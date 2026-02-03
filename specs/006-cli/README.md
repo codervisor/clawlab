@@ -75,6 +75,16 @@ render:
 - [ ] Invalid options show helpful error messages
 - [ ] Exit codes are correct (0 for success, 1 for error)
 
+## Open Questions
+
+1. **Programmatic API**: Should ClawAgent be importable as a library, not just CLI?
+2. **Config file location**: Where to store config? `~/.clawlab/config.json`? Project-local?
+3. **API key management**: Secure storage for LLM API keys? Keychain integration?
+4. **Interactive mode**: REPL for step-by-step debugging?
+5. **Watch mode**: Automatically re-run on goal file changes?
+6. **Output verbosity**: Debug vs normal vs quiet modes?
+7. **Dry run**: Preview actions without executing?
+
 ## Notes
 
 **Binary Distribution**: Consider using `pkg` or `esbuild` to create standalone binaries for distribution.

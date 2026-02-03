@@ -80,6 +80,16 @@ interface ActionEvent {
 - [ ] Session data persists correctly to disk
 - [ ] Large sessions don't run out of memory
 
+## Open Questions
+
+1. **Frame format**: PNG (lossless, large) vs JPEG (lossy, small) vs WebP (balanced)?
+2. **Sync mechanism**: How are frame timestamps precisely synchronized with cursor points?
+3. **Storage limits**: Max session size? Auto-cleanup policy for old sessions?
+4. **Resume capability**: Can recording resume after crash/interruption?
+5. **Session versioning**: Version field for forward compatibility with format changes?
+6. **Compression**: Compress frames on-the-fly or post-session?
+7. **Memory pressure**: What happens during very long sessions (1000+ frames)?
+
 ## Notes
 
 **Performance**: Consider writing frames asynchronously to avoid blocking the agent. Use a worker thread or queue for I/O.

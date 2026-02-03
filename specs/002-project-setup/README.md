@@ -61,6 +61,14 @@ clawlab/
 - [ ] ESLint passes with no errors
 - [ ] All directory paths resolve correctly
 
+## Open Questions
+
+1. **Logging framework**: pino vs winston vs console? Need structured logging for debugging agent behavior.
+2. **Config file format**: `.clawlabrc`, `clawlab.config.js`, or just `.env`? Should support JSON schema for IDE autocomplete.
+3. **Node.js version**: Minimum supported version? (Playwright requires Node 18+)
+4. **Monorepo vs single package**: Keep all modules in one package or split for independent versioning?
+5. **CI/CD pipeline**: GitHub Actions? What's the build/test/publish flow?
+
 ## Notes
 
 This is the foundational spec - all other modules depend on this being complete first.

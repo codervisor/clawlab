@@ -75,6 +75,18 @@ type AgentAction =
 - [ ] Retry logic handles missing elements gracefully
 - [ ] Smooth mouse movements are generated (not teleporting)
 
+## Open Questions
+
+1. **Multi-tab/popup handling**: How to handle new windows, popups, iframes, and shadow DOM?
+2. **Authentication flows**: Pre-authenticated sessions or should agent record login? Credential security?
+3. **Wait strategies**: Fixed timeout vs dynamic waits? How long before declaring element "not found"?
+4. **Action validation**: Screenshot diff, selector check, or network idle? How to verify a click worked?
+5. **Viewport size**: Fixed (1920x1080) or configurable? Affects element visibility and demo aesthetics.
+6. **Goal completion criteria**: How does LLM signal "done"? Confidence threshold for `complete` action?
+7. **Selector strategy**: CSS selectors only, or also XPath and coordinate-based clicking?
+8. **LLM rate limits**: Exponential backoff? Fallback to different provider?
+9. **Max retries per action**: How many retries before skipping/failing?
+
 ## Notes
 
 **Bezier Curve Implementation**: Use cubic Bezier curves for natural mouse movement. Record intermediate points for the Recorder module to capture.

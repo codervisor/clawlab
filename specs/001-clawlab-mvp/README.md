@@ -55,6 +55,8 @@ This is an umbrella spec. See child specs for detailed implementation:
 - [ ] Session Recorder Module (004)
 - [ ] Video Renderer Module (005)
 - [ ] Command Line Interface (006)
+- [ ] Module Interfaces & Contracts (007)
+- [ ] Vision LLM Prompt Engineering (008)
 
 ## Test
 
@@ -62,6 +64,32 @@ This is an umbrella spec. See child specs for detailed implementation:
 - [ ] Generated video has smooth cursor animations
 - [ ] Agent can recover from failed actions
 - [ ] All modules integrate correctly
+
+## Open Questions (Cross-Cutting)
+
+### Architecture
+1. **Session ownership**: Who creates/manages session IDs? Should there be a central `SessionManager`?
+2. **Module communication**: Direct imports, event bus, or message queue between modules?
+3. **Plugin system**: Should LLM providers and renderers be pluggable at runtime?
+
+### Security
+4. **Credential handling**: How to sanitize recordings that capture login flows?
+5. **API key storage**: Secure storage for LLM API keys (keychain, encrypted env)?
+
+### Observability  
+6. **Logging framework**: pino, winston, or structured console? Debug mode verbosity?
+7. **Progress callbacks**: How to surface progress for long-running operations?
+8. **Telemetry**: Anonymous usage stats for improvement?
+
+### Edge Cases
+9. **Network failures**: How to handle mid-recording connection drops?
+10. **Very long sessions**: Memory management for 1000+ frame sessions?
+11. **Pages with animations**: Capture strategy for animated content?
+12. **Element not found after N retries**: Skip action or fail entire session?
+
+### Distribution
+13. **Packaging**: npm package, Docker image, or standalone binary?
+14. **Versioning strategy**: Semver for session format compatibility?
 
 ## Notes
 

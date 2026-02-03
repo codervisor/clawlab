@@ -66,6 +66,16 @@ DemoComposition
 - [ ] Rendering completes without errors for sample session
 - [ ] Multiple output formats work correctly
 
+## Open Questions
+
+1. **Remotion licensing**: Commercial use implications? Any restrictions for SaaS?
+2. **Customization options**: Branding overlays, intro/outro sequences, captions/subtitles?
+3. **Render time**: Expected duration for a 2-minute demo? Can we parallelize?
+4. **Progress API**: How does CLI get render progress updates for display?
+5. **Page with animations**: How to handle pages with existing CSS animations without visual chaos?
+6. **Audio track**: Support for voiceover or background music?
+7. **Zoom/highlight effects**: Auto-zoom on clicked elements for emphasis?
+
 ## Notes
 
 **Remotion Setup**: Requires separate Remotion config. Consider using `@remotion/bundler` for programmatic rendering without the full Remotion studio.
