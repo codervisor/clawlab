@@ -6,12 +6,6 @@ tags:
   - mvp
 priority: high
 created_at: '2026-02-03T07:37:17.371020680+00:00'
-children:
-  - 002-project-setup
-  - 003-vision-agent
-  - 004-recorder
-  - 005-renderer
-  - 006-cli
 ---
 
 # ClawLab MVP
