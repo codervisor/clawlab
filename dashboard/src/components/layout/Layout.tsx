@@ -42,7 +42,6 @@ export function Layout({ view, onNavigate, wsConnected, children }: LayoutProps)
           view={view}
           onNavigate={onNavigate}
           collapsed={collapsed}
-          wsConnected={wsConnected}
         />
       </div>
 
@@ -52,7 +51,6 @@ export function Layout({ view, onNavigate, wsConnected, children }: LayoutProps)
           view={view}
           onNavigate={(v) => { onNavigate(v); setMobileOpen(false); }}
           collapsed={false}
-          wsConnected={wsConnected}
         />
       </Sheet>
 

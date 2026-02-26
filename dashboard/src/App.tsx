@@ -42,6 +42,8 @@ interface AuditEvent {
 
 type View = 'fleet' | 'agent-detail' | 'tasks' | 'config' | 'audit';
 
+type BadgeVariant = 'success' | 'warning' | 'secondary' | 'outline' | 'destructive';
+
 const POLL_MS = 2_000;
 
 // --- App Component ---
@@ -75,7 +77,7 @@ export function App() {
 
       ws.onopen = () => {
         setWsConnected(true);
-        if (wasConnected === false) wasConnected = true;
+        if (!wasConnected) wasConnected = true;
       };
       ws.onclose = () => {
         if (wasConnected) {
@@ -699,7 +701,7 @@ function MetricCard({
 }
 
 function StateBadge({ state }: { state: AgentState }) {
-  const variantMap: Record<AgentState, 'success' | 'warning' | 'secondary' | 'outline' | 'destructive'> = {
+  const variantMap: Record<AgentState, BadgeVariant> = {
     running: 'success',
     degraded: 'warning',
     stopped: 'secondary',
@@ -718,7 +720,7 @@ function HealthBadge({ status }: { status: AgentRecord['health'] }) {
     unknown: 'bg-slate-400',
   };
 
-  const variantMap: Record<AgentRecord['health'], 'success' | 'warning' | 'destructive' | 'secondary'> = {
+  const variantMap: Record<AgentRecord['health'], BadgeVariant> = {
     healthy: 'success',
     degraded: 'warning',
     unhealthy: 'destructive',

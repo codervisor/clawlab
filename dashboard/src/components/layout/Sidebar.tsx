@@ -8,7 +8,6 @@ interface SidebarProps {
   view: View;
   onNavigate: (view: View) => void;
   collapsed: boolean;
-  wsConnected: boolean;
 }
 
 const NAV_ITEMS = [
@@ -18,7 +17,7 @@ const NAV_ITEMS = [
   { view: 'audit' as const, label: 'Audit Log', icon: ClipboardList },
 ];
 
-export function Sidebar({ view, onNavigate, collapsed, wsConnected: _wsConnected }: SidebarProps) {
+export function Sidebar({ view, onNavigate, collapsed }: SidebarProps) {
   const isActive = (v: View) => v === view || (v === 'fleet' && view === 'agent-detail');
 
   return (
