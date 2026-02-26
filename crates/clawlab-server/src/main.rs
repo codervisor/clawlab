@@ -1,12 +1,21 @@
+mod api;
 mod audit;
 mod lifecycle;
+mod manager;
 
+use crate::api::{
+    audit_log, fleet_status, health_summary, list_agents, register_agent, send_task, start_agent,
+    stop_agent, AppState,
+};
 use crate::audit::{AuditEvent, AuditLog};
 use crate::lifecycle::AgentState;
+use crate::manager::{append_audit, LifecycleManager};
 use axum::{routing::get, Json, Router};
 use serde::Serialize;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::sync::RwLock;
 use tracing::info;
 
 #[derive(Debug, Serialize)]
@@ -30,9 +39,25 @@ async fn main() {
         .compact()
         .init();
 
-    let app = Router::new().route("/health", get(health));
+    let audit_store = Arc::new(AuditLog::default());
+    let manager = LifecycleManager::new(clawlab_adapters::builtin_registry());
+    let shared_state = AppState {
+        manager: Arc::new(RwLock::new(manager)),
+        audit: audit_store.clone(),
+    };
+
+    let app = Router::new()
+        .route("/health", get(health))
+        .route("/agents", get(list_agents))
+        .route("/agents/register", axum::routing::post(register_agent))
+        .route("/agents/{agent_id}/start", axum::routing::post(start_agent))
+        .route("/agents/{agent_id}/stop", axum::routing::post(stop_agent))
+        .route("/agents/health", get(health_summary))
+        .route("/fleet/status", get(fleet_status))
+        .route("/task/send", axum::routing::post(send_task))
+        .route("/audit", get(audit_log))
+        .with_state(shared_state);
     let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
-    let audit_log = AuditLog::default();
 
     let startup_event = AuditEvent {
         actor: "system".to_string(),
@@ -43,8 +68,8 @@ async fn main() {
             .expect("system clock before UNIX_EPOCH")
             .as_millis() as u64,
     };
-    audit_log.append(startup_event);
-    if let Some(last) = audit_log.list().last() {
+    audit_store.append(startup_event);
+    if let Some(last) = audit_store.list().last() {
         info!(
             actor = %last.actor,
             action = %last.action,
@@ -68,6 +93,8 @@ async fn main() {
         known_state_count = known_states.len(),
         "lifecycle transition check"
     );
+
+    append_audit(&audit_store, "server.ready", "clawlab-server");
 
     info!(%addr, "starting clawlab server");
 

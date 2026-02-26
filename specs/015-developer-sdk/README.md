@@ -16,7 +16,6 @@ transitions:
 - status: in-progress
   at: 2026-02-26T03:07:30.691255720Z
 ---
-
 # Cross-Claw Developer SDK & CLI
 
 ## Overview
@@ -72,8 +71,8 @@ export default defineSkill({
 ## Plan
 
 - [x] Build CLI subcommands in `clawlab-cli` crate (clap derive)
-- [ ] Implement agent management commands (list, start, stop, health)
-- [ ] Implement fleet status commands
+- [x] Implement agent management commands (list, start, stop, health)
+- [x] Implement fleet status commands
 - [x] Define TypeScript Skill SDK with `defineSkill` API (`sdk/` directory)
 - [ ] Build skill scaffolding (`clawlab skill create` → generates TS template)
 - [ ] Create cross-runtime skill test harness

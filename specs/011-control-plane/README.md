@@ -15,7 +15,6 @@ transitions:
 - status: in-progress
   at: 2026-02-26T03:07:30.687377780Z
 ---
-
 # Control Plane & Agent Lifecycle Management
 
 ## Overview
@@ -60,11 +59,11 @@ The control plane manages the full lifecycle of claw agents across the fleet. It
 ## Plan
 
 - [x] Define agent state machine and transitions
-- [ ] Implement LifecycleManager service
+- [x] Implement LifecycleManager service
 - [ ] Implement HealthMonitor with configurable intervals
 - [ ] Implement RecoveryEngine with exponential backoff
 - [x] Add audit logging for all lifecycle events
-- [ ] Create REST API endpoints for lifecycle operations
+- [x] Create REST API endpoints for lifecycle operations
 
 ## Test
 

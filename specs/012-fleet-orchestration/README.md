@@ -1,5 +1,5 @@
 ---
-status: planned
+status: in-progress
 created: 2026-02-26
 priority: high
 tags:
@@ -7,11 +7,14 @@ tags:
 - fleet
 - routing
 - swarm
-parent: 009-orchestration-platform
 depends_on:
 - 010-claw-runtime-interface
+parent: 009-orchestration-platform
 created_at: 2026-02-26T02:08:29.575833924Z
-updated_at: 2026-02-26T02:08:40.055516376Z
+updated_at: 2026-02-26T03:26:22.415306720Z
+transitions:
+- status: in-progress
+  at: 2026-02-26T03:26:22.415306720Z
 ---
 
 # Fleet Discovery & Task Routing
@@ -53,12 +56,12 @@ interface AgentRegistration {
 
 ## Plan
 
-- [ ] Implement agent registry with registration/deregistration
-- [ ] Build capability-based task router
+- [x] Implement agent registry with registration/deregistration
+- [x] Build capability-based task router
 - [ ] Add load balancing and cost-aware routing
 - [ ] Implement agent discovery (network scan, manual, DNS-SD)
 - [ ] Design swarm coordination protocol
-- [ ] Create REST/WebSocket APIs for fleet management
+- [x] Create REST/WebSocket APIs for fleet management
 
 ## Test
 

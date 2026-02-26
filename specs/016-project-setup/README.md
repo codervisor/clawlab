@@ -13,7 +13,6 @@ transitions:
 - status: in-progress
   at: 2026-02-26T03:07:30.691898682Z
 ---
-
 # Project Setup & Monorepo Scaffolding
 
 ## Overview
@@ -69,8 +68,8 @@ clawlab/
 
 ## Test
 
-- [ ] `cargo build` compiles all crates
-- [ ] `cargo test` passes for all crates
-- [ ] `cargo clippy` reports no warnings
-- [ ] Dashboard `pnpm dev` starts dev server
+- [x] `cargo build` compiles all crates
+- [x] `cargo test` passes for all crates
+- [x] `cargo clippy` reports no warnings
+- [x] Dashboard `pnpm dev` starts dev server
 - [ ] CI pipeline passes on clean checkout

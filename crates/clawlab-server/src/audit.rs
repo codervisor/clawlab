@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex};
+use serde::Serialize;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct AuditEvent {
     pub actor: String,
     pub action: String,
