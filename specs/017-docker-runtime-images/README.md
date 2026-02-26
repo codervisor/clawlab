@@ -59,14 +59,18 @@ Each runtime gets its own `-docker` repo following a common structure:
 
 ### Per-Runtime Specifics
 
-| Runtime | Language | Config Format | Default Port | Image Base | Build Strategy |
-|---------|----------|---------------|-------------|------------|----------------|
-| ZeroClaw | Rust | TOML | 42617 | `rust:slim` → `debian:slim` | `cargo build --release` (reference impl exists) |
-| OpenClaw | Python | JSON | 3000 | `python:slim` → `debian:slim` | `pip install` or clone + install |
-| PicoClaw | Go | JSON | 8080 | `golang:alpine` → `alpine` | `go build` (static binary) |
-| NanoClaw | Node.js | JSON | 7070 | `node:lts-slim` | `npm ci --production` |
-| IronClaw | Rust | TOML | 9090 | `rust:slim` → `debian:slim` | `cargo build --release` |
-| NullClaw | Rust | TOML | 6060 | `rust:slim` → `debian:slim` | `cargo build --release` |
+| Runtime | Repo | Language | Config Format | Default Port | Image Base | Build Strategy |
+|---------|------|----------|---------------|-------------|------------|----------------|
+| ZeroClaw | `zeroclaw-labs/zeroclaw` | Rust | TOML | 42617 | `rust:slim` → `debian:slim` | `cargo build --release` (reference impl exists) |
+| OpenClaw | `openclaw/openclaw` | TypeScript (Node.js ≥22) | JSON | 18789 | `node:22-slim` | `pnpm install && pnpm build` |
+| PicoClaw | `sipeed/picoclaw` | Go | JSON | — | `golang:alpine` → `alpine` | `go build` (static binary) |
+| NanoClaw | `qwibitai/nanoclaw` | TypeScript (Node.js 20+) | code-driven | — | `node:20-slim` | `npm install` + Claude Agent SDK |
+| IronClaw | `nearai/ironclaw` | Rust | env/DB (PostgreSQL + pgvector) | — | `rust:slim` → `debian:slim` | `cargo build --release` |
+| NullClaw | `nullclaw/nullclaw` | Zig | JSON | 3000 | custom (Zig 0.15.2 builder) → `debian:slim` | `zig build -Doptimize=ReleaseSmall` (678 KB static binary) |
+| MicroClaw | `microclaw/microclaw` | Rust | YAML | — | `rust:slim` → `debian:slim` | `cargo build --release` |
+
+**Not containerizable (embedded-only):**
+- **MimiClaw** (`memovai/mimiclaw`) — pure C on ESP32-S3, bare-metal firmware. Requires ESP-IDF toolchain + physical hardware. ClawLab will support it via a serial/MQTT bridge adapter rather than Docker.
 
 ### Common Conventions
 
@@ -111,11 +115,12 @@ ClawLab canonical config (TOML)
 ## Plan
 
 - [ ] Extract reusable template from `zeroclaw-docker` (Dockerfile template, entrypoint pattern, compose template, CI workflow)
-- [ ] Create `openclaw-docker` repo following the template — Python-based build, JSON config, port 3000
-- [ ] Create `picoclaw-docker` repo following the template — Go static binary, JSON config, port 8080
-- [ ] Create `nanoclaw-docker` repo following the template — Node.js, JSON config, port 7070
-- [ ] Create `ironclaw-docker` repo following the template — Rust build, TOML config, port 9090
-- [ ] Create `nullclaw-docker` repo following the template — Rust build, TOML config, port 6060
+- [ ] Create `openclaw-docker` repo — Node.js 22 build, JSON config, gateway port 18789
+- [ ] Create `picoclaw-docker` repo — Go static binary build, JSON config
+- [ ] Create `nanoclaw-docker` repo — Node.js 20 + Claude Agent SDK, code-driven config
+- [ ] Create `ironclaw-docker` repo — Rust build, PostgreSQL + pgvector sidecar
+- [ ] Create `nullclaw-docker` repo — Zig 0.15.2 builder, JSON config, port 3000 (678 KB binary)
+- [ ] Create `microclaw-docker` repo — Rust build, YAML config
 - [ ] Add `docker-compose.fleet.yml` to ClawLab for bringing up the full fleet locally (all runtimes)
 - [ ] Implement Docker-based `install()` / `start()` / `stop()` in each CRI adapter (connects to spec 010)
 - [ ] Document the runtime image template in ClawLab developer docs
@@ -133,7 +138,13 @@ ClawLab canonical config (TOML)
 ## Notes
 
 - `zeroclaw-docker` is the reference implementation — copy its patterns, don't abstract prematurely
-- Runtimes that don't have a gateway yet (e.g., NanoClaw filesystem IPC) may need a sidecar HTTP shim until their upstream adds an HTTP API
+- **OpenClaw** is the largest ecosystem (229K+ stars, TypeScript/Node.js). Its gateway runs on port 18789 with WS control plane. Config is `~/.openclaw/openclaw.json`
+- **PicoClaw** (Go, 20K+ stars) is ultra-lightweight (<10 MB RAM). Produces a static binary — ideal for minimal Alpine images. Already has Docker Compose in its repo
+- **NanoClaw** (TypeScript, 15K+ stars) runs on Claude Agent SDK with container isolation (Apple Container / Docker). Config is code-driven, not file-based — may need a thin wrapper
+- **IronClaw** (Rust, 3.5K+ stars) requires PostgreSQL + pgvector — Docker image needs a DB sidecar or external DB URL. Uses WASM sandbox for tool isolation
+- **NullClaw** (Zig, 2.2K+ stars) produces a 678 KB static binary with ~1 MB RAM. Port 3000 by default. JSON config at `~/.nullclaw/config.json`
+- **MicroClaw** (Rust, 410 stars) — channel-agnostic agentic assistant. YAML config
+- **MimiClaw** (C, 3.3K+ stars) — bare-metal ESP32-S3 firmware, not containerizable. ClawLab supports it via serial/MQTT bridge adapter in the CRI layer
 - Consider a `clawlab runtime init <name>` CLI command that scaffolds a new `-docker` repo from the template
 - Multi-arch builds (amd64 + arm64) are a stretch goal — start with amd64 only
-- Image size matters for fleet scale-up; track and optimize layer caching
+- Image size matters for fleet scale-up: NullClaw (678 KB) and PicoClaw (~8 MB) are ideal for rapid scale-up; OpenClaw (~28 MB dist) is the heaviest

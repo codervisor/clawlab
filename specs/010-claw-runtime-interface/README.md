@@ -52,14 +52,16 @@ pub trait ClawAdapter: Send + Sync {
 
 ### Supported Runtimes (Initial)
 
-| Runtime | Communication Method | Adapter Strategy |
-|---------|---------------------|------------------|
-| OpenClaw | HTTP Gateway API | REST client |
-| ZeroClaw | HTTP Gateway + CLI | REST + subprocess |
-| PicoClaw | HTTP Gateway + CLI | REST + subprocess |
-| NanoClaw | Filesystem IPC | File watch + subprocess |
-| IronClaw | HTTP Gateway + CLI | REST + subprocess |
-| NullClaw | HTTP Gateway + CLI | REST + subprocess |
+| Runtime | Language | Stars | Communication Method | Adapter Strategy |
+|---------|----------|-------|---------------------|------------------|
+| OpenClaw | TypeScript (Node.js) | 229K+ | WS Gateway (port 18789) | WebSocket client |
+| ZeroClaw | Rust | 19K+ | HTTP Gateway (port 42617) + CLI | REST + subprocess |
+| PicoClaw | Go | 20K+ | HTTP Gateway + CLI | REST + subprocess |
+| NanoClaw | TypeScript (Node.js) | 15K+ | Agent SDK + Docker isolation | REST + subprocess |
+| IronClaw | Rust | 3.5K+ | HTTP webhooks + REPL + WASM | REST + subprocess |
+| NullClaw | Zig | 2.2K+ | HTTP Gateway (port 3000) + CLI | REST + subprocess |
+| MicroClaw | Rust | 410+ | Multi-channel + Web UI | REST + subprocess |
+| MimiClaw | C (ESP32-S3) | 3.3K+ | Telegram + WebSocket (port 18789) | Serial/MQTT bridge |
 
 ### Adapter Registration
 Adapters are registered via Rust feature flags (compile-time) or dynamic loading from `~/.clawlab/adapters/` (shared libraries). Built-in adapters are compiled into the binary by default.
