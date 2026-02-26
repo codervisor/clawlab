@@ -21,26 +21,34 @@ Each claw runtime has its own config format (JSON, TOML, env vars, markdown). Cl
 ## Design
 
 ### Canonical Config Schema
-```typescript
-interface ClawLabConfig {
-  agent: {
-    name: string;
-    runtime: string;
-    model: ModelConfig;        // provider, model name, API key ref
-    tools: ToolConfig[];       // enabled tools and permissions
-    channels: ChannelConfig[]; // messaging channels
-    memory: MemoryConfig;      // memory backend settings
-    security: SecurityConfig;  // sandbox, allowlists
-    schedule: ScheduleConfig;  // cron jobs, heartbeat
-  };
+```rust
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct ClawLabConfig {
+    pub agent: AgentConfig,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct AgentConfig {
+    pub name: String,
+    pub runtime: String,
+    pub model: ModelConfig,          // provider, model name, API key ref
+    pub tools: Vec<ToolConfig>,      // enabled tools and permissions
+    pub channels: Vec<ChannelConfig>,// messaging channels
+    pub memory: MemoryConfig,        // memory backend settings
+    pub security: SecurityConfig,    // sandbox, allowlists
+    pub schedule: Option<ScheduleConfig>, // cron jobs, heartbeat
+    #[serde(flatten)]
+    pub extras: HashMap<String, Value>, // runtime-specific extensions
 }
 ```
 
+Config files use **TOML** as canonical format (aligns with Rust/Cargo ecosystem, human-readable).
+
 ### Config Translation
-Each CRI adapter includes a config translator:
-- `toRuntimeConfig(canonical)` → runtime-specific format
-- `fromRuntimeConfig(native)` → canonical format
-- Validates required fields per runtime
+Each CRI adapter includes a config translator trait:
+- `to_runtime_config(&canonical)` → runtime-specific format (JSON/TOML/env/markdown)
+- `from_runtime_config(&native)` → canonical format
+- Validates required fields per runtime via serde + custom validators
 - Handles runtime-specific extensions via `extras` field
 
 ### Secret Management
@@ -50,12 +58,12 @@ Each CRI adapter includes a config translator:
 
 ## Plan
 
-- [ ] Define canonical config schema with Zod validation
-- [ ] Implement config translator interface in CRI
-- [ ] Build OpenClaw config translator (JSON ↔ canonical)
-- [ ] Build ZeroClaw config translator (TOML ↔ canonical)
-- [ ] Build PicoClaw config translator (JSON ↔ canonical)
-- [ ] Implement encrypted secret vault
+- [ ] Define canonical config schema with serde + validation
+- [ ] Implement config translator trait in CRI
+- [ ] Build OpenClaw config translator (JSON ↔ canonical TOML)
+- [ ] Build ZeroClaw config translator (TOML ↔ canonical TOML)
+- [ ] Build PicoClaw config translator (JSON ↔ canonical TOML)
+- [ ] Implement encrypted secret vault (age encryption or system keychain)
 - [ ] Add config diff and drift detection
 
 ## Test

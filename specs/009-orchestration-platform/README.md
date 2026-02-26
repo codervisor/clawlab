@@ -52,12 +52,13 @@ ClawLab becomes the **unified orchestration platform** — the Kubernetes of cla
 ```
 
 ### Tech Stack
-- **Core**: TypeScript / Node.js
-- **API**: Fastify (REST) + tRPC or gRPC for internal
-- **Dashboard**: React + Tailwind
+- **Backend**: Rust (Axum for HTTP/WS, tokio async runtime, SQLx for DB)
+- **CLI**: Rust (clap) — ships as same binary (`clawlab` subcommands)
+- **Dashboard**: React 19 + Tailwind + shadcn/ui + Vite
 - **Database**: SQLite (embedded) → PostgreSQL (production)
 - **Communication**: WebSocket for real-time, HTTP for control
-- **Adapters**: Shell-out to native binaries + API integration
+- **Adapters**: Rust trait objects — native for Rust runtimes, subprocess/HTTP for others
+- **Skill SDK**: TypeScript `@clawlab/sdk` (most skill authors use TS/JS)
 
 ## Plan
 
@@ -83,3 +84,4 @@ ClawLab becomes the **unified orchestration platform** — the Kubernetes of cla
 - The original "browser use" capability could become a ClawLab skill
 - Inspiration: Kubernetes CRI, Docker Compose, Terraform providers
 - Community can contribute adapters for new claw variants
+- Rust chosen for ecosystem alignment (ZeroClaw, IronClaw, MicroClaw are Rust) and single-binary deployment

@@ -6,12 +6,12 @@
 
 **Core Tech Stack:**
 
-* **Language:** TypeScript / Node.js (pnpm monorepo)
-* **API:** Fastify (REST) + WebSocket (real-time)
-* **Dashboard:** React 19 + Tailwind CSS + shadcn/ui
+* **Backend:** Rust (Axum HTTP/WS + tokio async + SQLx)
+* **CLI:** Rust (clap) — ships as same `clawlab` binary
+* **Dashboard:** React 19 + Tailwind CSS + shadcn/ui + Vite
 * **Database:** SQLite (dev) → PostgreSQL (production)
-* **Build:** tsup + Vitest + ESLint
-* **Adapters:** Shell-out to native binaries + HTTP API integration
+* **Skill SDK:** TypeScript `@clawlab/sdk` (for skill developers)
+* **Adapters:** Rust trait objects — native for Rust runtimes, subprocess/HTTP for others
 
 **Three Pillars:**
 
@@ -39,21 +39,20 @@
 
 ```
 clawlab/
-├── packages/
-│   ├── core/           # CRI interfaces, types, shared utilities
-│   ├── control-plane/  # Lifecycle, health, recovery services
-│   ├── fleet/          # Discovery, routing, swarm coordination
-│   ├── config/         # Config schema, translators, secret vault
-│   ├── api/            # REST + WebSocket API server
-│   ├── dashboard/      # React web dashboard
-│   ├── cli/            # clawlab CLI
-│   └── sdk/            # @clawlab/sdk for skill developers
-├── adapters/
-│   ├── openclaw/       # @clawlab/adapter-openclaw
-│   ├── zeroclaw/       # @clawlab/adapter-zeroclaw
-│   ├── picoclaw/       # @clawlab/adapter-picoclaw
-│   └── nanoclaw/       # @clawlab/adapter-nanoclaw
-└── specs/              # LeanSpec specs
+├── Cargo.toml              # Workspace root
+├── crates/
+│   ├── clawlab-core/       # CRI traits, types, shared utilities
+│   ├── clawlab-server/     # Axum HTTP/WS API server
+│   ├── clawlab-cli/        # CLI binary (clap)
+│   ├── clawlab-config/     # Config schema (serde), translators
+│   └── clawlab-adapters/   # Built-in adapters (feature-gated)
+│       ├── openclaw/
+│       ├── zeroclaw/
+│       ├── picoclaw/
+│       └── nanoclaw/
+├── dashboard/              # React 19 + Vite + Tailwind
+├── sdk/                    # @clawlab/sdk — TypeScript skill SDK
+└── specs/                  # LeanSpec specs
 ```
 
 **Supported Claw Runtimes:**

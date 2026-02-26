@@ -17,20 +17,21 @@ updated_at: 2026-02-26T02:08:40.056135402Z
 
 ## Overview
 
-A unified SDK and CLI that enables developers to build skills/plugins that work across multiple claw runtimes. Includes a testing harness, skill packaging, and distribution via a marketplace.
+A unified SDK and CLI that enables developers to build skills/plugins that work across multiple claw runtimes. The **CLI is Rust** (clap, ships as part of the `clawlab` binary). The **Skill SDK is TypeScript** (`@clawlab/sdk`) since most skill authors work in TS/JS.
 
 ## Design
 
-### CLI (`clawlab`)
+### CLI (`clawlab` — Rust/clap, same binary as server)
 ```bash
 clawlab init                    # Initialize ClawLab project
+clawlab server start            # Start the orchestration server
 clawlab agent list              # List registered agents
 clawlab agent start <name>      # Start an agent
 clawlab agent stop <name>       # Stop an agent
 clawlab agent health            # Fleet health summary
 clawlab fleet status            # Fleet overview
 clawlab task send <agent> <msg> # Send task to agent
-clawlab skill create <name>     # Scaffold a new skill
+clawlab skill create <name>     # Scaffold a new skill (generates TS template)
 clawlab skill test <name>       # Test skill across runtimes
 clawlab skill publish <name>    # Publish to marketplace
 clawlab config set <key> <val>  # Set config value
@@ -66,11 +67,11 @@ export default defineSkill({
 
 ## Plan
 
-- [ ] Build CLI with commander.js / yargs
-- [ ] Implement agent management commands
+- [ ] Build CLI subcommands in `clawlab-cli` crate (clap derive)
+- [ ] Implement agent management commands (list, start, stop, health)
 - [ ] Implement fleet status commands
-- [ ] Define Skill SDK with `defineSkill` API
-- [ ] Build skill scaffolding (`clawlab skill create`)
+- [ ] Define TypeScript Skill SDK with `defineSkill` API (`sdk/` directory)
+- [ ] Build skill scaffolding (`clawlab skill create` → generates TS template)
 - [ ] Create cross-runtime skill test harness
 - [ ] Design marketplace registry protocol
 

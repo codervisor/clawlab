@@ -16,37 +16,38 @@ updated_at: 2026-02-26T02:08:40.054769542Z
 
 ## Overview
 
-The Claw Runtime Interface (CRI) is the adapter layer that abstracts communication with heterogeneous claw runtimes. Like Kubernetes' Container Runtime Interface, CRI provides a unified TypeScript interface that each claw runtime implements via a driver/adapter.
+The Claw Runtime Interface (CRI) is the adapter layer that abstracts communication with heterogeneous claw runtimes. Like Kubernetes' Container Runtime Interface, CRI provides a unified Rust trait that each claw runtime implements via a driver/adapter.
 
 ## Design
 
-### Core Interface
+### Core Trait
 
-```typescript
-interface ClawAdapter {
-  readonly runtime: ClawRuntime; // metadata: name, version, lang, capabilities
-  
-  // Lifecycle
-  install(config: InstallConfig): Promise<void>;
-  start(config: AgentConfig): Promise<AgentHandle>;
-  stop(handle: AgentHandle): Promise<void>;
-  restart(handle: AgentHandle): Promise<void>;
-  
-  // Health
-  health(handle: AgentHandle): Promise<HealthStatus>;
-  metrics(handle: AgentHandle): Promise<AgentMetrics>;
-  
-  // Communication
-  send(handle: AgentHandle, message: AgentMessage): Promise<AgentResponse>;
-  subscribe(handle: AgentHandle, event: string, cb: EventCallback): Unsubscribe;
-  
-  // Configuration  
-  getConfig(handle: AgentHandle): Promise<RuntimeConfig>;
-  setConfig(handle: AgentHandle, config: Partial<RuntimeConfig>): Promise<void>;
-  
-  // Skills
-  listSkills(handle: AgentHandle): Promise<Skill[]>;
-  installSkill(handle: AgentHandle, skill: SkillManifest): Promise<void>;
+```rust
+#[async_trait]
+pub trait ClawAdapter: Send + Sync {
+    fn runtime(&self) -> &ClawRuntime; // metadata: name, version, lang, capabilities
+
+    // Lifecycle
+    async fn install(&self, config: &InstallConfig) -> Result<()>;
+    async fn start(&self, config: &AgentConfig) -> Result<AgentHandle>;
+    async fn stop(&self, handle: &AgentHandle) -> Result<()>;
+    async fn restart(&self, handle: &AgentHandle) -> Result<()>;
+
+    // Health
+    async fn health(&self, handle: &AgentHandle) -> Result<HealthStatus>;
+    async fn metrics(&self, handle: &AgentHandle) -> Result<AgentMetrics>;
+
+    // Communication
+    async fn send(&self, handle: &AgentHandle, message: &AgentMessage) -> Result<AgentResponse>;
+    async fn subscribe(&self, handle: &AgentHandle, event: &str) -> Result<EventStream>;
+
+    // Configuration
+    async fn get_config(&self, handle: &AgentHandle) -> Result<RuntimeConfig>;
+    async fn set_config(&self, handle: &AgentHandle, config: &RuntimeConfig) -> Result<()>;
+
+    // Skills
+    async fn list_skills(&self, handle: &AgentHandle) -> Result<Vec<Skill>>;
+    async fn install_skill(&self, handle: &AgentHandle, skill: &SkillManifest) -> Result<()>;
 }
 ```
 
@@ -62,16 +63,16 @@ interface ClawAdapter {
 | NullClaw | HTTP Gateway + CLI | REST + subprocess |
 
 ### Adapter Registration
-Adapters are discovered via a plugin directory (`~/.clawlab/adapters/`) or npm packages (`@clawlab/adapter-*`).
+Adapters are registered via Rust feature flags (compile-time) or dynamic loading from `~/.clawlab/adapters/` (shared libraries). Built-in adapters are compiled into the binary by default.
 
 ## Plan
 
-- [ ] Define `ClawAdapter` TypeScript interface and types
-- [ ] Implement `OpenClawAdapter` (most mature ecosystem)
-- [ ] Implement `ZeroClawAdapter` (Rust, popular)
-- [ ] Implement `PicoClawAdapter` (Go, popular)
-- [ ] Implement `NanoClawAdapter` (TypeScript, containerized)
-- [ ] Create adapter plugin loader and registry
+- [ ] Define `ClawAdapter` Rust trait and core types in `crates/clawlab-core`
+- [ ] Implement `OpenClawAdapter` (HTTP REST client, most mature ecosystem)
+- [ ] Implement `ZeroClawAdapter` (native Rust, most natural integration)
+- [ ] Implement `PicoClawAdapter` (HTTP + subprocess for Go binary)
+- [ ] Implement `NanoClawAdapter` (HTTP + subprocess for Node.js)
+- [ ] Create adapter registry with feature-flag and dynamic loading
 - [ ] Add adapter discovery and auto-detection
 
 ## Test

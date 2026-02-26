@@ -18,19 +18,21 @@ Read the skill file for complete SDD workflow guidance.
 
 ## Architecture
 
-ClawLab is organized as a pnpm monorepo with three pillars:
+ClawLab uses a **Rust backend + React frontend** architecture:
 
-1. **Control Plane** (`packages/control-plane`) — Agent lifecycle, health monitoring, auto-recovery
-2. **Fleet Orchestration** (`packages/fleet`) — Discovery, task routing, swarm coordination
-3. **Developer Platform** (`packages/sdk`, `packages/cli`) — Cross-claw skill SDK and CLI
+- **Backend** (`crates/`): Cargo workspace — Axum server, clap CLI, adapter trait objects
+- **Dashboard** (`dashboard/`): React 19 + Vite — consumes REST + WebSocket API
+- **Skill SDK** (`sdk/`): TypeScript `@clawlab/sdk` — for skill authors (most skills are TS/JS)
 
-All communication with claw runtimes goes through the **Claw Runtime Interface** (`packages/core`) — an adapter pattern where each runtime has a pluggable driver.
+All communication with claw runtimes goes through the **Claw Runtime Interface** (`crates/clawlab-core`) — Rust traits where each runtime has a pluggable adapter.
 
 ## Project-Specific Rules
 
-- TypeScript throughout, strict mode
-- pnpm workspaces for monorepo management
-- Adapters live in `adapters/` directory (one per claw runtime)
+- Rust for all backend code, strict clippy, rustfmt enforced
+- React + TypeScript for dashboard
+- TypeScript for Skill SDK (`@clawlab/sdk`)
+- Cargo workspace for Rust crates, pnpm for dashboard/SDK
+- Adapters live in `crates/clawlab-adapters/` (feature-gated)
 - Specs follow LeanSpec SDD workflow
 - All lifecycle events must be audit-logged
 - Secrets are never stored in plain text
