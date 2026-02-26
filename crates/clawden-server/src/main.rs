@@ -19,8 +19,8 @@ use axum::{routing::get, Json, Router};
 use serde::Serialize;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 use std::time::Duration;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 use tracing::info;
 

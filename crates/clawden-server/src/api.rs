@@ -169,9 +169,7 @@ pub async fn register_endpoint(
     (StatusCode::CREATED, Json(serde_json::json!({ "key": key })))
 }
 
-pub async fn list_endpoints(
-    State(state): State<AppState>,
-) -> Json<Vec<DiscoveredEndpoint>> {
+pub async fn list_endpoints(State(state): State<AppState>) -> Json<Vec<DiscoveredEndpoint>> {
     let discovery = state.discovery.read().await;
     Json(discovery.list_endpoints().into_iter().cloned().collect())
 }
@@ -228,9 +226,7 @@ pub async fn create_team(
     (StatusCode::CREATED, Json(response))
 }
 
-pub async fn list_teams(
-    State(state): State<AppState>,
-) -> Json<serde_json::Value> {
+pub async fn list_teams(State(state): State<AppState>) -> Json<serde_json::Value> {
     let swarm = state.swarm.read().await;
     Json(serde_json::to_value(swarm.list_teams()).unwrap_or_default())
 }
@@ -248,7 +244,11 @@ pub async fn fan_out_task(
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
     let mut swarm = state.swarm.write().await;
     let tasks = swarm
-        .fan_out(&req.team_name, &req.task_description, req.subtask_descriptions)
+        .fan_out(
+            &req.team_name,
+            &req.task_description,
+            req.subtask_descriptions,
+        )
         .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
 
     let value = serde_json::to_value(&tasks).unwrap_or_default();
@@ -256,9 +256,7 @@ pub async fn fan_out_task(
     Ok(Json(value))
 }
 
-pub async fn list_swarm_tasks(
-    State(state): State<AppState>,
-) -> Json<serde_json::Value> {
+pub async fn list_swarm_tasks(State(state): State<AppState>) -> Json<serde_json::Value> {
     let swarm = state.swarm.read().await;
     Json(serde_json::to_value(swarm.list_tasks(None)).unwrap_or_default())
 }

@@ -44,7 +44,12 @@ impl LifecycleManager {
         }
     }
 
-    pub fn register_agent(&mut self, name: String, runtime: ClawRuntime, capabilities: Vec<String>) -> AgentRecord {
+    pub fn register_agent(
+        &mut self,
+        name: String,
+        runtime: ClawRuntime,
+        capabilities: Vec<String>,
+    ) -> AgentRecord {
         let id = format!("agent-{}", self.next_id.fetch_add(1, Ordering::Relaxed));
         let record = AgentRecord {
             id: id.clone(),
@@ -74,7 +79,10 @@ impl LifecycleManager {
         };
 
         let Some(adapter) = self.adapters.get(&record.runtime) else {
-            return Err(format!("no adapter registered for runtime {:?}", record.runtime));
+            return Err(format!(
+                "no adapter registered for runtime {:?}",
+                record.runtime
+            ));
         };
 
         if !record.state.can_transition_to(AgentState::Running)
@@ -116,7 +124,10 @@ impl LifecycleManager {
         };
 
         let Some(adapter) = self.adapters.get(&record.runtime) else {
-            return Err(format!("no adapter registered for runtime {:?}", record.runtime));
+            return Err(format!(
+                "no adapter registered for runtime {:?}",
+                record.runtime
+            ));
         };
 
         adapter
@@ -266,7 +277,10 @@ impl LifecycleManager {
         };
 
         let Some(adapter) = self.adapters.get(&record.runtime) else {
-            return Err(format!("no adapter registered for runtime {:?}", record.runtime));
+            return Err(format!(
+                "no adapter registered for runtime {:?}",
+                record.runtime
+            ));
         };
 
         let response = adapter
@@ -301,18 +315,19 @@ impl LifecycleManager {
         }
 
         let mut ranked: Vec<&AgentRecord> = eligible;
-        ranked.sort_by_key(|agent| (agent.task_count, runtime_cost_tier(&agent.runtime), agent.id.clone()));
+        ranked.sort_by_key(|agent| {
+            (
+                agent.task_count,
+                runtime_cost_tier(&agent.runtime),
+                agent.id.clone(),
+            )
+        });
 
-        let best_score = (
-            ranked[0].task_count,
-            runtime_cost_tier(&ranked[0].runtime),
-        );
+        let best_score = (ranked[0].task_count, runtime_cost_tier(&ranked[0].runtime));
         let best_group: Vec<&AgentRecord> = ranked
             .iter()
             .copied()
-            .filter(|agent| {
-                (agent.task_count, runtime_cost_tier(&agent.runtime)) == best_score
-            })
+            .filter(|agent| (agent.task_count, runtime_cost_tier(&agent.runtime)) == best_score)
             .collect();
 
         let idx = self.round_robin_index % best_group.len();
@@ -367,7 +382,11 @@ mod tests {
     #[test]
     fn registers_and_lists_agents() {
         let mut manager = LifecycleManager::new(builtin_registry());
-        manager.register_agent("alpha".to_string(), ClawRuntime::ZeroClaw, vec!["chat".to_string()]);
+        manager.register_agent(
+            "alpha".to_string(),
+            ClawRuntime::ZeroClaw,
+            vec!["chat".to_string()],
+        );
 
         let listed = manager.list_agents();
         assert_eq!(listed.len(), 1);

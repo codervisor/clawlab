@@ -223,13 +223,8 @@ impl RuntimeConfigTranslator for PicoClawConfigTranslator {
             .and_then(Value::as_str)
             .ok_or_else(|| "missing picoclaw llm.model".to_string())?;
 
-        let mut config = base_config_with_runtime(
-            name,
-            ClawRuntime::PicoClaw,
-            provider,
-            model,
-            runtime_config,
-        );
+        let mut config =
+            base_config_with_runtime(name, ClawRuntime::PicoClaw, provider, model, runtime_config);
         config.agent.model.api_key_ref = llm
             .get("apiKeyRef")
             .and_then(Value::as_str)
@@ -271,15 +266,12 @@ fn base_config_with_runtime(
         .get("security")
         .cloned()
         .or_else(|| {
-            runtime_config
-                .get("policy")
-                .cloned()
-                .or_else(|| {
-                    runtime_config
-                        .get("agent")
-                        .and_then(|agent| agent.get("security"))
-                        .cloned()
-                })
+            runtime_config.get("policy").cloned().or_else(|| {
+                runtime_config
+                    .get("agent")
+                    .and_then(|agent| agent.get("security"))
+                    .cloned()
+            })
         })
         .unwrap_or_else(|| Value::Object(Map::new()));
 
@@ -454,8 +446,8 @@ pub fn detect_drift(
 #[cfg(test)]
 mod tests {
     use super::{
-        ClawDenConfig, ModelConfig, OpenClawConfigTranslator, PicoClawConfigTranslator,
-        RuntimeConfigTranslator, SecretVault, ZeroClawConfigTranslator, diff_configs,
+        diff_configs, ClawDenConfig, ModelConfig, OpenClawConfigTranslator,
+        PicoClawConfigTranslator, RuntimeConfigTranslator, SecretVault, ZeroClawConfigTranslator,
     };
     use crate::{AgentConfig, ChannelConfig, SecurityConfig, ToolConfig};
     use clawden_core::ClawRuntime;
@@ -533,7 +525,10 @@ mod tests {
 
         assert_eq!(decoded.agent.runtime, ClawRuntime::PicoClaw);
         assert_eq!(decoded.agent.name, "alpha");
-        assert_eq!(decoded.agent.model.api_key_ref.as_deref(), Some("secret/openai"));
+        assert_eq!(
+            decoded.agent.model.api_key_ref.as_deref(),
+            Some("secret/openai")
+        );
     }
 
     #[test]

@@ -1,5 +1,5 @@
-use std::sync::{Arc, Mutex};
 use serde::Serialize;
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct AuditEvent {

@@ -59,8 +59,12 @@ enum AgentCommand {
         capabilities: Vec<String>,
     },
     List,
-    Start { id: String },
-    Stop { id: String },
+    Start {
+        id: String,
+    },
+    Stop {
+        id: String,
+    },
     Health,
 }
 
@@ -230,14 +234,14 @@ fn main() -> Result<()> {
                 println!("{}", response.text()?);
             }
         },
-                Commands::Skill { command } => match command {
-                        SkillCommand::Create { name } => {
-                                scaffold_skill_template(&name)?;
-                                println!("created skill scaffold: {name}");
-                        }
-                        SkillCommand::Test { name } => println!("skill test not implemented yet: {name}"),
-                        SkillCommand::Publish { name } => println!("skill publish not implemented yet: {name}"),
-                },
+        Commands::Skill { command } => match command {
+            SkillCommand::Create { name } => {
+                scaffold_skill_template(&name)?;
+                println!("created skill scaffold: {name}");
+            }
+            SkillCommand::Test { name } => println!("skill test not implemented yet: {name}"),
+            SkillCommand::Publish { name } => println!("skill publish not implemented yet: {name}"),
+        },
         Commands::Config { command } => println!("config command: {command:?}"),
     }
 
@@ -245,15 +249,15 @@ fn main() -> Result<()> {
 }
 
 fn scaffold_skill_template(name: &str) -> Result<()> {
-        let skill_dir = Path::new(name);
-        if skill_dir.exists() {
-                anyhow::bail!("destination already exists: {}", skill_dir.display());
-        }
+    let skill_dir = Path::new(name);
+    if skill_dir.exists() {
+        anyhow::bail!("destination already exists: {}", skill_dir.display());
+    }
 
-        fs::create_dir_all(skill_dir.join("src"))?;
+    fs::create_dir_all(skill_dir.join("src"))?;
 
-        let package_json = format!(
-                r#"{{
+    let package_json = format!(
+        r#"{{
     "name": "@clawden-skill/{name}",
     "version": "0.1.0",
     "private": true,
@@ -269,9 +273,9 @@ fn scaffold_skill_template(name: &str) -> Result<()> {
     }}
 }}
 "#
-        );
+    );
 
-        let tsconfig = r#"{
+    let tsconfig = r#"{
     "compilerOptions": {
         "target": "ES2022",
         "module": "ESNext",
@@ -284,8 +288,8 @@ fn scaffold_skill_template(name: &str) -> Result<()> {
 }
 "#;
 
-        let source = format!(
-                r#"import {{ defineSkill }} from '@clawden/sdk';
+    let source = format!(
+        r#"import {{ defineSkill }} from '@clawden/sdk';
 
 export default defineSkill({{
     name: '{name}',
@@ -297,10 +301,10 @@ export default defineSkill({{
     }},
 }});
 "#
-        );
+    );
 
-        fs::write(skill_dir.join("package.json"), package_json)?;
-        fs::write(skill_dir.join("tsconfig.json"), tsconfig)?;
-        fs::write(skill_dir.join("src").join("index.ts"), source)?;
-        Ok(())
+    fs::write(skill_dir.join("package.json"), package_json)?;
+    fs::write(skill_dir.join("tsconfig.json"), tsconfig)?;
+    fs::write(skill_dir.join("src").join("index.ts"), source)?;
+    Ok(())
 }

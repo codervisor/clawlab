@@ -24,23 +24,23 @@ pub use zeroclaw::ZeroClawAdapter;
 
 /// Creates a registry pre-populated with all compile-time enabled adapters.
 pub fn builtin_registry() -> AdapterRegistry {
-	let mut registry = AdapterRegistry::new();
+    let mut registry = AdapterRegistry::new();
 
-	#[cfg(feature = "openclaw")]
-	registry.register(ClawRuntime::OpenClaw, Arc::new(OpenClawAdapter));
+    #[cfg(feature = "openclaw")]
+    registry.register(ClawRuntime::OpenClaw, Arc::new(OpenClawAdapter));
 
-	#[cfg(feature = "zeroclaw")]
-	registry.register(ClawRuntime::ZeroClaw, Arc::new(ZeroClawAdapter));
+    #[cfg(feature = "zeroclaw")]
+    registry.register(ClawRuntime::ZeroClaw, Arc::new(ZeroClawAdapter));
 
-	#[cfg(feature = "picoclaw")]
-	registry.register(ClawRuntime::PicoClaw, Arc::new(PicoClawAdapter));
+    #[cfg(feature = "picoclaw")]
+    registry.register(ClawRuntime::PicoClaw, Arc::new(PicoClawAdapter));
 
-	#[cfg(feature = "nanoclaw")]
-	registry.register(ClawRuntime::NanoClaw, Arc::new(NanoClawAdapter));
+    #[cfg(feature = "nanoclaw")]
+    registry.register(ClawRuntime::NanoClaw, Arc::new(NanoClawAdapter));
 
-	tracing::info!(
-		adapter_count = registry.list().len(),
-		"built-in adapter registry initialized"
-	);
-	registry
+    tracing::info!(
+        adapter_count = registry.list().len(),
+        "built-in adapter registry initialized"
+    );
+    registry
 }
