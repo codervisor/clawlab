@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Layout } from './components/layout/Layout';
 import { Badge } from './components/ui/badge';
@@ -61,6 +61,7 @@ export function App() {
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
   const [loading, setLoading] = useState(true);
+  const wsEverConnected = useRef(false);
 
   // Initialize theme on mount
   useTheme();
@@ -70,17 +71,16 @@ export function App() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/api/ws`;
     let ws: WebSocket | null = null;
-    let wasConnected = false;
 
     try {
       ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
         setWsConnected(true);
-        if (!wasConnected) wasConnected = true;
+        wsEverConnected.current = true;
       };
       ws.onclose = () => {
-        if (wasConnected) {
+        if (wsEverConnected.current) {
           toast.warning('WebSocket disconnected, switching to polling mode');
         }
         setWsConnected(false);
@@ -689,8 +689,14 @@ function MetricCard({
   subtext?: string;
   variant?: 'default' | 'success' | 'warning';
 }) {
+  const accentClass = {
+    default: 'border-l-4 border-l-primary',
+    success: 'border-l-4 border-l-green-500',
+    warning: 'border-l-4 border-l-amber-500',
+  }[variant];
+
   return (
-    <Card>
+    <Card className={accentClass}>
       <CardContent className="p-6">
         <div className="text-sm font-medium text-muted-foreground">{label}</div>
         <div className="mt-2 text-3xl font-bold">{value}</div>
