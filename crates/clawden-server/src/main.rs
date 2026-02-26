@@ -28,7 +28,7 @@ struct HealthResponse {
 async fn health() -> Json<HealthResponse> {
     Json(HealthResponse {
         status: "ok",
-        service: "clawlab-server",
+        service: "clawden-server",
     })
 }
 
@@ -41,17 +41,17 @@ async fn main() {
         .init();
 
     let audit_store = Arc::new(AuditLog::default());
-    let manager = LifecycleManager::new(clawlab_adapters::builtin_registry());
+    let manager = LifecycleManager::new(clawden_adapters::builtin_registry());
     let shared_state = AppState {
         manager: Arc::new(RwLock::new(manager)),
         audit: audit_store.clone(),
     };
 
-    let health_interval_ms = std::env::var("CLAWLAB_HEALTH_INTERVAL_MS")
+    let health_interval_ms = std::env::var("CLAWDEN_HEALTH_INTERVAL_MS")
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
         .unwrap_or(5_000);
-    let recovery_base_backoff_ms = std::env::var("CLAWLAB_RECOVERY_BASE_BACKOFF_MS")
+    let recovery_base_backoff_ms = std::env::var("CLAWDEN_RECOVERY_BASE_BACKOFF_MS")
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
         .unwrap_or(1_000);
@@ -95,7 +95,7 @@ async fn main() {
     let startup_event = AuditEvent {
         actor: "system".to_string(),
         action: "server.start".to_string(),
-        target: "clawlab-server".to_string(),
+        target: "clawden-server".to_string(),
         timestamp_unix_ms: SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("system clock before UNIX_EPOCH")
@@ -127,9 +127,9 @@ async fn main() {
         "lifecycle transition check"
     );
 
-    append_audit(&audit_store, "server.ready", "clawlab-server");
+    append_audit(&audit_store, "server.ready", "clawden-server");
 
-    info!(%addr, "starting clawlab server");
+    info!(%addr, "starting clawden server");
 
     let listener = tokio::net::TcpListener::bind(addr)
         .await

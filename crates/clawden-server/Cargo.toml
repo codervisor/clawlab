@@ -1,13 +1,13 @@
 [package]
-name = "clawlab-server"
+name = "clawden-server"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
 axum.workspace = true
-clawlab-adapters = { path = "../clawlab-adapters" }
-clawlab-core = { path = "../clawlab-core" }
+clawden-adapters = { path = "../clawden-adapters" }
+clawden-core = { path = "../clawden-core" }
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

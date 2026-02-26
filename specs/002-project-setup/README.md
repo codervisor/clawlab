@@ -10,7 +10,7 @@ updated_at: 2026-02-26T02:06:31.992795213Z
 transitions:
 - status: archived
   at: 2026-02-26T02:06:31.992795213Z
-parent: 001-clawlab-mvp
+parent: 001-clawden-mvp
 ---
 
 # Project Setup & Dependencies
@@ -19,13 +19,13 @@ parent: 001-clawlab-mvp
 
 ## Overview
 
-Initialize the ClawLab project with proper TypeScript/Node.js configuration and all required dependencies for browser automation, AI vision, and video rendering.
+Initialize the ClawDen project with proper TypeScript/Node.js configuration and all required dependencies for browser automation, AI vision, and video rendering.
 
 ## Design
 
 ### Directory Structure
 ```
-clawlab/
+clawden/
 ├── src/
 │   ├── agent/           # Vision agent logic
 │   ├── recorder/        # Frame & metadata capture
@@ -68,7 +68,7 @@ clawlab/
 ## Open Questions
 
 1. **Logging framework**: pino vs winston vs console? Need structured logging for debugging agent behavior.
-2. **Config file format**: `.clawlabrc`, `clawlab.config.js`, or just `.env`? Should support JSON schema for IDE autocomplete.
+2. **Config file format**: `.clawdenrc`, `clawden.config.js`, or just `.env`? Should support JSON schema for IDE autocomplete.
 3. **Node.js version**: Minimum supported version? (Playwright requires Node 18+)
 4. **Monorepo vs single package**: Keep all modules in one package or split for independent versioning?
 5. **CI/CD pipeline**: GitHub Actions? What's the build/test/publish flow?

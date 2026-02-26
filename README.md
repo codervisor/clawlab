@@ -1,4 +1,4 @@
-# ClawLab
+# ClawDen
 
 Unified orchestration platform for heterogeneous claw runtimes.
 
@@ -8,13 +8,13 @@ Unified orchestration platform for heterogeneous claw runtimes.
 
 - Build: `cargo build`
 - Test: `cargo test`
-- Run server: `cargo run -p clawlab-server`
-- Run CLI: `cargo run -p clawlab-cli -- --help`
+- Run server: `cargo run -p clawden-server`
+- Run CLI: `cargo run -p clawden-cli -- --help`
 
 ### Dashboard and SDK
 
 - Install deps: `pnpm install`
-- Dashboard dev: `pnpm --filter @clawlab/dashboard dev`
-- Dashboard test: `pnpm --filter @clawlab/dashboard test`
-- SDK build: `pnpm --filter @clawlab/sdk build`
-- SDK test: `pnpm --filter @clawlab/sdk test`
+- Dashboard dev: `pnpm --filter @clawden/dashboard dev`
+- Dashboard test: `pnpm --filter @clawden/dashboard test`
+- SDK build: `pnpm --filter @clawden/sdk build`
+- SDK test: `pnpm --filter @clawden/sdk test`

@@ -17,20 +17,20 @@ transitions:
 
 ## Overview
 
-Scaffold the ClawLab project with a Cargo workspace (Rust backend + CLI) and a separate React frontend for the dashboard. The Skill SDK remains TypeScript (npm).
+Scaffold the ClawDen project with a Cargo workspace (Rust backend + CLI) and a separate React frontend for the dashboard. The Skill SDK remains TypeScript (npm).
 
 ## Design
 
 ### Project Structure
 ```
-clawlab/
+clawden/
 ├── Cargo.toml              # Workspace root
 ├── crates/
-│   ├── clawlab-core/       # CRI traits, types, shared utilities
-│   ├── clawlab-server/     # Axum HTTP/WS API server (control plane + fleet)
-│   ├── clawlab-cli/        # CLI binary (clap) — agent, fleet, config, skill cmds
-│   ├── clawlab-config/     # Config schema (serde), translators, secret vault
-│   └── clawlab-adapters/   # Built-in adapters (feature-gated)
+│   ├── clawden-core/       # CRI traits, types, shared utilities
+│   ├── clawden-server/     # Axum HTTP/WS API server (control plane + fleet)
+│   ├── clawden-cli/        # CLI binary (clap) — agent, fleet, config, skill cmds
+│   ├── clawden-config/     # Config schema (serde), translators, secret vault
+│   └── clawden-adapters/   # Built-in adapters (feature-gated)
 │       ├── openclaw/
 │       ├── zeroclaw/
 │       ├── picoclaw/
@@ -40,7 +40,7 @@ clawlab/
 ├── dashboard/              # React 19 + Vite + Tailwind + shadcn/ui
 │   ├── package.json
 │   └── src/
-├── sdk/                    # @clawlab/sdk — TypeScript skill SDK
+├── sdk/                    # @clawden/sdk — TypeScript skill SDK
 │   ├── package.json
 │   └── src/
 ├── specs/                  # LeanSpec specs
@@ -58,9 +58,9 @@ clawlab/
 ## Plan
 
 - [x] Initialize Cargo workspace with crate structure
-- [x] Set up `clawlab-core` crate with placeholder trait
-- [x] Set up `clawlab-server` crate with Axum hello-world
-- [x] Set up `clawlab-cli` crate with clap skeleton
+- [x] Set up `clawden-core` crate with placeholder trait
+- [x] Set up `clawden-server` crate with Axum hello-world
+- [x] Set up `clawden-cli` crate with clap skeleton
 - [ ] Scaffold React dashboard with Vite + Tailwind + shadcn/ui
 - [x] Scaffold TypeScript SDK with tsup + Vitest
 - [x] Configure GitHub Actions CI (cargo test + cargo clippy + pnpm test)

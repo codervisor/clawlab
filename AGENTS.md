@@ -1,8 +1,8 @@
-# clawlab
+# clawden
 
 ## Overview
 
-ClawLab is the **unified orchestration platform for the xxxclaw ecosystem**. It provides a single control plane to deploy, manage, monitor, and coordinate heterogeneous AI agent runtimes — OpenClaw, ZeroClaw, PicoClaw, NanoClaw, IronClaw, NullClaw, and community variants.
+ClawDen is the **unified orchestration platform for the xxxclaw ecosystem**. It provides a single control plane to deploy, manage, monitor, and coordinate heterogeneous AI agent runtimes — OpenClaw, ZeroClaw, PicoClaw, NanoClaw, IronClaw, NullClaw, and community variants.
 
 ## Skills
 
@@ -18,21 +18,21 @@ Read the skill file for complete SDD workflow guidance.
 
 ## Architecture
 
-ClawLab uses a **Rust backend + React frontend** architecture:
+ClawDen uses a **Rust backend + React frontend** architecture:
 
 - **Backend** (`crates/`): Cargo workspace — Axum server, clap CLI, adapter trait objects
 - **Dashboard** (`dashboard/`): React 19 + Vite — consumes REST + WebSocket API
-- **Skill SDK** (`sdk/`): TypeScript `@clawlab/sdk` — for skill authors (most skills are TS/JS)
+- **Skill SDK** (`sdk/`): TypeScript `@clawden/sdk` — for skill authors (most skills are TS/JS)
 
-All communication with claw runtimes goes through the **Claw Runtime Interface** (`crates/clawlab-core`) — Rust traits where each runtime has a pluggable adapter.
+All communication with claw runtimes goes through the **Claw Runtime Interface** (`crates/clawden-core`) — Rust traits where each runtime has a pluggable adapter.
 
 ## Project-Specific Rules
 
 - Rust for all backend code, strict clippy, rustfmt enforced
 - React + TypeScript for dashboard
-- TypeScript for Skill SDK (`@clawlab/sdk`)
+- TypeScript for Skill SDK (`@clawden/sdk`)
 - Cargo workspace for Rust crates, pnpm for dashboard/SDK
-- Adapters live in `crates/clawlab-adapters/` (feature-gated)
+- Adapters live in `crates/clawden-adapters/` (feature-gated)
 - Specs follow LeanSpec SDD workflow
 - All lifecycle events must be audit-logged
 - Secrets are never stored in plain text

@@ -1,10 +1,12 @@
 [package]
-name = "clawlab-config"
+name = "clawden-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
-clawlab-core = { path = "../clawlab-core" }
+anyhow.workspace = true
+clap.workspace = true
+reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true

@@ -66,11 +66,11 @@ pub trait ClawAdapter: Send + Sync {
 | MimiClaw | C (ESP32-S3) | 3.3K+ | Telegram + WebSocket (port 18789) | Serial/MQTT bridge |
 
 ### Adapter Registration
-Adapters are registered via Rust feature flags (compile-time) or dynamic loading from `~/.clawlab/adapters/` (shared libraries). Built-in adapters are compiled into the binary by default.
+Adapters are registered via Rust feature flags (compile-time) or dynamic loading from `~/.clawden/adapters/` (shared libraries). Built-in adapters are compiled into the binary by default.
 
 ## Plan
 
-- [x] Define `ClawAdapter` Rust trait and core types in `crates/clawlab-core`
+- [x] Define `ClawAdapter` Rust trait and core types in `crates/clawden-core`
 - [x] Implement `OpenClawAdapter` (HTTP REST client, most mature ecosystem)
 - [x] Implement `ZeroClawAdapter` (native Rust, most natural integration)
 - [x] Implement `PicoClawAdapter` (HTTP + subprocess for Go binary)

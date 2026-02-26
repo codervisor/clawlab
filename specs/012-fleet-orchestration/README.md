@@ -51,7 +51,7 @@ interface AgentRegistration {
 - Define agent teams with roles (leader, worker, reviewer)
 - Task decomposition and fan-out to team members
 - Result aggregation and consensus
-- Cross-runtime communication via ClawLab message bus
+- Cross-runtime communication via ClawDen message bus
 
 ## Plan
 

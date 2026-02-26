@@ -20,9 +20,9 @@ updated_at: 2026-02-26T02:50:41.154596674Z
 
 ## Overview
 
-Every claw runtime has independently built its own messaging integrations — Telegram bots, Discord adapters, WhatsApp bridges, etc. The result is fragmented: OpenClaw supports 14+ channels, NullClaw supports 17, PicoClaw supports 6, but each uses different libraries, auth flows, and configuration patterns. ClawLab needs a unified channel layer so operators can configure messaging channels once and route them to any runtime in the fleet.
+Every claw runtime has independently built its own messaging integrations — Telegram bots, Discord adapters, WhatsApp bridges, etc. The result is fragmented: OpenClaw supports 14+ channels, NullClaw supports 17, PicoClaw supports 6, but each uses different libraries, auth flows, and configuration patterns. ClawDen needs a unified channel layer so operators can configure messaging channels once and route them to any runtime in the fleet.
 
-This spec documents which channels each runtime supports (the compatibility matrix) and designs ClawLab's channel abstraction for cross-runtime message routing.
+This spec documents which channels each runtime supports (the compatibility matrix) and designs ClawDen's channel abstraction for cross-runtime message routing.
 
 ## Channel Support Matrix
 
@@ -67,7 +67,7 @@ Data sourced from official GitHub repos (February 2026).
 | Telegram | 8/8 (all) | Universal — every runtime supports it. Best candidate for "default" channel |
 | Discord | 6/8 | Missing: IronClaw, MimiClaw |
 | WhatsApp | 4/8 | Two implementations: Baileys (OpenClaw, NanoClaw) vs Meta Cloud API (ZeroClaw, NullClaw) |
-| CLI/REPL | 6/8 | Local-only, not routable through ClawLab |
+| CLI/REPL | 6/8 | Local-only, not routable through ClawDen |
 | Slack | 5/8 | Bolt SDK (OpenClaw), Socket Mode or webhook-based (others) |
 | Signal | 4/8 | Requires `signal-cli` daemon |
 | WebChat | 4/8 | Each runtime has its own Web UI approach |
@@ -87,16 +87,16 @@ Data sourced from official GitHub repos (February 2026).
 
 ## Design
 
-### ClawLab Channel Architecture
+### ClawDen Channel Architecture
 
-ClawLab doesn't replace each runtime's native channel implementation. Instead, it provides:
+ClawDen doesn't replace each runtime's native channel implementation. Instead, it provides:
 
 1. **Channel Registry** — Tracks which channels each agent supports and their current state
-2. **Channel Proxy** (optional) — For runtimes that lack a specific channel, ClawLab can act as a proxy: receive on the channel, translate to the runtime's API, relay the response back
+2. **Channel Proxy** (optional) — For runtimes that lack a specific channel, ClawDen can act as a proxy: receive on the channel, translate to the runtime's API, relay the response back
 3. **Unified Config** — Single place to configure channel credentials (bot tokens, API keys), mapped to each runtime's native config format via the config translator (spec 013)
 
 ```
-User (Telegram) ──► ClawLab Channel Router
+User (Telegram) ──► ClawDen Channel Router
                          │
                    ┌─────┴─────┐
                    │           │
@@ -104,14 +104,14 @@ User (Telegram) ──► ClawLab Channel Router
                    │           │
               ZeroClaw    IronClaw
            (has Telegram) (no Telegram,
-                          ClawLab proxies)
+                          ClawDen proxies)
 ```
 
 ### Channel Proxy Mode
 
-For runtimes that don't natively support a channel, ClawLab can bridge:
+For runtimes that don't natively support a channel, ClawDen can bridge:
 
-1. ClawLab receives the message on the channel (e.g., Telegram)
+1. ClawDen receives the message on the channel (e.g., Telegram)
 2. Translates to a `send()` call on the CRI adapter
 3. Gets the `AgentResponse` back
 4. Sends the response back on the channel
@@ -120,7 +120,7 @@ This means every agent in the fleet is reachable on every channel, even if the r
 
 ### Channel Credential Management
 
-All channel credentials flow through ClawLab's secret vault (spec 013):
+All channel credentials flow through ClawDen's secret vault (spec 013):
 - Bot tokens, API keys, webhook secrets stored encrypted
 - Injected into runtime configs at deploy time via env vars
 - Never exposed in logs or API responses
@@ -133,14 +133,14 @@ Every runtime uses some form of allowlisting:
 - **Pairing**: OpenClaw and some others use a pairing code flow for DM access
 - **Group activation**: Mention-only vs always-respond (configurable per-channel)
 
-ClawLab normalizes these into a canonical security policy per agent.
+ClawDen normalizes these into a canonical security policy per agent.
 
 ## Plan
 
 - [ ] Audit and document the complete channel matrix (this spec captures the initial audit)
-- [ ] Design canonical channel config schema in `clawlab-config` (credentials + allowlists + policies)
+- [ ] Design canonical channel config schema in `clawden-config` (credentials + allowlists + policies)
 - [ ] Implement channel config translators per runtime in the CRI adapters
-- [ ] Build channel proxy in `clawlab-server` for bridging unsupported channels
+- [ ] Build channel proxy in `clawden-server` for bridging unsupported channels
 - [ ] Implement channel health monitoring (is the Telegram bot connected? Is Discord auth valid?)
 - [ ] Add channel management to the dashboard (spec 014) — enable/disable, status, logs per channel
 - [ ] Document channel setup guides for operators
@@ -156,9 +156,9 @@ ClawLab normalizes these into a canonical security policy per agent.
 
 ## Notes
 
-- **Telegram is the universal channel** — all 8 runtimes support it. It's the safest default for testing and the best candidate for ClawLab's proxy implementation
-- **WhatsApp fragmentation** — two incompatible approaches: Baileys (unofficial, full-featured, used by OpenClaw/NanoClaw) vs Meta Cloud API (official, webhook-based, used by ZeroClaw). ClawLab should support both
-- **NanoClaw's skill-based channels** — NanoClaw adds channels via Claude Code skills (`/add-telegram`, `/add-slack`), not built-in code. This means channel support varies per fork. ClawLab should track announced skills, not just core code
+- **Telegram is the universal channel** — all 8 runtimes support it. It's the safest default for testing and the best candidate for ClawDen's proxy implementation
+- **WhatsApp fragmentation** — two incompatible approaches: Baileys (unofficial, full-featured, used by OpenClaw/NanoClaw) vs Meta Cloud API (official, webhook-based, used by ZeroClaw). ClawDen should support both
+- **NanoClaw's skill-based channels** — NanoClaw adds channels via Claude Code skills (`/add-telegram`, `/add-slack`), not built-in code. This means channel support varies per fork. ClawDen should track announced skills, not just core code
 - **IronClaw's WASM channels** — channels are compiled to WebAssembly for sandboxed execution. Unique approach that's more secure but harder to extend
 - **NullClaw has the broadest channel support** (17 channels) despite being the newest and smallest binary (678 KB). All channels are native Zig vtable implementations
 - **Chinese IM ecosystem** — DingTalk, Lark/Feishu, QQ, WeCom, and Zalo are important for APAC deployment. PicoClaw (from Sipeed, a Chinese hardware company) and NullClaw have the best coverage here

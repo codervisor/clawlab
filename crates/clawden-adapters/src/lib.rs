@@ -6,7 +6,7 @@ mod zeroclaw;
 
 use std::sync::Arc;
 
-use clawlab_core::ClawRuntime;
+use clawden_core::ClawRuntime;
 
 pub use nanoclaw::NanoClawAdapter;
 pub use openclaw::OpenClawAdapter;

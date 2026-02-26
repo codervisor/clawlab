@@ -13,14 +13,14 @@ updated_at: 2026-02-26T02:06:31.993838276Z
 transitions:
 - status: archived
   at: 2026-02-26T02:06:31.993838276Z
-parent: 001-clawlab-mvp
+parent: 001-clawden-mvp
 ---
 
 # Module Interfaces & Contracts
 
 ## Overview
 
-Define TypeScript interfaces and contracts that govern communication between ClawLab modules. This ensures loose coupling, testability, and clear boundaries.
+Define TypeScript interfaces and contracts that govern communication between ClawDen modules. This ensures loose coupling, testability, and clear boundaries.
 
 ## Design
 
@@ -92,7 +92,7 @@ type ElementTarget =
 
 ### Error Types
 ```typescript
-class ClawLabError extends Error {
+class ClawDenError extends Error {
   constructor(
     message: string,
     public readonly code: ErrorCode,

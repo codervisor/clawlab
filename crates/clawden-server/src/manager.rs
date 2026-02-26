@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
-use clawlab_adapters::AdapterRegistry;
-use clawlab_core::{
+use clawden_adapters::AdapterRegistry;
+use clawden_core::{
     AgentConfig, AgentHandle, AgentMessage, AgentResponse, ClawRuntime, HealthStatus,
 };
 use serde::Serialize;
@@ -359,10 +359,10 @@ pub fn append_audit(audit: &Arc<AuditLog>, action: &str, target: &str) {
 
 #[cfg(test)]
 mod tests {
-    use clawlab_adapters::builtin_registry;
+    use clawden_adapters::builtin_registry;
 
     use super::LifecycleManager;
-    use clawlab_core::ClawRuntime;
+    use clawden_core::ClawRuntime;
 
     #[test]
     fn registers_and_lists_agents() {

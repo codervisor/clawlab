@@ -14,7 +14,7 @@ updated_at: 2026-02-26T02:06:31.993491052Z
 transitions:
 - status: archived
   at: 2026-02-26T02:06:31.993491052Z
-parent: 001-clawlab-mvp
+parent: 001-clawden-mvp
 ---
 
 # Video Renderer Module

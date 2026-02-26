@@ -6,7 +6,7 @@ use std::fs;
 use std::path::Path;
 
 #[derive(Debug, Parser)]
-#[command(name = "clawlab", version, about = "ClawLab orchestration CLI")]
+#[command(name = "clawden", version, about = "ClawDen orchestration CLI")]
 struct Cli {
     #[arg(long, global = true, default_value = "http://127.0.0.1:8080")]
     server_url: String,
@@ -147,9 +147,9 @@ fn main() -> Result<()> {
     let base = cli.server_url.trim_end_matches('/');
 
     match cli.command {
-        Commands::Init => println!("clawlab init scaffold is not implemented yet"),
+        Commands::Init => println!("clawden init scaffold is not implemented yet"),
         Commands::Server { command } => match command {
-            ServerCommand::Start => println!("run: cargo run -p clawlab-server"),
+            ServerCommand::Start => println!("run: cargo run -p clawden-server"),
         },
         Commands::Agent { command } => match command {
             AgentCommand::Register {
@@ -254,7 +254,7 @@ fn scaffold_skill_template(name: &str) -> Result<()> {
 
         let package_json = format!(
                 r#"{{
-    "name": "@clawlab-skill/{name}",
+    "name": "@clawden-skill/{name}",
     "version": "0.1.0",
     "private": true,
     "type": "module",
@@ -262,7 +262,7 @@ fn scaffold_skill_template(name: &str) -> Result<()> {
         "build": "tsc -p tsconfig.json"
     }},
     "dependencies": {{
-        "@clawlab/sdk": "^0.1.0"
+        "@clawden/sdk": "^0.1.0"
     }},
     "devDependencies": {{
         "typescript": "^5.7.3"
@@ -285,7 +285,7 @@ fn scaffold_skill_template(name: &str) -> Result<()> {
 "#;
 
         let source = format!(
-                r#"import {{ defineSkill }} from '@clawlab/sdk';
+                r#"import {{ defineSkill }} from '@clawden/sdk';
 
 export default defineSkill({{
     name: '{name}',

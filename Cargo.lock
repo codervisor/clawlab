@@ -223,17 +223,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a822ea5bc7590f9d40f1ba12c0dc3c2760f3482c6984db1573ad11031420831"
 
 [[package]]
-name = "clawlab-adapters"
+name = "clawden-adapters"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "clawlab-core",
+ "clawden-core",
  "serde_json",
 ]
 
 [[package]]
-name = "clawlab-cli"
+name = "clawden-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -244,16 +244,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "clawlab-config"
+name = "clawden-config"
 version = "0.1.0"
 dependencies = [
- "clawlab-core",
+ "clawden-core",
  "serde",
  "serde_json",
 ]
 
 [[package]]
-name = "clawlab-core"
+name = "clawden-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -263,12 +263,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "clawlab-server"
+name = "clawden-server"
 version = "0.1.0"
 dependencies = [
  "axum",
- "clawlab-adapters",
- "clawlab-core",
+ "clawden-adapters",
+ "clawden-core",
  "serde",
  "serde_json",
  "tokio",

@@ -13,7 +13,7 @@ updated_at: 2026-02-26T02:06:31.993357715Z
 transitions:
 - status: archived
   at: 2026-02-26T02:06:31.993357715Z
-parent: 001-clawlab-mvp
+parent: 001-clawden-mvp
 ---
 
 # Session Recorder Module

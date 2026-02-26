@@ -1,29 +1,29 @@
-# ClawLab — xxxClaw Orchestration Platform
+# ClawDen — xxxClaw Orchestration Platform
 
-**Project:** ClawLab
+**Project:** ClawDen
 
 **Objective:** The unified orchestration platform for the xxxclaw ecosystem — deploy, manage, monitor, and coordinate heterogeneous AI agent runtimes (OpenClaw, ZeroClaw, PicoClaw, NanoClaw, IronClaw, NullClaw, and more) from a single control plane.
 
 **Core Tech Stack:**
 
 * **Backend:** Rust (Axum HTTP/WS + tokio async + SQLx)
-* **CLI:** Rust (clap) — ships as same `clawlab` binary
+* **CLI:** Rust (clap) — ships as same `clawden` binary
 * **Dashboard:** React 19 + Tailwind CSS + shadcn/ui + Vite
 * **Database:** SQLite (dev) → PostgreSQL (production)
-* **Skill SDK:** TypeScript `@clawlab/sdk` (for skill developers)
+* **Skill SDK:** TypeScript `@clawden/sdk` (for skill developers)
 * **Adapters:** Rust trait objects — native for Rust runtimes, subprocess/HTTP for others
 
 **Three Pillars:**
 
 1. **Control Plane** — Unified lifecycle management (deploy, start, stop, restart, upgrade) with health monitoring, auto-recovery, and audit logging across all claw runtimes.
 2. **Fleet Orchestration** — Agent discovery and registration, capability-based task routing, load balancing, cost optimization, and multi-agent swarm coordination.
-3. **Developer Platform** — Cross-claw SDK (`@clawlab/sdk`), CLI (`clawlab`), skill testing harness, and skill marketplace for building plugins that work across runtimes.
+3. **Developer Platform** — Cross-claw SDK (`@clawden/sdk`), CLI (`clawden`), skill testing harness, and skill marketplace for building plugins that work across runtimes.
 
 **Architecture:**
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                    ClawLab Dashboard (Web UI)                 │
+│                    ClawDen Dashboard (Web UI)                 │
 ├──────────────────────────────────────────────────────────────┤
 │                     REST + WebSocket API                      │
 ├──────────────────────────────────────────────────────────────┤
@@ -38,20 +38,20 @@
 **Monorepo Structure:**
 
 ```
-clawlab/
+clawden/
 ├── Cargo.toml              # Workspace root
 ├── crates/
-│   ├── clawlab-core/       # CRI traits, types, shared utilities
-│   ├── clawlab-server/     # Axum HTTP/WS API server
-│   ├── clawlab-cli/        # CLI binary (clap)
-│   ├── clawlab-config/     # Config schema (serde), translators
-│   └── clawlab-adapters/   # Built-in adapters (feature-gated)
+│   ├── clawden-core/       # CRI traits, types, shared utilities
+│   ├── clawden-server/     # Axum HTTP/WS API server
+│   ├── clawden-cli/        # CLI binary (clap)
+│   ├── clawden-config/     # Config schema (serde), translators
+│   └── clawden-adapters/   # Built-in adapters (feature-gated)
 │       ├── openclaw/
 │       ├── zeroclaw/
 │       ├── picoclaw/
 │       └── nanoclaw/
 ├── dashboard/              # React 19 + Vite + Tailwind
-├── sdk/                    # @clawlab/sdk — TypeScript skill SDK
+├── sdk/                    # @clawden/sdk — TypeScript skill SDK
 └── specs/                  # LeanSpec specs
 ```
 

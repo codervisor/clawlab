@@ -1,20 +1,20 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use clawlab_core::{
+use clawden_core::{
     AgentConfig, AgentHandle, AgentMessage, AgentMetrics, AgentResponse, ClawAdapter, ClawRuntime,
     EventStream, HealthStatus, InstallConfig, RuntimeConfig, RuntimeMetadata, Skill, SkillManifest,
 };
 
-pub struct NanoClawAdapter;
+pub struct PicoClawAdapter;
 
 #[async_trait]
-impl ClawAdapter for NanoClawAdapter {
+impl ClawAdapter for PicoClawAdapter {
     fn metadata(&self) -> RuntimeMetadata {
         RuntimeMetadata {
-            runtime: ClawRuntime::NanoClaw,
+            runtime: ClawRuntime::PicoClaw,
             version: "unknown".to_string(),
-            language: "typescript".to_string(),
-            capabilities: vec!["chat".to_string(), "skills".to_string()],
+            language: "go".to_string(),
+            capabilities: vec!["chat".to_string(), "embedded".to_string()],
         }
     }
 
@@ -24,9 +24,9 @@ impl ClawAdapter for NanoClawAdapter {
 
     async fn start(&self, config: &AgentConfig) -> Result<AgentHandle> {
         Ok(AgentHandle {
-            id: format!("nanoclaw-{}", config.name),
+            id: format!("picoclaw-{}", config.name),
             name: config.name.clone(),
-            runtime: ClawRuntime::NanoClaw,
+            runtime: ClawRuntime::PicoClaw,
         })
     }
 
@@ -52,7 +52,7 @@ impl ClawAdapter for NanoClawAdapter {
 
     async fn send(&self, _handle: &AgentHandle, message: &AgentMessage) -> Result<AgentResponse> {
         Ok(AgentResponse {
-            content: format!("NanoClaw echo: {}", message.content),
+            content: format!("PicoClaw echo: {}", message.content),
         })
     }
 
@@ -62,7 +62,7 @@ impl ClawAdapter for NanoClawAdapter {
 
     async fn get_config(&self, _handle: &AgentHandle) -> Result<RuntimeConfig> {
         Ok(RuntimeConfig {
-            values: serde_json::json!({ "runtime": "nanoclaw" }),
+            values: serde_json::json!({ "runtime": "picoclaw" }),
         })
     }
 

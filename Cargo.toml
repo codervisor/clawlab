@@ -1,10 +1,10 @@
 [workspace]
 members = [
-  "crates/clawlab-core",
-  "crates/clawlab-server",
-  "crates/clawlab-cli",
-  "crates/clawlab-config",
-  "crates/clawlab-adapters",
+  "crates/clawden-core",
+  "crates/clawden-server",
+  "crates/clawden-cli",
+  "crates/clawden-config",
+  "crates/clawden-adapters",
 ]
 resolver = "2"
 

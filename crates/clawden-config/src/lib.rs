@@ -1,9 +1,9 @@
-use clawlab_core::ClawRuntime;
+use clawden_core::ClawRuntime;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ClawLabConfig {
+pub struct ClawDenConfig {
     pub agent: AgentConfig,
 }
 
@@ -49,7 +49,7 @@ pub struct SecurityConfig {
     pub sandboxed: bool,
 }
 
-impl ClawLabConfig {
+impl ClawDenConfig {
     pub fn validate(&self) -> Result<(), String> {
         if self.agent.name.trim().is_empty() {
             return Err("agent.name must not be empty".to_string());
@@ -77,8 +77,8 @@ impl ClawLabConfig {
 
 pub trait RuntimeConfigTranslator {
     fn runtime(&self) -> ClawRuntime;
-    fn to_runtime_config(&self, canonical: &ClawLabConfig) -> Result<Value, String>;
-    fn from_runtime_config(&self, runtime_config: &Value) -> Result<ClawLabConfig, String>;
+    fn to_runtime_config(&self, canonical: &ClawDenConfig) -> Result<Value, String>;
+    fn from_runtime_config(&self, runtime_config: &Value) -> Result<ClawDenConfig, String>;
 }
 
 pub struct OpenClawConfigTranslator;
@@ -90,7 +90,7 @@ impl RuntimeConfigTranslator for OpenClawConfigTranslator {
         ClawRuntime::OpenClaw
     }
 
-    fn to_runtime_config(&self, canonical: &ClawLabConfig) -> Result<Value, String> {
+    fn to_runtime_config(&self, canonical: &ClawDenConfig) -> Result<Value, String> {
         canonical.validate()?;
         Ok(serde_json::json!({
             "runtime": "openclaw",
@@ -104,7 +104,7 @@ impl RuntimeConfigTranslator for OpenClawConfigTranslator {
         }))
     }
 
-    fn from_runtime_config(&self, runtime_config: &Value) -> Result<ClawLabConfig, String> {
+    fn from_runtime_config(&self, runtime_config: &Value) -> Result<ClawDenConfig, String> {
         let agent = runtime_config
             .get("agent")
             .and_then(Value::as_str)
@@ -133,7 +133,7 @@ impl RuntimeConfigTranslator for ZeroClawConfigTranslator {
         ClawRuntime::ZeroClaw
     }
 
-    fn to_runtime_config(&self, canonical: &ClawLabConfig) -> Result<Value, String> {
+    fn to_runtime_config(&self, canonical: &ClawDenConfig) -> Result<Value, String> {
         canonical.validate()?;
         Ok(serde_json::json!({
             "runtime": "zeroclaw",
@@ -148,7 +148,7 @@ impl RuntimeConfigTranslator for ZeroClawConfigTranslator {
         }))
     }
 
-    fn from_runtime_config(&self, runtime_config: &Value) -> Result<ClawLabConfig, String> {
+    fn from_runtime_config(&self, runtime_config: &Value) -> Result<ClawDenConfig, String> {
         let agent_obj = runtime_config
             .get("agent")
             .and_then(Value::as_object)
@@ -182,7 +182,7 @@ impl RuntimeConfigTranslator for PicoClawConfigTranslator {
         ClawRuntime::PicoClaw
     }
 
-    fn to_runtime_config(&self, canonical: &ClawLabConfig) -> Result<Value, String> {
+    fn to_runtime_config(&self, canonical: &ClawDenConfig) -> Result<Value, String> {
         canonical.validate()?;
         Ok(serde_json::json!({
             "runtime": "picoclaw",
@@ -199,7 +199,7 @@ impl RuntimeConfigTranslator for PicoClawConfigTranslator {
         }))
     }
 
-    fn from_runtime_config(&self, runtime_config: &Value) -> Result<ClawLabConfig, String> {
+    fn from_runtime_config(&self, runtime_config: &Value) -> Result<ClawDenConfig, String> {
         let name = runtime_config
             .get("name")
             .and_then(Value::as_str)
@@ -238,7 +238,7 @@ fn base_config_with_runtime(
     provider: &str,
     model: &str,
     runtime_config: &Value,
-) -> ClawLabConfig {
+) -> ClawDenConfig {
     let tools = runtime_config
         .get("tools")
         .cloned()
@@ -283,7 +283,7 @@ fn base_config_with_runtime(
         .cloned()
         .unwrap_or_default();
 
-    ClawLabConfig {
+    ClawDenConfig {
         agent: AgentConfig {
             name: name.to_string(),
             runtime,
@@ -306,15 +306,15 @@ fn base_config_with_runtime(
 #[cfg(test)]
 mod tests {
     use super::{
-        ClawLabConfig, ModelConfig, OpenClawConfigTranslator, PicoClawConfigTranslator,
+        ClawDenConfig, ModelConfig, OpenClawConfigTranslator, PicoClawConfigTranslator,
         RuntimeConfigTranslator, ZeroClawConfigTranslator,
     };
     use crate::{AgentConfig, ChannelConfig, SecurityConfig, ToolConfig};
-    use clawlab_core::ClawRuntime;
+    use clawden_core::ClawRuntime;
     use serde_json::Map;
 
-    fn sample_config(runtime: ClawRuntime) -> ClawLabConfig {
-        ClawLabConfig {
+    fn sample_config(runtime: ClawRuntime) -> ClawDenConfig {
+        ClawDenConfig {
             agent: AgentConfig {
                 name: "alpha".to_string(),
                 runtime,

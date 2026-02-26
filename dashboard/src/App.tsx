@@ -80,7 +80,7 @@ export function App() {
 
   return (
     <main style={{ fontFamily: 'system-ui', margin: '2rem' }}>
-      <h1>ClawLab Dashboard</h1>
+      <h1>ClawDen Dashboard</h1>
       <p>Fleet overview</p>
 
       <section style={{ display: 'flex', gap: '1rem', margin: '1rem 0' }}>

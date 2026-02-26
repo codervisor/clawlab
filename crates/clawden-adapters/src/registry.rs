@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use clawlab_core::{ClawAdapter, ClawRuntime};
+use clawden_core::{ClawAdapter, ClawRuntime};
 
 #[derive(Default)]
 pub struct AdapterRegistry {

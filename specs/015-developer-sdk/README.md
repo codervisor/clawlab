@@ -20,30 +20,30 @@ transitions:
 
 ## Overview
 
-A unified SDK and CLI that enables developers to build skills/plugins that work across multiple claw runtimes. The **CLI is Rust** (clap, ships as part of the `clawlab` binary). The **Skill SDK is TypeScript** (`@clawlab/sdk`) since most skill authors work in TS/JS.
+A unified SDK and CLI that enables developers to build skills/plugins that work across multiple claw runtimes. The **CLI is Rust** (clap, ships as part of the `clawden` binary). The **Skill SDK is TypeScript** (`@clawden/sdk`) since most skill authors work in TS/JS.
 
 ## Design
 
-### CLI (`clawlab` — Rust/clap, same binary as server)
+### CLI (`clawden` — Rust/clap, same binary as server)
 ```bash
-clawlab init                    # Initialize ClawLab project
-clawlab server start            # Start the orchestration server
-clawlab agent list              # List registered agents
-clawlab agent start <name>      # Start an agent
-clawlab agent stop <name>       # Stop an agent
-clawlab agent health            # Fleet health summary
-clawlab fleet status            # Fleet overview
-clawlab task send <agent> <msg> # Send task to agent
-clawlab skill create <name>     # Scaffold a new skill (generates TS template)
-clawlab skill test <name>       # Test skill across runtimes
-clawlab skill publish <name>    # Publish to marketplace
-clawlab config set <key> <val>  # Set config value
-clawlab config diff             # Show config drift
+clawden init                    # Initialize ClawDen project
+clawden server start            # Start the orchestration server
+clawden agent list              # List registered agents
+clawden agent start <name>      # Start an agent
+clawden agent stop <name>       # Stop an agent
+clawden agent health            # Fleet health summary
+clawden fleet status            # Fleet overview
+clawden task send <agent> <msg> # Send task to agent
+clawden skill create <name>     # Scaffold a new skill (generates TS template)
+clawden skill test <name>       # Test skill across runtimes
+clawden skill publish <name>    # Publish to marketplace
+clawden config set <key> <val>  # Set config value
+clawden config diff             # Show config drift
 ```
 
 ### Skill SDK
 ```typescript
-import { defineSkill } from '@clawlab/sdk';
+import { defineSkill } from '@clawden/sdk';
 
 export default defineSkill({
   name: 'web-scraper',
@@ -70,17 +70,17 @@ export default defineSkill({
 
 ## Plan
 
-- [x] Build CLI subcommands in `clawlab-cli` crate (clap derive)
+- [x] Build CLI subcommands in `clawden-cli` crate (clap derive)
 - [x] Implement agent management commands (list, start, stop, health)
 - [x] Implement fleet status commands
 - [x] Define TypeScript Skill SDK with `defineSkill` API (`sdk/` directory)
-- [x] Build skill scaffolding (`clawlab skill create` → generates TS template)
+- [x] Build skill scaffolding (`clawden skill create` → generates TS template)
 - [ ] Create cross-runtime skill test harness
 - [ ] Design marketplace registry protocol
 
 ## Test
 
-- [x] CLI commands execute correctly against running ClawLab
+- [x] CLI commands execute correctly against running ClawDen
 - [ ] Skill SDK produces valid skill packages
 - [ ] Test harness runs skills against multiple runtimes
 - [ ] Published skills can be installed and executed

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::Json;
-use clawlab_core::ClawRuntime;
+use clawden_core::ClawRuntime;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 

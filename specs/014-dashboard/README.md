@@ -36,7 +36,7 @@ A web-based dashboard providing real-time visibility into the claw agent fleet. 
 - **Frontend**: React 19 + Tailwind CSS + shadcn/ui
 - **Real-time**: WebSocket for live status updates
 - **Charts**: Recharts or Tremor for metrics visualization
-- **API**: Consumes ClawLab REST + WebSocket API
+- **API**: Consumes ClawDen REST + WebSocket API
 
 ### Key Interactions
 - Start/stop/restart agents from dashboard

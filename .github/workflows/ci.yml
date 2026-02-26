@@ -33,6 +33,6 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile=false
       - name: Test dashboard
-        run: pnpm --filter @clawlab/dashboard test
+        run: pnpm --filter @clawden/dashboard test
       - name: Test sdk
-        run: pnpm --filter @clawlab/sdk test
+        run: pnpm --filter @clawden/sdk test

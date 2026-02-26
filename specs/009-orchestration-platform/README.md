@@ -10,13 +10,13 @@ created_at: 2026-02-26T02:06:55.408050677Z
 updated_at: 2026-02-26T02:06:55.408050677Z
 ---
 
-# ClawLab: xxxClaw Orchestration Platform
+# ClawDen: xxxClaw Orchestration Platform
 
 ## Overview
 
 The xxxclaw ecosystem (OpenClaw, ZeroClaw, PicoClaw, NanoClaw, IronClaw, NullClaw, MicroClaw, MimiClaw) is thriving but fragmented. Each product has its own deployment model, configuration format, monitoring approach, and skill/plugin system. **OpenClaw Mission Control** covers only OpenClaw.
 
-ClawLab becomes the **unified orchestration platform** — the Kubernetes of claw agents. It provides a single control plane to deploy, manage, monitor, and coordinate heterogeneous claw agents across any infrastructure.
+ClawDen becomes the **unified orchestration platform** — the Kubernetes of claw agents. It provides a single control plane to deploy, manage, monitor, and coordinate heterogeneous claw agents across any infrastructure.
 
 ### Three Pillars
 
@@ -30,7 +30,7 @@ ClawLab becomes the **unified orchestration platform** — the Kubernetes of cla
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                    ClawLab Dashboard (Web UI)                 │
+│                    ClawDen Dashboard (Web UI)                 │
 ├──────────────────────────────────────────────────────────────┤
 │                     REST + WebSocket API                      │
 ├──────────────────────────────────────────────────────────────┤
@@ -53,12 +53,12 @@ ClawLab becomes the **unified orchestration platform** — the Kubernetes of cla
 
 ### Tech Stack
 - **Backend**: Rust (Axum for HTTP/WS, tokio async runtime, SQLx for DB)
-- **CLI**: Rust (clap) — ships as same binary (`clawlab` subcommands)
+- **CLI**: Rust (clap) — ships as same binary (`clawden` subcommands)
 - **Dashboard**: React 19 + Tailwind + shadcn/ui + Vite
 - **Database**: SQLite (embedded) → PostgreSQL (production)
 - **Communication**: WebSocket for real-time, HTTP for control
 - **Adapters**: Rust trait objects — native for Rust runtimes, subprocess/HTTP for others
-- **Skill SDK**: TypeScript `@clawlab/sdk` (most skill authors use TS/JS)
+- **Skill SDK**: TypeScript `@clawden/sdk` (most skill authors use TS/JS)
 
 ## Plan
 
@@ -81,7 +81,7 @@ ClawLab becomes the **unified orchestration platform** — the Kubernetes of cla
 ## Notes
 
 - Pivot from browser-use demo engine (specs 001-008 archived)
-- The original "browser use" capability could become a ClawLab skill
+- The original "browser use" capability could become a ClawDen skill
 - Inspiration: Kubernetes CRI, Docker Compose, Terraform providers
 - Community can contribute adapters for new claw variants
 - Rust chosen for ecosystem alignment (ZeroClaw, IronClaw, MicroClaw are Rust) and single-binary deployment

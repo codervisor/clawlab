@@ -13,7 +13,7 @@ updated_at: 2026-02-26T02:06:31.993060955Z
 transitions:
 - status: archived
   at: 2026-02-26T02:06:31.993060955Z
-parent: 001-clawlab-mvp
+parent: 001-clawden-mvp
 ---
 
 # Vision Agent Module

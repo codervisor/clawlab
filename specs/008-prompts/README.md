@@ -13,7 +13,7 @@ updated_at: 2026-02-26T02:06:31.994044588Z
 transitions:
 - status: archived
   at: 2026-02-26T02:06:31.994044588Z
-parent: 001-clawlab-mvp
+parent: 001-clawden-mvp
 ---
 
 # Vision LLM Prompt Engineering
@@ -32,7 +32,7 @@ Define the prompt templates, output schemas, and parsing logic for the Vision LL
 
 ### System Prompt Template
 ```typescript
-const SYSTEM_PROMPT = `You are ClawLab, an AI agent that automates browser interactions to create product demos.
+const SYSTEM_PROMPT = `You are ClawDen, an AI agent that automates browser interactions to create product demos.
 
 ROLE:
 - Analyze screenshots to understand the current UI state
@@ -62,7 +62,7 @@ async function parseVisionResponse(raw: string): Promise<VisionResponse> {
     const parsed = JSON.parse(jsonStr);
     return VisionResponseSchema.parse(parsed);
   } catch (error) {
-    throw new ClawLabError('Failed to parse LLM response', 'LLM_PARSE_ERROR', true);
+    throw new ClawDenError('Failed to parse LLM response', 'LLM_PARSE_ERROR', true);
   }
 }
 ```

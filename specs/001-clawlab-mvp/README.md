@@ -12,13 +12,13 @@ transitions:
   at: 2026-02-26T02:06:31.992117036Z
 ---
 
-# ClawLab MVP
+# ClawDen MVP
 
 > **Status**: planned · **Priority**: high · **Created**: 2026-02-03
 
 ## Overview
 
-ClawLab is an AI-powered "Browser/Computer Use" engine that automates web interactions to generate high-quality software product demos (videos/images).
+ClawDen is an AI-powered "Browser/Computer Use" engine that automates web interactions to generate high-quality software product demos (videos/images).
 
 **Problem**: Creating polished product demos is time-consuming and requires manual screen recording, editing, and post-production work.
 

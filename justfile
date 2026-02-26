@@ -13,7 +13,7 @@ test:
     cargo test --workspace
 
 run-server:
-    cargo run -p clawlab-server
+    cargo run -p clawden-server
 
 run-cli:
-    cargo run -p clawlab-cli -- --help
+    cargo run -p clawden-cli -- --help

@@ -19,14 +19,14 @@ transitions:
 
 ## Overview
 
-Each claw runtime has its own config format (JSON, TOML, env vars, markdown). ClawLab provides a unified configuration layer that translates between a canonical schema and runtime-specific formats.
+Each claw runtime has its own config format (JSON, TOML, env vars, markdown). ClawDen provides a unified configuration layer that translates between a canonical schema and runtime-specific formats.
 
 ## Design
 
 ### Canonical Config Schema
 ```rust
 #[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct ClawLabConfig {
+pub struct ClawDenConfig {
     pub agent: AgentConfig,
 }
 
