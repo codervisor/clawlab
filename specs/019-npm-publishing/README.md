@@ -19,7 +19,6 @@ transitions:
 - status: complete
   at: 2026-02-26T07:24:08.959495981Z
 ---
-
 # npm Publishing & Package Distribution
 
 ## Overview
@@ -124,8 +123,8 @@ clawden/
 
 - [x] `cd sdk && pnpm pack` produces a valid tarball with correct files
 - [x] `cd npm/clawden && npm pack` includes bin/ and binaries/ correctly
-- [ ] `npm install clawden` on Linux x64 installs correct binary and `clawden --help` works
-- [ ] `npx clawden --help` works without global install
+- [x] `npm install clawden` on Linux x64 installs correct binary and `clawden --help` works
+- [x] `npx clawden --help` works without global install
 - [x] Platform binary wrapper falls back correctly when no npm package found (local dev)
 - [x] CI publish workflow succeeds on tag push (dry-run first)
 - [x] Dev prerelease publish works with `--dev` flag (via `workflow_dispatch` `inputs.dev`)
