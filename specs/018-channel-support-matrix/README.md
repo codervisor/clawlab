@@ -23,7 +23,12 @@ Every claw runtime has independently built its own messaging integrations — Te
 
 ClawDen makes this invisible to users. You list your channels in `clawden.yaml`, assign them to runtimes, and ClawDen handles the rest — credential injection and proxying for unsupported combos.
 
-**Phase 1 scope**: OpenClaw (highest priority — most popular runtime), ZeroClaw, NanoClaw, and PicoClaw. IronClaw, NullClaw, and MicroClaw are deferred to Phase 2.
+**Phase 1 runtimes**: OpenClaw (highest priority — most popular runtime), ZeroClaw, NanoClaw, and PicoClaw. IronClaw, NullClaw, and MicroClaw are deferred to Phase 2.
+
+**Channel tiers** (within Phase 1 runtimes):
+- **Tier 1**: Telegram, Discord, Feishu/Lark — high native coverage across Phase 1 runtimes, proves the config translation pipeline. Feishu/Lark is included because early adopters are expected to skew heavily toward the Chinese market.
+- **Tier 2**: Slack, WhatsApp — full Phase 1 runtime coverage but more complex auth (Slack needs dual tokens; WhatsApp has divergent implementations per runtime).
+- **Tier 3**: Signal, DingTalk, QQ, LINE, Matrix — partial coverage, requires channel proxy for most Phase 1 runtimes.
 
 **Canonical runtime list**: Per [ClawCharts.com](https://clawcharts.com/) (February 2026): OpenClaw, Nanobot, PicoClaw, ZeroClaw, NanoClaw, IronClaw, TinyClaw, OpenFang.
 
@@ -67,7 +72,7 @@ These are the priority runtimes for initial channel support:
 | **Signal**      | ✅ (signal-cli) |      ✅       |      —      |    —     |
 | **Feishu/Lark** |       ✅        |      ✅       |      —      |    ✅     |
 
-Telegram, Discord, Slack, and WhatsApp have full coverage across Phase 1 runtimes. For channels a runtime doesn't support, ClawDen's proxy bridges the gap.
+**Tier 1 channels** (Telegram, Discord, Feishu/Lark) have broad native coverage — these ship first to validate the config translation pipeline. **Tier 2 channels** (Slack, WhatsApp) have full runtime coverage but add auth complexity. **Tier 3 channels** (Signal, DingTalk, QQ, etc.) have partial coverage and require the channel proxy. For any channel a runtime doesn't natively support, ClawDen's proxy bridges the gap.
 
 ### Implementation Libraries by Runtime
 
@@ -319,17 +324,27 @@ channels:
 
 ## Plan
 
-### Phase 1: OpenClaw, ZeroClaw, NanoClaw, PicoClaw
+### Phase 1a: Tier 1 Channels (Telegram, Discord, Feishu/Lark)
 - [ ] Define channel instance schema (name, type inference, per-type fields)
 - [ ] Implement channel instance validation (1:1 instance-runtime, token uniqueness, type resolution, reference checks)
 - [ ] Implement channel credential resolver ($ENV_VAR + .env auto-load)
-- [ ] Add OpenClaw credential mapping (JSON5 config, grammY, discord.js, Baileys, Bolt) — highest priority
-- [ ] Add ZeroClaw credential mapping (env vars, TOML config)
-- [ ] Add NanoClaw credential mapping (code-driven, skill-based channels)
-- [ ] Add PicoClaw credential mapping (JSON config, native Go)
-- [ ] Implement channel proxy for unsupported runtime+channel combos
+- [ ] Add OpenClaw credential mapping for Tier 1 channels (grammY, discord.js, Feishu SDK) — highest priority
+- [ ] Add ZeroClaw credential mapping for Tier 1 channels (env vars, TOML)
+- [ ] Add NanoClaw credential mapping for Tier 1 channels (skill injection, env vars)
+- [ ] Add PicoClaw credential mapping for Tier 1 channels (JSON config)
 - [ ] Implement `clawden channels` and `clawden channels test` CLI commands
 - [ ] Channel health monitoring
+
+### Phase 1b: Tier 2 Channels (Slack, WhatsApp)
+- [ ] Add Slack credential mapping across Phase 1 runtimes (dual token: bot + app)
+- [ ] Add WhatsApp credential mapping across Phase 1 runtimes (Baileys, Meta API, native Go, default)
+- [ ] Implement channel proxy for unsupported runtime+channel combos
+
+### Phase 1c: Tier 3 Channels (Signal, DingTalk, QQ, etc.)
+- [ ] Add Signal credential mapping (OpenClaw + ZeroClaw native; proxy for NanoClaw, PicoClaw)
+- [ ] Add DingTalk credential mapping (PicoClaw native; proxy for others)
+- [ ] Add QQ credential mapping (PicoClaw native; proxy for others)
+- [ ] Validate channel proxy across all Tier 3 channels
 
 ### Phase 2: IronClaw, NullClaw, MicroClaw & Dashboard
 - [ ] Add IronClaw credential mapping (WASM capabilities, secret injection)
