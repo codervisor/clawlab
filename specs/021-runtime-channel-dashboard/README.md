@@ -66,13 +66,13 @@ Clicking an instance opens a side panel enhanced with:
 
 #### New Backend Endpoints
 
-| Endpoint | Method | Purpose |
-|----------|--------|---------|          
-| `/runtimes` | GET | List available runtimes with adapter metadata |
-| `/runtimes/{runtime}/deploy` | POST | Deploy new instance (install + configure + start) |
-| `/agents/{id}/deploy-status` | GET | Deployment progress tracking |
-| `/agents/{id}/logs` | GET (SSE) | Stream agent logs |
-| `/agents/{id}/metrics/history` | GET | Historical metrics for charting |
+| Endpoint                       | Method    | Purpose                                           |
+| ------------------------------ | --------- | ------------------------------------------------- |
+| `/runtimes`                    | GET       | List available runtimes with adapter metadata     |
+| `/runtimes/{runtime}/deploy`   | POST      | Deploy new instance (install + configure + start) |
+| `/agents/{id}/deploy-status`   | GET       | Deployment progress tracking                      |
+| `/agents/{id}/logs`            | GET (SSE) | Stream agent logs                                 |
+| `/agents/{id}/metrics/history` | GET       | Historical metrics for charting                   |
 
 ### Part 2: Channel / Bot Management
 
@@ -105,20 +105,47 @@ A new top-level nav item **Channels** in the sidebar (after Runtimes).
 3. Pushes config to each instance (`ClawAdapter::set_config()`)
 4. Monitors channel health, reports status back to dashboard
 
+#### Channel Registry (Conflict Prevention)
+
+Multiple claw instances sharing the same bot token causes conflicts: duplicate message processing, webhook endpoint collisions, polling API races, state corruption. Some runtimes detect this (ZeroClaw `channel doctor`, OpenClaw account namespacing) but most don't.
+
+ClawDen enforces token uniqueness at the orchestrator level via a **Channel Registry**:
+
+- **Token binding**: Each `(channel_type, bot_token_hash)` pair maps to exactly one instance. Attempting to assign a token already bound elsewhere is rejected.
+- **Reservation lifecycle**: Bind on channel assignment, unbind on instance stop/delete. Status: `active` / `draining` / `released`.
+- **Dashboard warnings**: Conflict detection UI shows if a token is in use by another instance, with option to reassign (unbind old → bind new).
+- **Auto-routing (future)**: Single bot token → ClawDen webhook ingress → route to correct instance by conversation context.
+
+Data model (`channel_bindings`):
+
+| Field            | Type      | Constraint                   |
+| ---------------- | --------- | ---------------------------- |
+| `instance_id`    | UUID      | FK → agents                  |
+| `channel_type`   | String    | telegram, discord, etc.      |
+| `bot_token_hash` | String    | SHA-256 of token             |
+| `status`         | Enum      | active / draining / released |
+| `bound_at`       | Timestamp |                              |
+
+Unique constraint: `(channel_type, bot_token_hash)` — one token, one instance.
+
 #### Channel Proxy Indicator
 
 For runtimes lacking native support (per spec 018 matrix), UI shows a "Proxy" badge. ClawDen bridges via channel proxy. Operator sees native vs proxied, proxy latency, and can disable per-channel.
 
 #### New Backend Endpoints
 
-| Endpoint | Method | Purpose |
-|----------|--------|---------|          
-| `/channels` | GET | List configured channel types with status |
-| `/channels/{type}` | GET/PUT/DELETE | CRUD for channel config (credentials encrypted) |
-| `/channels/{type}/instances` | GET/PUT | Manage instance assignments |
-| `/channels/{type}/test` | POST | Test channel credentials |
-| `/agents/{id}/channels` | GET | Per-agent channel status |
-| `/channels/matrix` | GET | Full channel × runtime support matrix |
+| Endpoint                       | Method         | Purpose                                              |
+| ------------------------------ | -------------- | ---------------------------------------------------- |
+| `/channels`                    | GET            | List configured channel types with status            |
+| `/channels/{type}`             | GET/PUT/DELETE | CRUD for channel config (credentials encrypted)      |
+| `/channels/{type}/instances`   | GET/PUT        | Manage instance assignments                          |
+| `/channels/{type}/test`        | POST           | Test channel credentials                             |
+| `/agents/{id}/channels`        | GET            | Per-agent channel status                             |
+| `/channels/matrix`             | GET            | Full channel × runtime support matrix                |
+| `/channels/bindings`           | GET            | List all channel-instance bindings                   |
+| `/channels/bindings`           | POST           | Bind channel token to instance (enforces uniqueness) |
+| `/channels/bindings/{id}`      | DELETE         | Unbind (release) a channel token                     |
+| `/channels/bindings/conflicts` | GET            | Detect token conflicts across instances              |
 
 ### Component Structure
 
@@ -159,6 +186,8 @@ Fleet → **Runtimes** (NEW) → **Channels** (NEW) → Tasks → Config → Aud
 - [ ] Build ChannelAssignment + ChannelStatusMatrix components
 - [ ] Implement auto-config push (channel → translator → set_config)
 - [ ] Add "Channels" nav item and wire end-to-end
+- [ ] Implement channel_bindings store with token uniqueness enforcement
+- [ ] Add conflict detection endpoint and dashboard warnings
 
 ### Phase 3: Integration & Polish
 - [ ] Link runtime cards to channel support badges (native vs proxied)
@@ -177,6 +206,10 @@ Fleet → **Runtimes** (NEW) → **Channels** (NEW) → Tasks → Config → Aud
 - [ ] ChannelConfigForm validates credential format per channel type
 - [ ] Auto-config push translates and applies config to assigned instances
 - [ ] ChannelStatusMatrix reflects real-time connection state
+- [ ] Assigning a bot token already bound to another instance is rejected with clear error
+- [ ] Unbinding an instance releases its channel tokens (status → released)
+- [ ] `/channels/bindings/conflicts` detects duplicate token usage
+- [ ] Channel assignment UI warns when token is already in use elsewhere
 - [ ] Proxy badge appears for runtimes lacking native channel support
 - [ ] All new views render in both light and dark themes
 - [ ] Existing dashboard tests continue to pass
