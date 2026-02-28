@@ -2,7 +2,7 @@
 # ClawDen Runtime Entrypoint
 #
 # Environment variables (set by `clawden` CLI):
-#   RUNTIME  — runtime to launch (zeroclaw, picoclaw, openclaw, nanoclaw)
+#   RUNTIME  — runtime to launch (zeroclaw, picoclaw, openclaw, nanoclaw, openfang)
 #   TOOLS    — comma-separated list of tools to set up (git, http, browser, gui)
 #
 # This script:
@@ -16,7 +16,7 @@ RUNTIME="${RUNTIME:-}"
 TOOLS="${TOOLS:-}"
 
 if [ -z "$RUNTIME" ]; then
-    echo "Error: RUNTIME environment variable must be set (e.g., zeroclaw, picoclaw, openclaw, nanoclaw)" >&2
+    echo "Error: RUNTIME environment variable must be set (e.g., zeroclaw, picoclaw, openclaw, nanoclaw, openfang)" >&2
     exit 1
 fi
 
@@ -80,9 +80,17 @@ case "$RUNTIME" in
         # NanoClaw is a TypeScript app — use npm start which handles transpilation
         exec npm start -- "$@"
         ;;
+    openfang)
+        BINARY="/opt/clawden/runtimes/openfang"
+        if [ ! -x "$BINARY" ]; then
+            echo "Error: OpenFang binary not found at ${BINARY}" >&2
+            exit 1
+        fi
+        exec "$BINARY" "$@"
+        ;;
     *)
         echo "Error: Unknown runtime '${RUNTIME}'" >&2
-        echo "Supported runtimes: zeroclaw, picoclaw, openclaw, nanoclaw" >&2
+        echo "Supported runtimes: zeroclaw, picoclaw, openclaw, nanoclaw, openfang" >&2
         exit 1
         ;;
 esac

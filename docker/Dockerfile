@@ -4,6 +4,7 @@
 # - NanoClaw (Node.js, code-driven, Claude Agent SDK)
 # - ZeroClaw (Rust binary, TOML + env vars)
 # - PicoClaw (Go binary, JSON config)
+# - OpenFang (Rust binary, Agent OS, TOML config, dashboard on port 4200)
 #
 # Image: ghcr.io/codervisor/clawden-runtime:latest
 # Base: Debian slim + Node.js 22 LTS (for OpenClaw and NanoClaw)
@@ -13,11 +14,13 @@
 #   PicoClaw: https://github.com/picoclaw-labs/picoclaw/releases
 #   OpenClaw: npm install -g openclaw
 #   NanoClaw: https://github.com/qwibitai/nanoclaw (git clone)
+#   OpenFang: https://github.com/RightNow-AI/openfang/releases
 
 # Pinned runtime versions — bump these to upgrade
 ARG ZEROCLAW_VERSION=0.1.7
 ARG PICOCLAW_VERSION=latest
 ARG OPENCLAW_VERSION=latest
+ARG OPENFANG_VERSION=0.2.0
 
 FROM debian:bookworm-slim AS base
 
@@ -101,6 +104,26 @@ RUN set -eux; \
     && rm -rf .git .github docs assets \
     && apt-get purge -y git && apt-get autoremove -y \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# OpenFang (Rust binary) — from GitHub Releases (.deb package)
+# Note: arm64 .deb not yet available upstream; amd64 only for now
+ARG OPENFANG_VERSION
+ARG TARGETARCH
+RUN set -eux; \
+    case "${TARGETARCH}" in \
+        amd64) \
+            curl -fsSL "https://github.com/RightNow-AI/openfang/releases/download/v${OPENFANG_VERSION}/OpenFang_0.1.0_amd64.deb" \
+                -o /tmp/openfang.deb \
+            && dpkg -x /tmp/openfang.deb /tmp/openfang-extracted \
+            && find /tmp/openfang-extracted -type f -name 'openfang' -exec mv {} /opt/clawden/runtimes/openfang \; \
+            && chmod +x /opt/clawden/runtimes/openfang \
+            && rm -rf /tmp/openfang* \
+            ;; \
+        arm64) \
+            echo "[clawden] Warning: OpenFang arm64 binary not yet available upstream, skipping" >&2 \
+            ;; \
+        *)  echo "Unsupported arch: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac
 
 WORKDIR /home/clawden/workspace
 VOLUME /home/clawden/workspace
