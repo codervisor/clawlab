@@ -28,8 +28,7 @@ FROM debian:bookworm-slim AS base
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
-    dnsutils \
-    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    dnsutils \    git \    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && npm install -g pnpm \
     && apt-get clean \
@@ -96,14 +95,11 @@ RUN npm install -g "openclaw@${OPENCLAW_VERSION}" \
 # NanoClaw (Node.js app) — cloned from GitHub (no npm/releases yet)
 ARG NANOCLAW_REF=main
 RUN set -eux; \
-    apt-get update && apt-get install -y --no-install-recommends git \
-    && git clone --depth 1 --branch "${NANOCLAW_REF}" \
+    git clone --depth 1 --branch "${NANOCLAW_REF}" \
        https://github.com/qwibitai/nanoclaw.git /opt/clawden/runtimes/nanoclaw \
     && cd /opt/clawden/runtimes/nanoclaw \
     && npm install --production \
-    && rm -rf .git .github docs assets \
-    && apt-get purge -y git && apt-get autoremove -y \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+    && rm -rf .git .github docs assets
 
 # OpenFang (Rust binary) — from GitHub Releases (.deb package)
 # Note: arm64 .deb not yet available upstream; amd64 only for now
