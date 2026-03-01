@@ -64,7 +64,7 @@ Tools are organized into tiers based on size, install cost, and universality:
 | **Extended**  | Available in use-case image variants or installed at container start | Heavy (200–450MB each)  | Specialized capabilities, split by use case |
 | **Community** | User-provided, mounted or installed at start                         | Varies                  | Custom tools via `~/.clawden/tools/`        |
 
-Extended tools serve distinct use cases with different audiences, so they ship as **use-case image variants** rather than a single `:full` dump:
+Extended tools ship as **use-case image variants**:
 
 | Image Tag       | Includes                                 | ~Size  | Use Case                                                                      |
 | --------------- | ---------------------------------------- | ------ | ----------------------------------------------------------------------------- |
@@ -73,11 +73,7 @@ Extended tools serve distinct use cases with different audiences, so they ship a
 | `:computer-use` | `:browser` + Xvfb/VNC/noVNC/fluxbox      | ~1.3GB | Full computer-use agent — GUI interaction, visual browser, desktop automation |
 | `:full`         | `:computer-use` + compiler toolchain     | ~1.6GB | Advanced users — native compilation, build from source                        |
 
-Key relationships:
-- **`:browser`** is the foundation for LLM-driven web interaction. Most agents that "browse the web" need only this.
-- **`:computer-use`** is a strict superset of `:browser`. Computer-use agents get a full virtual desktop, which includes visual browser control (point-and-click, screenshots) on top of headless browsing.
-- **`:full`** adds `compiler` on top — only for users who need agents that compile C/C++ code. Most users never need this.
-- Any extended tool can also be **lazy-installed** into `:latest` at first start (volume-cached), so users aren't forced to pick a variant upfront.
+Any extended tool can also be **lazy-installed** into `:latest` at first start (volume-cached), so users are not forced to pick a variant upfront.
 
 ### Tool Catalog
 
@@ -212,26 +208,30 @@ bwrap \
 **Security properties:**
 - **Network isolation**: No outbound access by default. Opt-in with `--allow-network`
 - **Filesystem isolation**: Read-only root, writable only in /tmp and workspace
-- **Resource caps**: `--timeout` (wall-clock), `--memory` (cgroup limit), `--cpu` (CPU shares)
+- **Resource caps**: `--timeout`, `--memory`, and `--cpu` are enforced by the wrapper with cgroup/ulimit controls, not just command-line flags
 - **Process isolation**: Cannot see or signal host/other-agent processes
 - **Auto-cleanup**: Temp files and processes killed on exit or timeout
+
+In multi-tenant mode, `clawden-sandbox` is **fail-closed**: if required kernel/cgroup primitives are unavailable, execution is denied with a clear error instead of running unsandboxed.
 
 The wrapper script (`/usr/local/bin/clawden-sandbox`) is installed by the sandbox tool's `setup.sh`. Runtimes call it instead of executing code directly when untrusted input is involved.
 
 ### Browser Tool Design
 
-`browser` installs headless Chromium and Playwright, then starts a persistent browser server:
+`browser` provides headless Chromium and Playwright, then starts a persistent browser server:
 
 ```bash
 # setup.sh starts browser server in background
-npx playwright install chromium --with-deps
+# install step is skipped when binaries are already present
+# for variant images, Chromium is pre-baked at image build time
+# for lazy-install mode, install occurs once and is volume-cached
 npx playwright run-server --port 3100 &
 
 # Capabilities
 export CLAWDEN_BROWSER_WS="ws://localhost:3100"
 ```
 
-Runtimes connect via WebSocket endpoint. Multiple runtime instances share one browser server. The browser runs with `--no-sandbox` (already inside container) but with `--disable-dev-shm-usage` and reasonable resource limits.
+Runtimes connect via WebSocket endpoint. Multiple runtime instances share one browser server. `setup.sh` must be idempotent: if the server is already healthy on port 3100, it reuses the existing process and does not spawn duplicates.
 
 **Size mitigation**: Chromium is ~400MB. For the `:latest` image, it's not included. Users who need it either:
 1. Use `clawden-runtime:browser` (or `:computer-use` / `:full` which include it)
@@ -239,15 +239,21 @@ Runtimes connect via WebSocket endpoint. Multiple runtime instances share one br
 
 ### GUI Tool Design
 
-`gui` provides a virtual desktop accessible via VNC/noVNC for full computer-use agents. It always requires `browser` — computer-use is a superset that includes visual browser interaction (point-and-click, screenshots) plus arbitrary GUI app control:
+`gui` provides a virtual desktop accessible via VNC/noVNC for full computer-use agents. It always requires `browser` — computer-use is a superset that includes visual browser interaction (point-and-click, screenshots) plus arbitrary GUI app control.
+
+Because this may run in remote multi-tenant deployments, GUI access is secure-by-default:
+- No unauthenticated VNC (`-nopw`) is allowed.
+- VNC/noVNC bind to localhost by default; external access is only via an authenticated gateway.
+- noVNC sessions require short-lived, per-session tokens tied to runtime identity.
+- TLS termination is required at the gateway boundary for remote access.
 
 ```bash
 # setup.sh (runs after browser setup.sh)
 Xvfb :99 -screen 0 1280x1024x24 &
 export DISPLAY=:99
-x11vnc -display :99 -forever -nopw -listen 0.0.0.0 -rfbport 5900 &
+x11vnc -display :99 -forever -rfbauth /run/clawden/x11vnc.pass -localhost -rfbport 5900 &
 # noVNC web client
-/opt/noVNC/utils/novnc_proxy --vnc localhost:5900 --listen 6080 &
+/opt/noVNC/utils/novnc_proxy --vnc localhost:5900 --listen 127.0.0.1:6080 &
 
 export CLAWDEN_DISPLAY=":99"
 export CLAWDEN_VNC_PORT="5900"
@@ -306,11 +312,10 @@ compiler     extended  250MB    available   gcc, g++, make, cmake
 
 ### Scaling Strategy
 
-**Short term (10–15 tools):** Flat directory under `/opt/clawden/tools/`, each with `manifest.toml` + `setup.sh`. The entrypoint iterates tools in order, respecting dependency edges.
-
-**Medium term (15–30 tools):** Dependency resolution becomes important — topological sort of tool DAG before activation. A `registry.toml` at `/opt/clawden/tools/registry.toml` lists all known tools with their tier and phase, so `clawden tools list` doesn't need to scan directories.
-
-**Long term (30+ tools):** Community tool registry. Tools published as tarballs to a registry (GitHub Releases or a simple HTTP index). `clawden tools install community/ml-toolkit` fetches and unpacks. Tools are namespaced to avoid collisions.
+- Flat directory under `/opt/clawden/tools/`, each with `manifest.toml` + `setup.sh`.
+- Resolve dependencies with a topological sort before activation.
+- Add `/opt/clawden/tools/registry.toml` for fast discovery.
+- Future: support namespaced community tools via remote registry.
 
 ### Image Layering
 
@@ -368,17 +373,20 @@ Each variant is an additive layer on the previous. Layers 2–3 change infrequen
 - [ ] `tools.json` capabilities file written with correct versions after activation
 - [ ] Tool with unmet dependency fails fast at entrypoint: `gui` without `browser` errors clearly
 - [ ] `sandbox` isolates execution — sandboxed process cannot access network, cannot read files outside workspace
+- [ ] `sandbox` enforces memory/CPU/time limits; attempts to exceed limits are terminated and audited
+- [ ] Multi-tenant fail-closed behavior: if sandbox primitives are unavailable, untrusted execution is denied
 - [ ] `clawden tools list` shows all tools with tier, size, and status
 - [ ] Extended tool lazy install works — first start installs to volume, second start skips
 - [ ] Custom tool in `~/.clawden/tools/my-tool/` with valid `manifest.toml` is discovered and activatable
 - [ ] Image sizes: `:latest` < 700MB, `:browser` < 1.2GB, `:computer-use` < 1.4GB, `:full` < 1.7GB
+- [ ] GUI security defaults: VNC/noVNC are localhost-only by default, require auth token flow, and are reachable remotely only through authenticated TLS gateway
 
 ## Notes
 
 - `core-utils` replaces ad-hoc installs scattered across runtime configs — single source for common CLI tools
 - `sandbox` is the highest-priority standard tool — without it, agents running arbitrary code are a security liability
-- `browser` uses Playwright's built-in server mode rather than starting/stopping Chromium per request — amortizes the ~2s cold start
-- Node.js is already in the base image for OpenClaw/NanoClaw, so Playwright's Node.js dependency costs zero extra
+- `browser` uses Playwright server mode rather than per-request Chromium startup
+- Node.js is already in the base image for OpenClaw/NanoClaw
 - `gui` always requires `browser` — computer-use is a superset of browser-use. The `:computer-use` image includes both.
 - `compiler` targets advanced users only (custom native extensions, research). Most agents never need it.
 - Image variants form a strict chain: `:latest` ⊂ `:browser` ⊂ `:computer-use` ⊂ `:full` — each adds one layer
