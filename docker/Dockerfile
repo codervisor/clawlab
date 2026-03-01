@@ -113,7 +113,12 @@ RUN set -eux; \
             curl -fsSL "https://github.com/RightNow-AI/openfang/releases/download/v${OPENFANG_VERSION}/OpenFang_0.1.0_amd64.deb" \
                 -o /tmp/openfang.deb \
             && dpkg -x /tmp/openfang.deb /tmp/openfang-extracted \
-            && find /tmp/openfang-extracted -type f -name 'openfang' -exec mv {} /opt/clawden/runtimes/openfang \; \
+            && find /tmp/openfang-extracted -type f -iname 'openfang' -exec mv {} /opt/clawden/runtimes/openfang \; \
+            && if [ ! -f /opt/clawden/runtimes/openfang ]; then \
+                 echo "ERROR: openfang binary not found in .deb package. Contents:" >&2; \
+                 find /tmp/openfang-extracted -type f >&2; \
+                 exit 1; \
+               fi \
             && chmod +x /opt/clawden/runtimes/openfang \
             && rm -rf /tmp/openfang* \
             ;; \
