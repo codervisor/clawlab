@@ -37,48 +37,21 @@ if [ -n "$TOOLS" ]; then
 fi
 
 # --- Runtime launch ---
+# Runtimes are installed by `clawden-cli install` into $HOME/.clawden/runtimes/
+# Each runtime has a versioned dir with a `current` symlink and a launcher/binary.
+CLAWDEN_RUNTIMES="${HOME}/.clawden/runtimes"
+
 echo "[clawden] Starting runtime: ${RUNTIME}"
 
 case "$RUNTIME" in
-    zeroclaw)
-        BINARY="/opt/clawden/runtimes/zeroclaw"
-        if [ ! -x "$BINARY" ]; then
-            echo "Error: ZeroClaw binary not found at ${BINARY}" >&2
+    zeroclaw|picoclaw|openclaw|nanoclaw)
+        LAUNCHER="${CLAWDEN_RUNTIMES}/${RUNTIME}/current/${RUNTIME}"
+        if [ ! -x "$LAUNCHER" ]; then
+            echo "Error: ${RUNTIME} not found at ${LAUNCHER}" >&2
+            echo "Run: clawden-cli install ${RUNTIME}" >&2
             exit 1
         fi
-        exec "$BINARY" "$@"
-        ;;
-    picoclaw)
-        BINARY="/opt/clawden/runtimes/picoclaw"
-        if [ ! -x "$BINARY" ]; then
-            echo "Error: PicoClaw binary not found at ${BINARY}" >&2
-            exit 1
-        fi
-        exec "$BINARY" "$@"
-        ;;
-    openclaw)
-        # OpenClaw is installed globally via npm; the symlink at
-        # /opt/clawden/runtimes/openclaw points to the npm package dir.
-        if command -v openclaw &>/dev/null; then
-            exec openclaw "$@"
-        fi
-        APP_DIR="/opt/clawden/runtimes/openclaw"
-        if [ ! -d "$APP_DIR" ]; then
-            echo "Error: OpenClaw app not found at ${APP_DIR}" >&2
-            exit 1
-        fi
-        cd "$APP_DIR"
-        exec node index.js "$@"
-        ;;
-    nanoclaw)
-        APP_DIR="/opt/clawden/runtimes/nanoclaw"
-        if [ ! -d "$APP_DIR" ]; then
-            echo "Error: NanoClaw app not found at ${APP_DIR}" >&2
-            exit 1
-        fi
-        cd "$APP_DIR"
-        # NanoClaw is a TypeScript app — use npm start which handles transpilation
-        exec npm start -- "$@"
+        exec "$LAUNCHER" "$@"
         ;;
     # DISABLED: OpenFang temporarily removed
     # openfang)
