@@ -1,0 +1,8 @@
+[tool]
+name = "core-utils"
+description = "Common utility commands"
+tier = "core"
+
+[dependencies]
+requires = []
+conflicts = []

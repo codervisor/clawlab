@@ -39,6 +39,10 @@ pub struct ClawDenYaml {
     #[serde(default)]
     pub channels: HashMap<String, ChannelInstanceYaml>,
 
+    /// Named LLM provider definitions.
+    #[serde(default)]
+    pub providers: HashMap<String, ProviderEntryYaml>,
+
     /// Multi-runtime list.
     #[serde(default)]
     pub runtimes: Vec<RuntimeEntryYaml>,
@@ -50,6 +54,14 @@ pub struct ClawDenYaml {
     /// Single-runtime config overrides shorthand.
     #[serde(default)]
     pub config: HashMap<String, Value>,
+
+    /// Single-runtime provider shorthand.
+    #[serde(default)]
+    pub provider: Option<ProviderRefYaml>,
+
+    /// Single-runtime model shorthand.
+    #[serde(default)]
+    pub model: Option<String>,
 }
 
 /// A channel instance entry in `clawden.yaml`.
@@ -109,11 +121,109 @@ pub struct RuntimeEntryYaml {
     #[serde(default)]
     pub tools: Vec<String>,
     #[serde(default)]
+    pub provider: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
     pub config: HashMap<String, Value>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderEntryYaml {
+    #[serde(rename = "type", default)]
+    pub provider_type: Option<LlmProvider>,
+    #[serde(default)]
+    pub api_key: Option<String>,
+    #[serde(default)]
+    pub base_url: Option<String>,
+    #[serde(default)]
+    pub org_id: Option<String>,
+    #[serde(flatten)]
+    pub extra: HashMap<String, Value>,
+}
+
+impl ProviderEntryYaml {
+    fn resolved_type(&self, provider_name: &str) -> Option<LlmProvider> {
+        self.provider_type
+            .clone()
+            .or_else(|| LlmProvider::from_name(provider_name))
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ProviderRefYaml {
+    Name(String),
+    Inline(ProviderEntryYaml),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum LlmProvider {
+    OpenAi,
+    Anthropic,
+    Google,
+    Mistral,
+    Groq,
+    OpenRouter,
+    Ollama,
+    Custom(String),
+}
+
+impl LlmProvider {
+    fn from_name(name: &str) -> Option<Self> {
+        match name.to_ascii_lowercase().as_str() {
+            "openai" => Some(Self::OpenAi),
+            "anthropic" => Some(Self::Anthropic),
+            "google" => Some(Self::Google),
+            "mistral" => Some(Self::Mistral),
+            "groq" => Some(Self::Groq),
+            "openrouter" => Some(Self::OpenRouter),
+            "ollama" => Some(Self::Ollama),
+            _ => None,
+        }
+    }
+
+    fn default_base_url(&self) -> Option<&'static str> {
+        match self {
+            Self::OpenAi => Some("https://api.openai.com/v1"),
+            Self::Anthropic => Some("https://api.anthropic.com"),
+            Self::Google => Some("https://generativelanguage.googleapis.com"),
+            Self::Mistral => Some("https://api.mistral.ai/v1"),
+            Self::Groq => Some("https://api.groq.com/openai/v1"),
+            Self::OpenRouter => Some("https://openrouter.ai/api/v1"),
+            Self::Ollama => Some("http://localhost:11434/v1"),
+            Self::Custom(_) => None,
+        }
+    }
+
+    fn default_api_key_env(&self) -> Option<&'static str> {
+        match self {
+            Self::OpenAi => Some("OPENAI_API_KEY"),
+            Self::Anthropic => Some("ANTHROPIC_API_KEY"),
+            Self::Google => Some("GOOGLE_API_KEY"),
+            Self::Mistral => Some("MISTRAL_API_KEY"),
+            Self::Groq => Some("GROQ_API_KEY"),
+            Self::OpenRouter => Some("OPENROUTER_API_KEY"),
+            Self::Ollama | Self::Custom(_) => None,
+        }
+    }
+}
+
 /// Known built-in tools.
-pub const KNOWN_TOOLS: &[&str] = &["git", "http", "browser", "gui"];
+pub const KNOWN_TOOLS: &[&str] = &[
+    "git",
+    "http",
+    "core-utils",
+    "python",
+    "code-tools",
+    "database",
+    "network",
+    "sandbox",
+    "browser",
+    "gui",
+    "compiler",
+];
 
 /// Known channel type names for type inference.
 const KNOWN_CHANNEL_TYPES: &[&str] = &[
@@ -213,6 +323,36 @@ impl ClawDenYaml {
             }
         }
 
+        for (provider_name, provider) in &self.providers {
+            let resolved_type = provider.resolved_type(provider_name);
+            if resolved_type.is_none() {
+                errors.push(format!(
+                    "Provider '{}' has no 'type' and is not a known provider name",
+                    provider_name
+                ));
+            } else if matches!(resolved_type, Some(LlmProvider::Custom(_)))
+                && provider.base_url.as_deref().is_none_or(str::is_empty)
+            {
+                errors.push(format!(
+                    "Provider '{}' of type custom requires a non-empty 'base_url'",
+                    provider_name
+                ));
+            }
+        }
+
+        for rt in &self.runtimes {
+            if let Some(provider_name) = &rt.provider {
+                let unknown = !self.providers.contains_key(provider_name)
+                    && LlmProvider::from_name(provider_name).is_none();
+                if unknown {
+                    errors.push(format!(
+                        "Runtime '{}' references provider '{}' which is not defined in 'providers:' and is not a known shorthand provider",
+                        rt.name, provider_name
+                    ));
+                }
+            }
+        }
+
         if errors.is_empty() {
             Ok(())
         } else {
@@ -224,11 +364,56 @@ impl ClawDenYaml {
     pub fn resolve_env_vars(&mut self) -> Result<(), Vec<String>> {
         let mut errors = Vec::new();
         for (name, ch) in &mut self.channels {
-            resolve_field(&mut ch.token, name, "token", &mut errors);
-            resolve_field(&mut ch.bot_token, name, "bot_token", &mut errors);
-            resolve_field(&mut ch.app_token, name, "app_token", &mut errors);
-            resolve_field(&mut ch.phone, name, "phone", &mut errors);
-            resolve_field(&mut ch.guild, name, "guild", &mut errors);
+            resolve_field(&mut ch.token, "Channel", name, "token", &mut errors);
+            resolve_field(&mut ch.bot_token, "Channel", name, "bot_token", &mut errors);
+            resolve_field(&mut ch.app_token, "Channel", name, "app_token", &mut errors);
+            resolve_field(&mut ch.phone, "Channel", name, "phone", &mut errors);
+            resolve_field(&mut ch.guild, "Channel", name, "guild", &mut errors);
+        }
+        for (name, provider) in &mut self.providers {
+            resolve_field(
+                &mut provider.api_key,
+                "Provider",
+                name,
+                "api_key",
+                &mut errors,
+            );
+            resolve_field(
+                &mut provider.base_url,
+                "Provider",
+                name,
+                "base_url",
+                &mut errors,
+            );
+
+            if let Some(provider_type) = provider.resolved_type(name) {
+                if provider.api_key.is_none() {
+                    if let Some(env_var) = provider_type.default_api_key_env() {
+                        if let Ok(api_key) = std::env::var(env_var) {
+                            provider.api_key = Some(api_key);
+                        }
+                    }
+                }
+                if provider.base_url.is_none() {
+                    provider.base_url = provider_type.default_base_url().map(str::to_string);
+                }
+            }
+        }
+        if let Some(ProviderRefYaml::Inline(provider)) = &mut self.provider {
+            resolve_field(
+                &mut provider.api_key,
+                "Provider",
+                "provider",
+                "api_key",
+                &mut errors,
+            );
+            resolve_field(
+                &mut provider.base_url,
+                "Provider",
+                "provider",
+                "base_url",
+                &mut errors,
+            );
         }
         if errors.is_empty() {
             Ok(())
@@ -252,6 +437,7 @@ impl ClawDenYaml {
 /// Resolve a single `$ENV_VAR` field in-place.
 fn resolve_field(
     field: &mut Option<String>,
+    kind: &str,
     instance: &str,
     field_name: &str,
     errors: &mut Vec<String>,
@@ -261,8 +447,8 @@ fn resolve_field(
             match std::env::var(env_name) {
                 Ok(resolved) => *field = Some(resolved),
                 Err(_) => errors.push(format!(
-                    "Channel '{}' field '{}': environment variable '{}' is not set",
-                    instance, field_name, env_name
+                    "{} '{}' field '{}': environment variable '{}' is not set",
+                    kind, instance, field_name, env_name
                 )),
             }
         }
@@ -369,6 +555,7 @@ impl RuntimeConfigTranslator for OpenClawConfigTranslator {
             "agent": canonical.agent.name,
             "model": canonical.agent.model.name,
             "provider": canonical.agent.model.provider,
+            "apiKeyRef": canonical.agent.model.api_key_ref,
             "tools": canonical.agent.tools,
             "channels": canonical.agent.channels,
             "security": canonical.agent.security,
@@ -390,13 +577,18 @@ impl RuntimeConfigTranslator for OpenClawConfigTranslator {
             .and_then(Value::as_str)
             .ok_or_else(|| "missing openclaw provider field".to_string())?;
 
-        Ok(base_config_with_runtime(
+        let mut config = base_config_with_runtime(
             agent,
             ClawRuntime::OpenClaw,
             provider,
             model,
             runtime_config,
-        ))
+        );
+        config.agent.model.api_key_ref = runtime_config
+            .get("apiKeyRef")
+            .and_then(Value::as_str)
+            .map(ToString::to_string);
+        Ok(config)
     }
 }
 
@@ -814,8 +1006,9 @@ impl ChannelCredentialMapper {
 #[cfg(test)]
 mod tests {
     use super::{
-        diff_configs, ClawDenConfig, ModelConfig, OpenClawConfigTranslator,
-        PicoClawConfigTranslator, RuntimeConfigTranslator, SecretVault, ZeroClawConfigTranslator,
+        diff_configs, ClawDenConfig, ClawDenYaml, LlmProvider, ModelConfig,
+        OpenClawConfigTranslator, PicoClawConfigTranslator, RuntimeConfigTranslator, SecretVault,
+        ZeroClawConfigTranslator,
     };
     use crate::{AgentConfig, ChannelConfig, SecurityConfig, ToolConfig};
     use clawden_core::ClawRuntime;
@@ -862,6 +1055,10 @@ mod tests {
         assert_eq!(decoded.agent.runtime, ClawRuntime::OpenClaw);
         assert_eq!(decoded.agent.name, "alpha");
         assert_eq!(decoded.agent.model.name, "gpt-5-mini");
+        assert_eq!(
+            decoded.agent.model.api_key_ref.as_deref(),
+            Some("secret/openai")
+        );
     }
 
     #[test]
@@ -953,5 +1150,67 @@ mod tests {
         let safe = config.to_safe_json();
         let api_ref = safe["agent"]["model"]["api_key_ref"].as_str().unwrap();
         assert_eq!(api_ref, "<redacted>");
+    }
+
+    #[test]
+    fn yaml_parses_providers_and_runtime_references() {
+        let yaml = r#"
+runtime: zeroclaw
+providers:
+  openai:
+    api_key: $OPENAI_API_KEY
+runtimes:
+  - name: zeroclaw
+    provider: openai
+    model: gpt-4o
+"#;
+        let parsed = ClawDenYaml::parse_yaml(yaml).expect("yaml should parse");
+        assert!(parsed.providers.contains_key("openai"));
+        assert_eq!(parsed.runtimes[0].provider.as_deref(), Some("openai"));
+        assert_eq!(parsed.runtimes[0].model.as_deref(), Some("gpt-4o"));
+    }
+
+    #[test]
+    fn provider_env_vars_and_defaults_resolve() {
+        std::env::set_var("OPENAI_API_KEY", "sk-from-env");
+        let yaml = r#"
+runtime: zeroclaw
+providers:
+  openai: {}
+"#;
+        let mut parsed = ClawDenYaml::parse_yaml(yaml).expect("yaml should parse");
+        parsed.resolve_env_vars().expect("env vars should resolve");
+        let provider = parsed.providers.get("openai").expect("provider exists");
+        assert_eq!(provider.api_key.as_deref(), Some("sk-from-env"));
+        assert_eq!(
+            provider.base_url.as_deref(),
+            Some("https://api.openai.com/v1")
+        );
+    }
+
+    #[test]
+    fn custom_provider_requires_base_url() {
+        let mut parsed = ClawDenYaml::parse_yaml("runtime: zeroclaw").expect("yaml should parse");
+        parsed.providers.insert(
+            "local".to_string(),
+            super::ProviderEntryYaml {
+                provider_type: Some(LlmProvider::Custom("lm-studio".to_string())),
+                api_key: None,
+                base_url: None,
+                org_id: None,
+                extra: std::collections::HashMap::new(),
+            },
+        );
+        let errors = parsed.validate().expect_err("validation should fail");
+        assert!(errors
+            .iter()
+            .any(|e| e.contains("requires a non-empty 'base_url'")));
+    }
+
+    #[test]
+    fn llm_provider_parses_known_type() {
+        let provider: LlmProvider =
+            serde_yaml::from_str("openai").expect("provider enum should parse");
+        assert_eq!(provider, LlmProvider::OpenAi);
     }
 }

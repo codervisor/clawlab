@@ -34,7 +34,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     dnsutils \
+    jq \
     git \
+    tree \
+    unzip \
+    zip \
     p7zip-full \
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
@@ -48,6 +52,7 @@ RUN groupadd -g 10000 clawden && \
 
 # Create directory structure
 RUN mkdir -p /opt/clawden/tools/git \
+             /opt/clawden/tools/core-utils \
              /opt/clawden/tools/http \
              /opt/clawden/tools/browser \
              /opt/clawden/tools/gui \

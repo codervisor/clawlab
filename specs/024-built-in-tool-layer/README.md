@@ -1,5 +1,5 @@
 ---
-status: planned
+status: in-progress
 created: 2026-03-01
 priority: high
 tags:
@@ -336,11 +336,11 @@ Each variant is an additive layer on the previous. Layers 2–3 change infrequen
 ## Plan
 
 ### Phase 1: Foundation
-- [ ] Add `manifest.toml` to existing `git` and `http` tools
-- [ ] Create `core-utils` tool (jq, yq, tree, file, zip)
-- [ ] Update `entrypoint.sh` to read manifests, resolve dependencies, write capabilities file
-- [ ] Add `core-utils` to Dockerfile base image layer
-- [ ] Add `CLAWDEN_TOOLS` summary env var export
+- [x] Add `manifest.toml` to existing `git` and `http` tools
+- [x] Create `core-utils` tool (jq, yq, tree, file, zip)
+- [x] Update `entrypoint.sh` to read manifests, resolve dependencies, write capabilities file
+- [x] Add `core-utils` to Dockerfile base image layer
+- [x] Add `CLAWDEN_TOOLS` summary env var export
 
 ### Phase 2: Standard Tools
 - [ ] Create `python` tool (Python 3.12, pip, venv)

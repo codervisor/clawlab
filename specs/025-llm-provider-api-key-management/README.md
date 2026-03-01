@@ -1,5 +1,5 @@
 ---
-status: planned
+status: in-progress
 created: 2026-03-01
 priority: medium
 tags:
@@ -204,20 +204,20 @@ The Runtime Instance Manager (spec 021) should show provider + model per runtime
 
 ## Plan
 
-- [ ] Add `LlmProvider` enum and `ProviderEntryYaml` struct to `clawden-config`
-- [ ] Add `providers` section to `ClawDenYaml` schema with parsing + validation
-- [ ] Add `provider` and `model` fields to `RuntimeEntryYaml`
-- [ ] Implement provider defaults lookup (base URL, env var convention)
-- [ ] Extend `resolve_env_vars()` to cover provider `api_key` and `base_url` fields
+- [x] Add `LlmProvider` enum and `ProviderEntryYaml` struct to `clawden-config`
+- [x] Add `providers` section to `ClawDenYaml` schema with parsing + validation
+- [x] Add `provider` and `model` fields to `RuntimeEntryYaml`
+- [x] Implement provider defaults lookup (base URL, env var convention)
+- [x] Extend `resolve_env_vars()` to cover provider `api_key` and `base_url` fields
 - [ ] Support `provider: <name>` string shorthand in YAML (single-runtime sugar)
 - [ ] Support `provider: <name>` reference to `providers.<name>` entry (multi-runtime)
-- [ ] Update `OpenClawConfigTranslator` to include API key in runtime output
+- [x] Update `OpenClawConfigTranslator` to include API key in runtime output
 - [ ] Ensure all four Phase 1 translators consistently map provider credentials + model
 - [ ] Add `clawden providers` CLI command (list providers + status)
 - [ ] Add `clawden providers test` CLI command (validate keys via lightweight API call)
 - [ ] Add `clawden providers set-key <provider>` CLI command (interactive, stores in vault)
 - [ ] Update dashboard config editor to support `providers` section with masked keys
-- [ ] Add unit tests: YAML parsing, env-var resolution, provider defaults, translator output
+- [x] Add unit tests: YAML parsing, env-var resolution, provider defaults, translator output
 - [ ] Add integration test: end-to-end provider config → runtime receives correct key
 
 ## Test
