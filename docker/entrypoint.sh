@@ -21,20 +21,66 @@ if [ -z "$RUNTIME" ]; then
 fi
 
 # --- Tool setup ---
+TOOLS_STATE_DIR="/run/clawden"
+if ! mkdir -p "$TOOLS_STATE_DIR" 2>/dev/null; then
+    TOOLS_STATE_DIR="${HOME}/.clawden/run"
+    mkdir -p "$TOOLS_STATE_DIR"
+fi
+ACTIVATED_TOOLS=()
+TOOLS_JSON='{}'
+
 if [ -n "$TOOLS" ]; then
     IFS=',' read -ra TOOL_LIST <<< "$TOOLS"
+
+    has_requested_tool() {
+        local required="$1"
+        for requested in "${TOOL_LIST[@]}"; do
+            if [ "$(echo "$requested" | xargs)" = "$required" ]; then
+                return 0
+            fi
+        done
+        return 1
+    }
+
     for tool in "${TOOL_LIST[@]}"; do
         tool="$(echo "$tool" | xargs)"  # trim whitespace
         setup_script="/opt/clawden/tools/${tool}/setup.sh"
+        manifest="/opt/clawden/tools/${tool}/manifest.toml"
+
+        if [ -f "$manifest" ]; then
+            # NOTE: this parser supports single-line requires arrays only (e.g. requires = ["browser"]).
+            requires_raw="$(awk -F= '/^requires[[:space:]]*=/{print $2; exit}' "$manifest" | tr -d '[]"')"
+            if [ -n "$requires_raw" ]; then
+                IFS=',' read -ra REQUIRES <<< "$requires_raw"
+                for dep in "${REQUIRES[@]}"; do
+                    dep="$(echo "$dep" | xargs)"
+                    if [ -n "$dep" ] && ! has_requested_tool "$dep"; then
+                        echo "[clawden] Error: Tool '${tool}' requires '${dep}'. Add it to TOOLS." >&2
+                        exit 1
+                    fi
+                done
+            fi
+        fi
+
         if [ -f "$setup_script" ]; then
             echo "[clawden] Setting up tool: ${tool}"
             # shellcheck disable=SC1090
             source "$setup_script"
+            ACTIVATED_TOOLS+=("$tool")
+            TOOLS_JSON="$(jq --arg tool "$tool" --arg bin "$setup_script" \
+                '. + {($tool): {"version": "unknown", "bin": $bin}}' <<<"$TOOLS_JSON")"
         else
             echo "[clawden] Warning: Unknown tool '${tool}', skipping" >&2
         fi
     done
 fi
+
+CLAWDEN_TOOLS="$(IFS=,; echo "${ACTIVATED_TOOLS[*]}")"
+export CLAWDEN_TOOLS
+
+ACTIVATED_JSON="$(printf '%s\n' "${ACTIVATED_TOOLS[@]}" | jq -Rsc 'split("\n") | map(select(length > 0))')"
+jq -n --argjson activated "$ACTIVATED_JSON" --argjson tools "$TOOLS_JSON" \
+    '{activated: $activated, tools: $tools}' > "${TOOLS_STATE_DIR}/tools.json"
 
 # --- Runtime launch ---
 # Runtimes are installed by `clawden-cli install` into $HOME/.clawden/runtimes/
