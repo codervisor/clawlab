@@ -9,6 +9,8 @@ tags:
 - cli
 - direct-install
 parent: 009-orchestration-platform
+depends_on:
+- 023-cli-direct-architecture
 created_at: 2026-03-01T02:44:52.520937Z
 updated_at: 2026-03-01T02:44:52.520937Z
 ---
@@ -21,7 +23,9 @@ Provide a **native install path** for ClawDen so users who don't have Docker (or
 
 ### Problem
 
-The current deployment story (`clawden up`) requires Docker. Many target users — hobbyists, students, Raspberry Pi users, WSL-without-Docker setups, shared hosting — don't have Docker installed and shouldn't need to learn it just to run an AI agent on Telegram. The npm-published `clawden` CLI already runs natively, but `clawden run` today shells out to `docker run`. Users need an alternative that works without Docker.
+The current deployment story (`clawden up`) requires Docker. Many target users — hobbyists, students, Raspberry Pi users, WSL-without-Docker setups, shared hosting — don't have Docker installed and shouldn't need to learn it just to run an AI agent on Telegram. Users need an alternative that works without Docker.
+
+> **Prerequisite**: This spec assumes the CLI-direct architecture from spec 023 is in place — the CLI calls `clawden-core` directly instead of going through an HTTP server. This spec adds Docker-free runtime installation and execution on top of that foundation.
 
 ### Goal
 
@@ -91,22 +95,38 @@ clawden uninstall zeroclaw
 
 Same upstream sources as the Docker image — no new infrastructure needed:
 
-| Runtime  | Source | Install Method |
-|----------|--------|----------------|
-| ZeroClaw | GitHub Releases (`zeroclaw-labs/zeroclaw`) | Download binary for platform |
-| PicoClaw | GitHub Releases (`picoclaw-labs/picoclaw`) | Download binary for platform |
-| OpenClaw | npm registry | `npm install -g openclaw` into managed prefix |
-| NanoClaw | GitHub repo (`qwibitai/nanoclaw`) | `git clone` + `pnpm install` |
-| OpenFang | GitHub Releases (`RightNow-AI/openfang`) | Download binary for platform |
+| Runtime  | Source                                     | Install Method                                |
+| -------- | ------------------------------------------ | --------------------------------------------- |
+| ZeroClaw | GitHub Releases (`zeroclaw-labs/zeroclaw`) | Download binary for platform                  |
+| PicoClaw | GitHub Releases (`picoclaw-labs/picoclaw`) | Download binary for platform                  |
+| OpenClaw | npm registry                               | `npm install -g openclaw` into managed prefix |
+| NanoClaw | GitHub repo (`qwibitai/nanoclaw`)          | `git clone` + `pnpm install`                  |
 
 ### Platform Detection
 
 Binary runtimes need the correct platform artifact. ClawDen detects:
 
-- **OS**: `linux`, `darwin`, `windows`
+- **OS**: `linux`, `darwin` (Phase 1). `windows` deferred to Phase 2 — symlinks, signal handling, and PID management require platform-specific implementations.
 - **Arch**: `x64` (`x86_64`), `arm64` (`aarch64`)
 
 Maps to upstream release naming conventions per runtime (e.g., `zeroclaw-0.1.7-linux-x86_64.tar.gz`).
+
+### Download Integrity Verification
+
+All downloaded artifacts are verified before installation to prevent supply-chain attacks:
+
+- **Binary runtimes (GitHub Releases)**: Each release must publish a `SHA256SUMS` file alongside artifacts. `clawden install` downloads the checksum file, verifies the downloaded archive's SHA-256 hash matches, and rejects mismatches with a clear error.
+- **npm runtimes (OpenClaw)**: npm's built-in integrity checking (`npm install --integrity`) is used. The expected package integrity hash is pinned in ClawDen's internal manifest.
+- **Git-cloned runtimes (NanoClaw)**: After cloning, verify the HEAD commit is signed or matches a known commit hash from ClawDen's pinned manifest.
+- **Cache validation**: Cached downloads in `~/.clawden/cache/` store the verified checksum alongside each archive. Re-installs from cache re-verify before use.
+
+If checksum verification fails:
+```
+[clawden] ERROR: Checksum mismatch for zeroclaw-0.1.7-linux-x86_64.tar.gz
+         Expected: sha256:abc123...
+         Got:      sha256:def456...
+         The download may be corrupted or tampered with. Aborting install.
+```
 
 ### Process Management (Direct Mode)
 
@@ -125,10 +145,11 @@ Implementation:
 - **Stdout/stderr**: Redirected to log files in background mode
 - **Health checks**: Same `GET /health` polling as Docker mode
 - **Crash restart**: Optional `--restart=on-failure` with backoff (1s → 2s → 4s → max 30s)
+- **Audit logging**: All lifecycle events (install, start, stop, crash, restart, uninstall) are recorded to `~/.clawden/logs/audit.log` with timestamp, runtime name, event type, and outcome. This satisfies the project-wide requirement that all lifecycle events must be audit-logged (see AGENTS.md).
 
 ### Config Translation (Reuse)
 
-The same `clawden.yaml` config works for both Docker and direct mode. The credential mapping logic (env var translation per runtime) is already implemented in the Rust backend — direct mode calls the same code paths, just without wrapping in `docker run`.
+The same `clawden.yaml` config works for both Docker and direct mode. The credential mapping logic (env var translation per runtime) is implemented in `clawden-core`. The `ProcessManager` (from spec 023) handles both Docker containers and native processes through its `ExecutionMode` enum. Config translation code paths in `clawden-core` are shared across both modes — no duplication.
 
 ### Tool Setup (Direct Mode)
 
@@ -145,6 +166,14 @@ Tools that can't be satisfied show a clear message:
          Install it with: brew install git (macOS) / apt install git (Debian/Ubuntu)
 ```
 
+### Install Locking & Atomicity
+
+Concurrent `clawden install` invocations must not corrupt `~/.clawden/`:
+
+- **File-based lock**: Acquire an exclusive lock on `~/.clawden/.install.lock` before writing to `runtimes/` or `cache/`. Use `flock` (Unix) advisory locking.
+- **Atomic directory swap**: Downloads go to a temporary directory (`~/.clawden/runtimes/<runtime>/.<version>.tmp`). After checksum verification, the directory is renamed atomically to its final path. If the process is interrupted, the temp directory is cleaned up on next install.
+- **Cache writes**: Cache archive writes use a temp filename + rename pattern to prevent partial files from being used.
+
 ### Environment Isolation
 
 Direct mode runs runtimes with a controlled environment:
@@ -154,18 +183,18 @@ Direct mode runs runtimes with a controlled environment:
 
 ### CLI Changes Summary
 
-| Command | New / Changed | Description |
-|---------|---------------|-------------|
-| `clawden install <runtime>` | **New** | Download + install a runtime natively |
-| `clawden install --list` | **New** | List installed runtimes + versions |
-| `clawden install --all` | **New** | Install all Phase 1 runtimes |
-| `clawden uninstall <runtime>` | **New** | Remove installed runtime |
-| `clawden run` | **Changed** | Falls back to direct mode if Docker unavailable |
-| `clawden up` | **Changed** | Supports direct mode process management |
-| `clawden ps` | **Changed** | Shows PID info in direct mode |
-| `clawden stop` | **Changed** | SIGTERM/SIGKILL in direct mode |
-| `clawden logs` | **Changed** | Tails log files in direct mode |
-| `clawden run --no-docker` | **New flag** | Force direct mode |
+| Command                       | New / Changed | Description                                     |
+| ----------------------------- | ------------- | ----------------------------------------------- |
+| `clawden install <runtime>`   | **New**       | Download + install a runtime natively           |
+| `clawden install --list`      | **New**       | List installed runtimes + versions              |
+| `clawden install --all`       | **New**       | Install all Phase 1 runtimes                    |
+| `clawden uninstall <runtime>` | **New**       | Remove installed runtime                        |
+| `clawden run`                 | **Changed**   | Falls back to direct mode if Docker unavailable |
+| `clawden up`                  | **Changed**   | Supports direct mode process management         |
+| `clawden ps`                  | **Changed**   | Shows PID info in direct mode                   |
+| `clawden stop`                | **Changed**   | SIGTERM/SIGKILL in direct mode                  |
+| `clawden logs`                | **New**       | Tail runtime log files (direct mode)            |
+| `clawden run --no-docker`     | **New flag**  | Force direct mode                               |
 
 ## Plan
 
@@ -177,6 +206,9 @@ Direct mode runs runtimes with a controlled environment:
 - [ ] Implement `clawden install --list` and `clawden uninstall`
 - [ ] Add Docker detection in `clawden run` — fall back to direct mode when Docker unavailable
 - [ ] Implement `--no-docker` flag and `CLAWDEN_NO_DOCKER` env var
+- [ ] Implement download integrity verification (SHA256SUMS for binaries, npm integrity, git commit pinning)
+- [ ] Implement install locking (`~/.clawden/.install.lock`) and atomic directory swap
+- [ ] Implement audit logging for install/uninstall lifecycle events
 
 ### Phase 2: Process Management
 - [ ] Implement direct-mode process spawning (background, PID files, log redirection)
@@ -185,6 +217,7 @@ Direct mode runs runtimes with a controlled environment:
 - [ ] Implement `clawden logs` for direct mode (tail log files)
 - [ ] Implement health check polling for direct-mode runtimes
 - [ ] Implement crash restart with exponential backoff (`--restart=on-failure`)
+- [ ] Implement audit logging for start/stop/crash/restart lifecycle events
 
 ### Phase 3: Tool Verification & Polish
 - [ ] Implement host tool verification (git, curl, browser checks) with actionable install hints
@@ -192,6 +225,13 @@ Direct mode runs runtimes with a controlled environment:
 - [ ] Add `clawden doctor` command — checks system prerequisites, installed runtimes, connectivity
 - [ ] Add upgrade support: `clawden install zeroclaw@latest` re-downloads if newer version available
 - [ ] Documentation: direct install quickstart guide
+
+### Phase 4: Windows Support (Deferred)
+- [ ] Replace symlinks with junction points or `.current` marker files on Windows
+- [ ] Replace SIGTERM/SIGKILL with `TerminateProcess` / `ctrl_c_event` on Windows
+- [ ] Replace `flock` with Windows named mutex for install locking
+- [ ] Add Windows platform detection and artifact naming support
+- [ ] Windows-specific tool install hints (winget, choco, scoop)
 
 ## Test
 
@@ -208,8 +248,13 @@ Direct mode runs runtimes with a controlled environment:
 - [ ] `clawden logs zeroclaw` streams runtime logs from log files
 - [ ] Health check detects crashed runtimes and reports status accurately
 - [ ] Missing tool on host produces a helpful error message with install instructions
-- [ ] Parallel installs don't corrupt the `~/.clawden/` directory
 - [ ] `clawden doctor` reports system readiness accurately
+- [ ] Download with tampered checksum is rejected with clear error message
+- [ ] Valid checksum passes verification and install completes successfully
+- [ ] Concurrent `clawden install zeroclaw` invocations don't corrupt `~/.clawden/`
+- [ ] Interrupted install leaves no partial directory in `~/.clawden/runtimes/`
+- [ ] Install, uninstall, start, stop, crash, restart events appear in `~/.clawden/logs/audit.log`
+- [ ] `clawden run --no-docker` bypasses server API and spawns runtime directly
 
 ## Notes
 
@@ -221,3 +266,5 @@ Direct mode runs runtimes with a controlled environment:
 - Crash restart with backoff prevents CPU burn if a runtime is misconfigured.
 - `clawden doctor` is inspired by `flutter doctor` — checks everything in one command.
 - Future consideration: systemd unit / launchd plist generation for `clawden up` as a system service (out of scope for now).
+- Windows support is deferred to Phase 4. The design relies on Unix symlinks, `flock`, and POSIX signals — all of which need platform-specific alternatives on Windows.
+- OpenFang was considered for the download sources table but is excluded because it is not in the current `ClawRuntime` enum or adapter registry. It can be added in a future spec if needed.
