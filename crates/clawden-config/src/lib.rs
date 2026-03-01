@@ -331,7 +331,7 @@ impl ClawDenYaml {
                     provider_name
                 ));
             } else if matches!(resolved_type, Some(LlmProvider::Custom(_)))
-                && provider.base_url.as_deref().is_none_or(str::is_empty)
+                && provider.base_url.as_deref().map_or(true, str::is_empty)
             {
                 errors.push(format!(
                     "Provider '{}' of type custom requires a non-empty 'base_url'",
@@ -1212,5 +1212,21 @@ providers:
         let provider: LlmProvider =
             serde_yaml::from_str("openai").expect("provider enum should parse");
         assert_eq!(provider, LlmProvider::OpenAi);
+    }
+
+    #[test]
+    fn runtime_unknown_provider_reference_fails_validation() {
+        let yaml = r#"
+runtimes:
+  - name: zeroclaw
+    provider: not-a-real-provider
+"#;
+        let parsed = ClawDenYaml::parse_yaml(yaml).expect("yaml should parse");
+        let errors = parsed.validate().expect_err("validation should fail");
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("references provider 'not-a-real-provider'"))
+        );
     }
 }

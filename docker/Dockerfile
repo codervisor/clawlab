@@ -34,8 +34,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     dnsutils \
-    jq \
     git \
+    jq \
     tree \
     unzip \
     zip \

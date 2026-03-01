@@ -27,7 +27,7 @@ if ! mkdir -p "$TOOLS_STATE_DIR" 2>/dev/null; then
     mkdir -p "$TOOLS_STATE_DIR"
 fi
 ACTIVATED_TOOLS=()
-TOOLS_JSON_ENTRIES=()
+TOOLS_JSON='{}'
 
 if [ -n "$TOOLS" ]; then
     IFS=',' read -ra TOOL_LIST <<< "$TOOLS"
@@ -48,6 +48,7 @@ if [ -n "$TOOLS" ]; then
         manifest="/opt/clawden/tools/${tool}/manifest.toml"
 
         if [ -f "$manifest" ]; then
+            # NOTE: this parser supports single-line requires arrays only (e.g. requires = ["browser"]).
             requires_raw="$(awk -F= '/^requires[[:space:]]*=/{print $2; exit}' "$manifest" | tr -d '[]"')"
             if [ -n "$requires_raw" ]; then
                 IFS=',' read -ra REQUIRES <<< "$requires_raw"
@@ -66,7 +67,8 @@ if [ -n "$TOOLS" ]; then
             # shellcheck disable=SC1090
             source "$setup_script"
             ACTIVATED_TOOLS+=("$tool")
-            TOOLS_JSON_ENTRIES+=("    \"${tool}\": { \"version\": \"unknown\", \"bin\": \"${setup_script}\" }")
+            TOOLS_JSON="$(jq --arg tool "$tool" --arg bin "$setup_script" \
+                '. + {($tool): {"version": "unknown", "bin": $bin}}' <<<"$TOOLS_JSON")"
         else
             echo "[clawden] Warning: Unknown tool '${tool}', skipping" >&2
         fi
@@ -76,25 +78,9 @@ fi
 CLAWDEN_TOOLS="$(IFS=,; echo "${ACTIVATED_TOOLS[*]}")"
 export CLAWDEN_TOOLS
 
-{
-    echo "{"
-    printf '  "activated": ['
-    for i in "${!ACTIVATED_TOOLS[@]}"; do
-        if [ "$i" -gt 0 ]; then printf ', '; fi
-        printf '"%s"' "${ACTIVATED_TOOLS[$i]}"
-    done
-    echo "],"
-    echo '  "tools": {'
-    for i in "${!TOOLS_JSON_ENTRIES[@]}"; do
-        if [ "$i" -gt 0 ]; then
-            echo ","
-        fi
-        printf '%s' "${TOOLS_JSON_ENTRIES[$i]}"
-    done
-    echo
-    echo "  }"
-    echo "}"
-} > "${TOOLS_STATE_DIR}/tools.json"
+ACTIVATED_JSON="$(printf '%s\n' "${ACTIVATED_TOOLS[@]}" | jq -Rsc 'split("\n") | map(select(length > 0))')"
+jq -n --argjson activated "$ACTIVATED_JSON" --argjson tools "$TOOLS_JSON" \
+    '{activated: $activated, tools: $tools}' > "${TOOLS_STATE_DIR}/tools.json"
 
 # --- Runtime launch ---
 # Runtimes are installed by `clawden-cli install` into $HOME/.clawden/runtimes/
