@@ -28,7 +28,9 @@ FROM debian:bookworm-slim AS base
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
-    dnsutils \    git \    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    dnsutils \
+    git \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && npm install -g pnpm \
     && apt-get clean \
