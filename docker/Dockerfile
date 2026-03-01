@@ -100,7 +100,7 @@ RUN set -eux; \
     git clone --depth 1 --branch "${NANOCLAW_REF}" \
        https://github.com/qwibitai/nanoclaw.git /opt/clawden/runtimes/nanoclaw \
     && cd /opt/clawden/runtimes/nanoclaw \
-    && npm install --production \
+    && npm install --omit=dev --ignore-scripts \
     && rm -rf .git .github docs assets
 
 # OpenFang (Rust binary) — from GitHub Releases (.deb package)
