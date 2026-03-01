@@ -45,7 +45,11 @@ impl RuntimeInstaller {
         })
     }
 
-    pub fn install_runtime(&self, runtime: &str, requested_version: Option<&str>) -> Result<InstalledRuntime> {
+    pub fn install_runtime(
+        &self,
+        runtime: &str,
+        requested_version: Option<&str>,
+    ) -> Result<InstalledRuntime> {
         ensure_runtime_supported(runtime)?;
         let _lock = InstallLock::acquire(&self.lock_path)?;
 
@@ -146,11 +150,7 @@ impl RuntimeInstaller {
             return None;
         }
         let version = fs::read_link(&current).ok()?;
-        let executable = self
-            .runtimes_dir
-            .join(runtime)
-            .join(version)
-            .join(runtime);
+        let executable = self.runtimes_dir.join(runtime).join(version).join(runtime);
         executable.exists().then_some(executable)
     }
 
@@ -402,7 +402,11 @@ struct GithubAsset {
     url: String,
 }
 
-fn github_release_assets(owner: &str, repo: &str, requested_version: &str) -> Result<GithubRelease> {
+fn github_release_assets(
+    owner: &str,
+    repo: &str,
+    requested_version: &str,
+) -> Result<GithubRelease> {
     ensure_command_available("curl", "curl")?;
     let url = if requested_version == "latest" {
         format!("https://api.github.com/repos/{owner}/{repo}/releases/latest")
@@ -440,10 +444,7 @@ fn github_release_assets(owner: &str, repo: &str, requested_version: &str) -> Re
             let Some(name) = entry.get("name").and_then(|v| v.as_str()) else {
                 continue;
             };
-            let Some(url) = entry
-                .get("browser_download_url")
-                .and_then(|v| v.as_str())
-            else {
+            let Some(url) = entry.get("browser_download_url").and_then(|v| v.as_str()) else {
                 continue;
             };
             assets.push(GithubAsset {
@@ -456,12 +457,19 @@ fn github_release_assets(owner: &str, repo: &str, requested_version: &str) -> Re
     Ok(GithubRelease { tag, assets })
 }
 
-fn pick_asset<'a>(assets: &'a [GithubAsset], patterns: &[&str], ext: &str) -> Option<&'a GithubAsset> {
+fn pick_asset<'a>(
+    assets: &'a [GithubAsset],
+    patterns: &[&str],
+    ext: &str,
+) -> Option<&'a GithubAsset> {
     assets.iter().find(|asset| {
         asset.name.ends_with(ext)
-            && patterns
-                .iter()
-                .any(|pattern| asset.name.to_ascii_lowercase().contains(&pattern.to_ascii_lowercase()))
+            && patterns.iter().any(|pattern| {
+                asset
+                    .name
+                    .to_ascii_lowercase()
+                    .contains(&pattern.to_ascii_lowercase())
+            })
     })
 }
 
@@ -496,15 +504,43 @@ struct InstallLock {
 
 impl InstallLock {
     fn acquire(path: &Path) -> Result<Self> {
-        OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .open(path)
-            .with_context(|| format!("install already in progress (lock: {})", path.display()))?;
-        Ok(Self {
-            path: path.to_path_buf(),
-        })
+        if let Ok(mut file) = OpenOptions::new().create_new(true).write(true).open(path) {
+            let _ = writeln!(file, "{}", std::process::id());
+            return Ok(Self {
+                path: path.to_path_buf(),
+            });
+        }
+
+        if !is_lock_active(path) {
+            let _ = fs::remove_file(path);
+            if let Ok(mut file) = OpenOptions::new().create_new(true).write(true).open(path) {
+                let _ = writeln!(file, "{}", std::process::id());
+                return Ok(Self {
+                    path: path.to_path_buf(),
+                });
+            }
+        }
+
+        anyhow::bail!("install already in progress (lock: {})", path.display());
     }
+}
+
+fn is_lock_active(path: &Path) -> bool {
+    let Ok(body) = fs::read_to_string(path) else {
+        return false;
+    };
+
+    let Ok(pid) = body.trim().parse::<u32>() else {
+        return false;
+    };
+
+    Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
 }
 
 impl Drop for InstallLock {

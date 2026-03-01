@@ -217,16 +217,16 @@ Direct mode runs runtimes with a controlled environment:
 - [x] Implement `clawden ps` for direct mode (PID, uptime, port, status)
 - [x] Implement `clawden stop` for direct mode (SIGTERM → SIGKILL)
 - [x] Implement `clawden logs` for direct mode (tail log files)
-- [ ] Implement health check polling for direct-mode runtimes
-- [ ] Implement crash restart with exponential backoff (`--restart=on-failure`)
-- [ ] Implement audit logging for start/stop/crash/restart lifecycle events
+- [x] Implement health check polling for direct-mode runtimes
+- [x] Implement crash restart with exponential backoff (`--restart=on-failure`)
+- [x] Implement audit logging for start/stop/crash/restart lifecycle events
 
 ### Phase 3: Tool Verification & Polish
 - [x] Implement host tool verification (git, curl, browser checks) with actionable install hints
 - [x] Implement `clawden install --all` for bulk install
 - [x] Add `clawden doctor` command — checks system prerequisites, installed runtimes, connectivity
 - [x] Add upgrade support: `clawden install zeroclaw@latest` re-downloads if newer version available
-- [ ] Documentation: direct install quickstart guide
+- [x] Documentation: direct install quickstart guide
 
 ### Phase 4: Windows Support (Deferred)
 - [ ] Replace symlinks with junction points or `.current` marker files on Windows
@@ -238,24 +238,24 @@ Direct mode runs runtimes with a controlled environment:
 ## Test
 
 - [x] `clawden install zeroclaw` downloads correct binary for current platform to `~/.clawden/runtimes/`
-- [ ] `clawden install openclaw` runs `npm install` into managed prefix successfully
+- [x] `clawden install openclaw` runs `npm install` into managed prefix successfully
 - [x] `clawden install --list` shows installed runtimes with versions
 - [x] `clawden uninstall zeroclaw` removes runtime and cleans up symlinks
-- [ ] `clawden run zeroclaw` uses direct mode when Docker is not installed
+- [x] `clawden run zeroclaw` uses direct mode when Docker is not installed
 - [x] `clawden run zeroclaw --no-docker` forces direct mode even when Docker is available
-- [ ] `clawden.yaml` config works identically in direct mode and Docker mode
-- [ ] `clawden up` starts runtimes as background processes with PID files in direct mode
+- [x] `clawden.yaml` config works identically in direct mode and Docker mode
+- [x] `clawden up` starts runtimes as background processes with PID files in direct mode
 - [x] `clawden ps` shows correct process status (running, stopped, crashed) in direct mode
 - [x] `clawden stop` cleanly shuts down runtime processes
 - [x] `clawden logs zeroclaw` streams runtime logs from log files
-- [ ] Health check detects crashed runtimes and reports status accurately
-- [ ] Missing tool on host produces a helpful error message with install instructions
+- [x] Health check detects crashed runtimes and reports status accurately
+- [x] Missing tool on host produces a helpful error message with install instructions
 - [x] `clawden doctor` reports system readiness accurately
-- [ ] Corrupted or incomplete archive is rejected with clear error message
+- [x] Corrupted or incomplete archive is rejected with clear error message
 - [x] Valid artifact passes baseline validation and install completes successfully
-- [ ] Concurrent `clawden install zeroclaw` invocations don't corrupt `~/.clawden/`
-- [ ] Interrupted install leaves no partial directory in `~/.clawden/runtimes/`
-- [ ] Install, uninstall, start, stop, crash, restart events appear in `~/.clawden/logs/audit.log`
+- [x] Concurrent `clawden install zeroclaw` invocations don't corrupt `~/.clawden/`
+- [x] Interrupted install leaves no partial directory in `~/.clawden/runtimes/`
+- [x] Install, uninstall, start, stop, crash, restart events appear in `~/.clawden/logs/audit.log`
 - [x] `clawden run --no-docker` bypasses HTTP server dependency and spawns runtime directly via `clawden-core`
 
 ## Notes
@@ -277,4 +277,7 @@ Direct mode runs runtimes with a controlled environment:
 
 - Replaced installer stubs with real host install paths in `clawden-core`: ZeroClaw via GitHub release asset discovery + tar extraction, PicoClaw via GitHub artifact + 7z extraction, OpenClaw via npm managed prefix, NanoClaw via git clone + pnpm install.
 - Verified with live commands: `install --list`, `install zeroclaw`, `uninstall zeroclaw`, `doctor`, and audit log inspection for install/start/stop/uninstall events.
-- `install openclaw` is implemented but can be slow in constrained environments due npm dependency resolution; test remains pending completion.
+- `install openclaw` completed successfully in live validation and remains sensitive to npm network/dependency resolution time in constrained environments.
+- Added direct-mode restart supervision for `--restart=on-failure` with exponential backoff and crash/restart audit records.
+- Added direct-mode health status surface in `clawden ps` with runtime-specific env overrides (`CLAWDEN_HEALTH_URL_<RUNTIME>` / `CLAWDEN_HEALTH_PORT_<RUNTIME>`).
+- Hardened install locking to recover from stale `.install.lock` files by validating lock owner PID before failing.

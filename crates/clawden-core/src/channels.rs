@@ -54,7 +54,10 @@ impl ChannelStore {
         Self::default()
     }
 
-    pub fn upsert_config(&mut self, req: ChannelConfigRequest) -> Result<ChannelInstanceConfig, String> {
+    pub fn upsert_config(
+        &mut self,
+        req: ChannelConfigRequest,
+    ) -> Result<ChannelInstanceConfig, String> {
         let channel_type = ChannelType::from_str_loose(&req.channel_type)
             .ok_or_else(|| format!("unknown channel type: {}", req.channel_type))?;
 
@@ -105,12 +108,14 @@ impl ChannelStore {
 
         type_map
             .into_iter()
-            .map(|(channel_type, (instance_count, connected, disconnected))| ChannelTypeSummary {
-                channel_type,
-                instance_count,
-                connected,
-                disconnected,
-            })
+            .map(
+                |(channel_type, (instance_count, connected, disconnected))| ChannelTypeSummary {
+                    channel_type,
+                    instance_count,
+                    connected,
+                    disconnected,
+                },
+            )
             .collect()
     }
 
@@ -174,7 +179,10 @@ impl ChannelStore {
                     binding.channel_type.to_string(),
                     binding.bot_token_hash.clone(),
                 );
-                groups.entry(key).or_default().push(binding.instance_id.clone());
+                groups
+                    .entry(key)
+                    .or_default()
+                    .push(binding.instance_id.clone());
             }
         }
 
@@ -205,7 +213,11 @@ impl ChannelStore {
             .unwrap_or_default()
     }
 
-    pub fn get_connection_status(&self, agent_id: &str, channel_name: &str) -> ChannelConnectionStatus {
+    pub fn get_connection_status(
+        &self,
+        agent_id: &str,
+        channel_name: &str,
+    ) -> ChannelConnectionStatus {
         self.connection_status
             .get(&(agent_id.to_string(), channel_name.to_string()))
             .cloned()

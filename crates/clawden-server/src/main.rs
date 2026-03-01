@@ -36,6 +36,73 @@ async fn health() -> Json<HealthResponse> {
     })
 }
 
+fn build_app(shared_state: AppState) -> Router {
+    Router::new()
+        .route("/health", get(health))
+        .route("/agents", get(list_agents))
+        .route("/agents/register", axum::routing::post(register_agent))
+        .route("/agents/{agent_id}/start", axum::routing::post(start_agent))
+        .route("/agents/{agent_id}/stop", axum::routing::post(stop_agent))
+        .route("/agents/health", get(health_summary))
+        .route("/fleet/status", get(fleet_status))
+        .route("/task/send", axum::routing::post(send_task))
+        .route("/audit", get(audit_log))
+        .route("/discovery/endpoints", get(list_endpoints))
+        .route(
+            "/discovery/endpoints/register",
+            axum::routing::post(register_endpoint),
+        )
+        .route("/discovery/scan", axum::routing::post(scan_endpoints))
+        .route("/swarm/teams", get(list_teams))
+        .route("/swarm/teams/create", axum::routing::post(create_team))
+        .route("/swarm/fan-out", axum::routing::post(fan_out_task))
+        .route("/swarm/tasks", get(list_swarm_tasks))
+        .route("/runtimes", get(list_runtimes))
+        .route(
+            "/runtimes/{runtime}/deploy",
+            axum::routing::post(deploy_runtime),
+        )
+        .route("/agents/{agent_id}/deploy-status", get(deploy_status))
+        .route(
+            "/agents/{agent_id}/restart",
+            axum::routing::post(restart_agent),
+        )
+        .route("/agents/{agent_id}/logs", get(agent_logs))
+        .route(
+            "/agents/{agent_id}/metrics/history",
+            get(agent_metrics_history),
+        )
+        .route(
+            "/agents/{agent_id}/proxy-status/{channel_type}",
+            get(proxy_status_endpoint),
+        )
+        .route("/channels", get(list_channels))
+        .route(
+            "/channels/{channel_type}",
+            get(get_channel_config)
+                .put(upsert_channel_config)
+                .delete(delete_channel_config),
+        )
+        .route("/channels/{channel_type}/instances", get(channel_instances))
+        .route(
+            "/channels/{channel_type}/test",
+            axum::routing::post(test_channel),
+        )
+        .route("/agents/{agent_id}/channels", get(agent_channels))
+        .route("/channels/matrix", get(channel_matrix))
+        .route("/channels/support-matrix", get(channel_support_matrix))
+        .route(
+            "/channels/bindings",
+            get(list_bindings).post(create_binding),
+        )
+        .route(
+            "/channels/bindings/{binding_id}",
+            axum::routing::delete(delete_binding),
+        )
+        .route("/channels/bindings/conflicts", get(binding_conflicts))
+        .with_state(shared_state)
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
@@ -87,74 +154,7 @@ async fn main() {
         }
     });
 
-    let app = Router::new()
-        .route("/health", get(health))
-        .route("/agents", get(list_agents))
-        .route("/agents/register", axum::routing::post(register_agent))
-        .route("/agents/{agent_id}/start", axum::routing::post(start_agent))
-        .route("/agents/{agent_id}/stop", axum::routing::post(stop_agent))
-        .route("/agents/health", get(health_summary))
-        .route("/fleet/status", get(fleet_status))
-        .route("/task/send", axum::routing::post(send_task))
-        .route("/audit", get(audit_log))
-        // Discovery endpoints
-        .route("/discovery/endpoints", get(list_endpoints))
-        .route(
-            "/discovery/endpoints/register",
-            axum::routing::post(register_endpoint),
-        )
-        .route("/discovery/scan", axum::routing::post(scan_endpoints))
-        // Swarm endpoints
-        .route("/swarm/teams", get(list_teams))
-        .route("/swarm/teams/create", axum::routing::post(create_team))
-        .route("/swarm/fan-out", axum::routing::post(fan_out_task))
-        .route("/swarm/tasks", get(list_swarm_tasks))
-        // Runtime endpoints (spec 017/021)
-        .route("/runtimes", get(list_runtimes))
-        .route(
-            "/runtimes/{runtime}/deploy",
-            axum::routing::post(deploy_runtime),
-        )
-        .route("/agents/{agent_id}/deploy-status", get(deploy_status))
-        .route(
-            "/agents/{agent_id}/restart",
-            axum::routing::post(restart_agent),
-        )
-        .route("/agents/{agent_id}/logs", get(agent_logs))
-        .route(
-            "/agents/{agent_id}/metrics/history",
-            get(agent_metrics_history),
-        )
-        .route(
-            "/agents/{agent_id}/proxy-status/{channel_type}",
-            get(proxy_status_endpoint),
-        )
-        // Channel endpoints (spec 018/021)
-        .route("/channels", get(list_channels))
-        .route(
-            "/channels/{channel_type}",
-            get(get_channel_config)
-                .put(upsert_channel_config)
-                .delete(delete_channel_config),
-        )
-        .route("/channels/{channel_type}/instances", get(channel_instances))
-        .route(
-            "/channels/{channel_type}/test",
-            axum::routing::post(test_channel),
-        )
-        .route("/agents/{agent_id}/channels", get(agent_channels))
-        .route("/channels/matrix", get(channel_matrix))
-        .route("/channels/support-matrix", get(channel_support_matrix))
-        .route(
-            "/channels/bindings",
-            get(list_bindings).post(create_binding),
-        )
-        .route(
-            "/channels/bindings/{binding_id}",
-            axum::routing::delete(delete_binding),
-        )
-        .route("/channels/bindings/conflicts", get(binding_conflicts))
-        .with_state(shared_state);
+    let app = build_app(shared_state);
     let port = std::env::var("CLAWDEN_SERVER_PORT")
         .ok()
         .and_then(|value| value.parse::<u16>().ok())
@@ -207,4 +207,55 @@ async fn main() {
     axum::serve(listener, app)
         .await
         .expect("server failed unexpectedly");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use tower::util::ServiceExt;
+
+    fn test_state() -> AppState {
+        let registry = clawden_adapters::builtin_registry();
+        let manager = LifecycleManager::new(registry.adapters_map());
+        AppState {
+            manager: Arc::new(RwLock::new(manager)),
+            audit: Arc::new(AuditLog::default()),
+            discovery: Arc::new(RwLock::new(DiscoveryService::new())),
+            swarm: Arc::new(RwLock::new(SwarmCoordinator::new())),
+            channels: Arc::new(RwLock::new(ChannelStore::new())),
+        }
+    }
+
+    #[tokio::test]
+    async fn core_api_endpoints_are_reachable() {
+        let app = build_app(test_state());
+        let endpoints = [
+            "/health",
+            "/agents",
+            "/agents/health",
+            "/fleet/status",
+            "/runtimes",
+            "/channels",
+            "/audit",
+        ];
+
+        for endpoint in endpoints {
+            let request = Request::builder()
+                .uri(endpoint)
+                .body(Body::empty())
+                .expect("request should build");
+            let response = app
+                .clone()
+                .oneshot(request)
+                .await
+                .expect("request should succeed");
+            assert_eq!(
+                response.status(),
+                StatusCode::OK,
+                "endpoint {endpoint} returned unexpected status"
+            );
+        }
+    }
 }

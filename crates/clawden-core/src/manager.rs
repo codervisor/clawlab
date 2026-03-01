@@ -72,7 +72,11 @@ impl LifecycleManager {
     }
 
     pub fn list_runtime_metadata(&self) -> Vec<RuntimeMetadata> {
-        let mut entries: Vec<_> = self.adapters.values().map(|adapter| adapter.metadata()).collect();
+        let mut entries: Vec<_> = self
+            .adapters
+            .values()
+            .map(|adapter| adapter.metadata())
+            .collect();
         entries.sort_by(|a, b| format!("{:?}", a.runtime).cmp(&format!("{:?}", b.runtime)));
         entries
     }
@@ -150,7 +154,10 @@ impl LifecycleManager {
         self.refresh_health_with_base_backoff_ms(1_000).await
     }
 
-    pub async fn refresh_health_with_base_backoff_ms(&mut self, base_backoff_ms: u64) -> Vec<AgentRecord> {
+    pub async fn refresh_health_with_base_backoff_ms(
+        &mut self,
+        base_backoff_ms: u64,
+    ) -> Vec<AgentRecord> {
         let now = current_unix_ms();
         let ids: Vec<String> = self.agents.keys().cloned().collect();
         for id in ids {

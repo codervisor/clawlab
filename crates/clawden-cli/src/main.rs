@@ -105,7 +105,12 @@ async fn main() -> Result<()> {
                     println!("No runtimes installed");
                 } else {
                     for row in installed {
-                        println!("{}\t{}\t{}", row.runtime, row.version, row.executable.display());
+                        println!(
+                            "{}\t{}\t{}",
+                            row.runtime,
+                            row.version,
+                            row.executable.display()
+                        );
                     }
                 }
                 return Ok(());
@@ -114,7 +119,12 @@ async fn main() -> Result<()> {
             if all {
                 let installed = installer.install_all()?;
                 for row in installed {
-                    println!("Installed {}@{} at {}", row.runtime, row.version, row.executable.display());
+                    println!(
+                        "Installed {}@{} at {}",
+                        row.runtime,
+                        row.version,
+                        row.executable.display()
+                    );
                 }
                 return Ok(());
             }
@@ -159,13 +169,14 @@ async fn main() -> Result<()> {
                         println!("Docker mode is available; direct processes are not started for {runtime}");
                     }
                     ExecutionMode::Direct | ExecutionMode::Auto => {
-                        let executable = installer.runtime_executable(&runtime).ok_or_else(|| {
-                            anyhow::anyhow!(
-                                "Runtime '{}' not installed. Run 'clawden install {}' first.",
-                                runtime,
-                                runtime
-                            )
-                        })?;
+                        let executable =
+                            installer.runtime_executable(&runtime).ok_or_else(|| {
+                                anyhow::anyhow!(
+                                    "Runtime '{}' not installed. Run 'clawden install {}' first.",
+                                    runtime,
+                                    runtime
+                                )
+                            })?;
                         let info = process_manager.start_direct(&runtime, &executable, &[])?;
                         append_audit_file("runtime.start", &runtime, "ok")?;
                         println!("Started {runtime} (pid {})", info.pid);
@@ -243,10 +254,13 @@ async fn main() -> Result<()> {
             if statuses.is_empty() {
                 println!("No running runtimes");
             } else {
-                println!("{:<14} {:<8} {:<10} {:<8} LOG", "RUNTIME", "PID", "MODE", "STATE");
+                println!(
+                    "{:<14} {:<8} {:<10} {:<10} {:<10} LOG",
+                    "RUNTIME", "PID", "MODE", "STATE", "HEALTH"
+                );
                 for status in statuses {
                     println!(
-                        "{:<14} {:<8} {:<10} {:<8} {}",
+                        "{:<14} {:<8} {:<10} {:<10} {:<10} {}",
                         status.runtime,
                         status
                             .pid
@@ -254,6 +268,7 @@ async fn main() -> Result<()> {
                             .unwrap_or_else(|| "-".to_string()),
                         format!("{:?}", status.mode),
                         if status.running { "running" } else { "stopped" },
+                        status.health,
                         status.log_path.display(),
                     );
                 }
@@ -283,7 +298,11 @@ async fn main() -> Result<()> {
         }
         Commands::Dashboard { port } => {
             let url = format!("http://127.0.0.1:{port}");
-            let _ = Command::new("open").arg(&url).stdout(Stdio::null()).stderr(Stdio::null()).spawn();
+            let _ = Command::new("open")
+                .arg(&url)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn();
             println!("Starting dashboard server on {url}");
 
             let status = if command_exists("clawden-server") {
@@ -307,40 +326,42 @@ async fn main() -> Result<()> {
             println!("node_available={}", command_exists("node"));
             println!("npm_available={}", command_exists("npm"));
             println!("git_available={}", command_exists("git"));
-            println!("curl_available={}", command_exists("curl") || command_exists("wget"));
+            println!(
+                "curl_available={}",
+                command_exists("curl") || command_exists("wget")
+            );
             println!("clawden_home={}", installer.root_dir().display());
             for row in installer.list_installed()? {
                 println!("installed={}@{}", row.runtime, row.version);
             }
         }
-        Commands::Channels { command } => {
-            match command {
-                None => {
-                    let metadata = manager.list_runtime_metadata();
-                    for runtime in metadata {
-                        println!("{}", runtime.runtime.as_slug());
-                        for (channel, support) in runtime.channel_support {
-                            println!("  {}: {:?}", channel, support);
-                        }
-                    }
-                }
-                Some(ChannelCommand::Test { channel_type }) => {
-                    if let Some(ct) = channel_type {
-                        println!("Channel config test for '{ct}' is available in dashboard server mode");
-                    } else {
-                        println!("Channel config test requires a channel type");
+        Commands::Channels { command } => match command {
+            None => {
+                let metadata = manager.list_runtime_metadata();
+                for runtime in metadata {
+                    println!("{}", runtime.runtime.as_slug());
+                    for (channel, support) in runtime.channel_support {
+                        println!("  {}: {:?}", channel, support);
                     }
                 }
             }
-        }
+            Some(ChannelCommand::Test { channel_type }) => {
+                if let Some(ct) = channel_type {
+                    println!(
+                        "Channel config test for '{ct}' is available in dashboard server mode"
+                    );
+                } else {
+                    println!("Channel config test requires a channel type");
+                }
+            }
+        },
     }
 
     Ok(())
 }
 
 fn parse_runtime(value: &str) -> Result<ClawRuntime> {
-    ClawRuntime::from_str_loose(value)
-        .ok_or_else(|| anyhow::anyhow!("unknown runtime: {value}"))
+    ClawRuntime::from_str_loose(value).ok_or_else(|| anyhow::anyhow!("unknown runtime: {value}"))
 }
 
 fn parse_runtime_version(spec: &str) -> (String, Option<String>) {

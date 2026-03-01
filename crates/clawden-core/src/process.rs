@@ -21,6 +21,8 @@ pub struct ProcessInfo {
     pub started_at_unix_ms: u64,
     pub mode: ExecutionMode,
     pub log_path: PathBuf,
+    pub restart_policy: Option<String>,
+    pub health_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -30,6 +32,7 @@ pub struct RuntimeProcessStatus {
     pub running: bool,
     pub mode: ExecutionMode,
     pub log_path: PathBuf,
+    pub health: String,
 }
 
 pub struct ProcessManager {
@@ -87,7 +90,12 @@ impl ProcessManager {
         }
     }
 
-    pub fn start_direct(&self, runtime: &str, executable: &Path, args: &[String]) -> Result<ProcessInfo> {
+    pub fn start_direct(
+        &self,
+        runtime: &str,
+        executable: &Path,
+        args: &[String],
+    ) -> Result<ProcessInfo> {
         if !executable.exists() {
             return Err(anyhow!(
                 "runtime executable not found: {}",
@@ -96,17 +104,47 @@ impl ProcessManager {
         }
 
         let log_path = self.log_dir.join(format!("{runtime}.log"));
-        let stdout = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&log_path)
-            .with_context(|| format!("opening runtime log file {}", log_path.display()))?;
-        let stderr = stdout.try_clone()?;
+        let (runtime_args, restart_policy) = split_restart_policy(args);
+        let health_url = runtime_health_url(runtime);
 
-        let mut command = Command::new(executable);
-        command.args(args);
-        command.stdout(Stdio::from(stdout));
-        command.stderr(Stdio::from(stderr));
+        let mut command = if restart_policy.as_deref() == Some("on-failure") {
+            let script_path = self.state_dir.join(format!("{runtime}.supervisor.sh"));
+            let audit_path = self.log_dir.join("audit.log");
+            let script = build_restart_supervisor_script();
+            fs::write(&script_path, script)
+                .with_context(|| format!("writing supervisor script {}", script_path.display()))?;
+            #[allow(clippy::permissions_set_readonly_false)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let mut perms = fs::metadata(&script_path)?.permissions();
+                perms.set_mode(0o755);
+                fs::set_permissions(&script_path, perms)?;
+            }
+
+            let mut cmd = Command::new("sh");
+            cmd.arg(script_path)
+                .arg(executable)
+                .arg(&log_path)
+                .arg(audit_path)
+                .arg(runtime);
+            cmd.args(&runtime_args);
+            cmd.stdout(Stdio::null());
+            cmd.stderr(Stdio::null());
+            cmd
+        } else {
+            let stdout = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&log_path)
+                .with_context(|| format!("opening runtime log file {}", log_path.display()))?;
+            let stderr = stdout.try_clone()?;
+
+            let mut cmd = Command::new(executable);
+            cmd.args(&runtime_args);
+            cmd.stdout(Stdio::from(stdout));
+            cmd.stderr(Stdio::from(stderr));
+            cmd
+        };
 
         let child = command
             .spawn()
@@ -118,6 +156,8 @@ impl ProcessManager {
             started_at_unix_ms: now_ms(),
             mode: ExecutionMode::Direct,
             log_path: log_path.clone(),
+            restart_policy,
+            health_url,
         };
 
         self.write_pid_file(runtime, &info)?;
@@ -164,12 +204,24 @@ impl ProcessManager {
                 .to_string();
 
             if let Some(info) = self.read_pid_file(&runtime)? {
+                let health = if !is_pid_running(info.pid) {
+                    "stopped".to_string()
+                } else if let Some(url) = &info.health_url {
+                    if health_check_ok(url) {
+                        "healthy".to_string()
+                    } else {
+                        "unhealthy".to_string()
+                    }
+                } else {
+                    "unknown".to_string()
+                };
                 statuses.push(RuntimeProcessStatus {
                     runtime,
                     pid: Some(info.pid),
                     running: is_pid_running(info.pid),
                     mode: info.mode,
                     log_path: info.log_path,
+                    health,
                 });
             }
         }
@@ -235,6 +287,100 @@ fn now_ms() -> u64 {
         .duration_since(UNIX_EPOCH)
         .expect("system clock before UNIX_EPOCH")
         .as_millis() as u64
+}
+
+fn split_restart_policy(args: &[String]) -> (Vec<String>, Option<String>) {
+    let mut filtered = Vec::new();
+    let mut restart_policy = None;
+
+    for arg in args {
+        if let Some(policy) = arg.strip_prefix("--restart=") {
+            restart_policy = Some(policy.to_string());
+            continue;
+        }
+        filtered.push(arg.clone());
+    }
+
+    (filtered, restart_policy)
+}
+
+fn runtime_health_url(runtime: &str) -> Option<String> {
+    let runtime_key = runtime.to_ascii_uppercase().replace('-', "_");
+    let url_key = format!("CLAWDEN_HEALTH_URL_{runtime_key}");
+    if let Ok(url) = std::env::var(url_key) {
+        if !url.trim().is_empty() {
+            return Some(url);
+        }
+    }
+
+    let port_key = format!("CLAWDEN_HEALTH_PORT_{runtime_key}");
+    if let Ok(port) = std::env::var(port_key) {
+        if !port.trim().is_empty() {
+            return Some(format!("http://127.0.0.1:{port}/health"));
+        }
+    }
+
+    None
+}
+
+fn health_check_ok(url: &str) -> bool {
+    Command::new("curl")
+        .args(["-fsS", "--max-time", "2", url])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+fn build_restart_supervisor_script() -> &'static str {
+    r#"#!/usr/bin/env sh
+set -u
+
+exec_path="$1"
+log_path="$2"
+audit_path="$3"
+runtime_name="$4"
+shift 4
+
+backoff=1
+child_pid=""
+
+cleanup() {
+    if [ -n "$child_pid" ]; then
+        kill -TERM "$child_pid" 2>/dev/null || true
+        sleep 2
+        kill -KILL "$child_pid" 2>/dev/null || true
+    fi
+    exit 0
+}
+
+trap cleanup INT TERM
+
+while true; do
+    "$exec_path" "$@" >>"$log_path" 2>&1 &
+    child_pid="$!"
+    wait "$child_pid"
+    exit_code="$?"
+    child_pid=""
+
+    if [ "$exit_code" -eq 0 ]; then
+        exit 0
+    fi
+
+    ts="$(date +%s)000"
+    printf "%s\truntime.crash\t%s\texit:%s\n" "$ts" "$runtime_name" "$exit_code" >>"$audit_path"
+    printf "%s\truntime.restart\t%s\tbackoff:%s\n" "$ts" "$runtime_name" "$backoff" >>"$audit_path"
+
+    sleep "$backoff"
+    if [ "$backoff" -lt 30 ]; then
+        backoff=$((backoff * 2))
+        if [ "$backoff" -gt 30 ]; then
+            backoff=30
+        fi
+    fi
+done
+"#
 }
 
 fn clawden_root_dir() -> Result<PathBuf> {

@@ -6,7 +6,7 @@ use axum::Json;
 use clawden_core::{
     append_audit, AgentRecord, AgentState, AuditEvent, AuditLog, BindChannelRequest,
     BindingConflict, ChannelConfigRequest, ChannelStore, ChannelTypeSummary, ClawRuntime,
-    DiscoveryMethod, DiscoveryService, DiscoveredEndpoint, LifecycleManager, MatrixRow,
+    DiscoveredEndpoint, DiscoveryMethod, DiscoveryService, LifecycleManager, MatrixRow,
     RuntimeMetadata, SwarmCoordinator, SwarmMember, SwarmRole,
 };
 use serde::{Deserialize, Serialize};
@@ -413,7 +413,12 @@ pub async fn upsert_channel_config(
     let config = channels
         .upsert_config(req)
         .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
-    append_audit(&state.audit, "api", "channel.configure", &config.instance_name);
+    append_audit(
+        &state.audit,
+        "api",
+        "channel.configure",
+        &config.instance_name,
+    );
     Ok((
         StatusCode::OK,
         Json(serde_json::to_value(config).unwrap_or_default()),
