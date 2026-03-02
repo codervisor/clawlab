@@ -1897,6 +1897,45 @@ channels:
     }
 
     #[test]
+    fn validation_rejects_invalid_top_level_version_constraint() {
+        let yaml = r#"
+runtime: zeroclaw
+version: "this-is-not-semver"
+channels:
+  telegram:
+    token: "abc"
+"#;
+        let parsed = ClawDenYaml::parse_yaml(yaml).expect("yaml should parse");
+        let errors = parsed.validate().expect_err("validation should fail");
+        assert!(
+            errors.iter().any(|e| e.contains("Top-level 'version'")),
+            "expected top-level version validation error, got: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn validation_rejects_invalid_runtime_version_constraint() {
+        let yaml = r#"
+channels:
+  support:
+    type: telegram
+    token: "abc"
+runtimes:
+  - name: zeroclaw
+    version: ">=>1.2.3"
+    channels: [support]
+"#;
+        let parsed = ClawDenYaml::parse_yaml(yaml).expect("yaml should parse");
+        let errors = parsed.validate().expect_err("validation should fail");
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("Runtime 'zeroclaw' has invalid version constraint")),
+            "expected runtime version validation error, got: {errors:?}"
+        );
+    }
+
+    #[test]
     fn zeroclaw_signal_mapping_uses_phone_and_token() {
         let mut ch = sample_channel();
         ch.phone = Some("+123456789".to_string());

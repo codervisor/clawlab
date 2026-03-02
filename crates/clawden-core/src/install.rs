@@ -485,6 +485,35 @@ pub fn runtime_start_args(runtime: &str) -> Vec<String> {
     }
 }
 
+/// Returns the set of extra CLI flags (long-form names) that a runtime's start
+/// command is known to accept.  Any flag **not** in this list must be passed via
+/// environment variables instead — blindly appending flags will break runtimes
+/// whose CLIs don't recognise them.
+pub fn runtime_supported_extra_args(runtime: &str) -> &'static [&'static str] {
+    match runtime {
+        "zeroclaw" => &["--config-dir", "--port", "--host"],
+        "picoclaw" => &["--config-dir", "--port", "--host"],
+        "nullclaw" => &["--config-dir", "--port", "--host"],
+        _ => &[],
+    }
+}
+
+/// Validate that all `args` (beyond `start_args`) are accepted by the runtime.
+/// Returns the names of any unsupported flags.
+pub fn validate_runtime_args<'a>(runtime: &str, args: &'a [String]) -> Vec<&'a str> {
+    let supported = runtime_supported_extra_args(runtime);
+    args.iter()
+        .filter_map(|arg| {
+            let flag = arg.split('=').next().unwrap_or(arg);
+            if flag.starts_with("--") && !supported.contains(&flag) {
+                Some(flag)
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
 pub fn version_satisfies(installed: &str, constraint: &str) -> bool {
     let normalized_constraint = constraint.trim();
     if normalized_constraint.is_empty() || normalized_constraint.eq_ignore_ascii_case("latest") {
@@ -845,7 +874,7 @@ fn make_executable(path: &Path) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::version_satisfies;
+    use super::{validate_runtime_args, version_satisfies};
 
     #[test]
     fn version_constraints_support_exact_wildcard_range_and_latest() {
@@ -855,5 +884,27 @@ mod tests {
         assert!(version_satisfies("main", "latest"));
         assert!(!version_satisfies("0.3.0", "0.2.x"));
         assert!(!version_satisfies("main", ">=0.2.1"));
+    }
+
+    #[test]
+    fn validate_runtime_args_rejects_unknown_flags() {
+        let args = vec![
+            "daemon".to_string(),
+            "--channels=telegram,discord".to_string(),
+            "--tools=git,http".to_string(),
+        ];
+        let bad = validate_runtime_args("zeroclaw", &args);
+        assert_eq!(bad, vec!["--channels", "--tools"]);
+    }
+
+    #[test]
+    fn validate_runtime_args_allows_known_flags() {
+        let args = vec![
+            "daemon".to_string(),
+            "--port=9090".to_string(),
+            "--host=127.0.0.1".to_string(),
+        ];
+        let bad = validate_runtime_args("zeroclaw", &args);
+        assert!(bad.is_empty(), "expected no bad flags, got: {:?}", bad);
     }
 }

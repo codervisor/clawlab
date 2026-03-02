@@ -1,5 +1,7 @@
 use anyhow::Result;
-use clawden_core::{ExecutionMode, LifecycleManager, ProcessManager, RuntimeInstaller};
+use clawden_core::{
+    validate_runtime_args, ExecutionMode, LifecycleManager, ProcessManager, RuntimeInstaller,
+};
 use std::time::Duration;
 
 use crate::commands::up::{
@@ -105,22 +107,35 @@ pub async fn exec_run(
     let installed = ensure_installed_runtime(installer, &opts.runtime, pinned_version)?;
 
     let mut args = installed.start_args.clone();
-    if !resolved_channels.is_empty() {
-        args.push(format!("--channels={}", resolved_channels.join(",")));
-    }
-    if !effective_tools.is_empty() {
-        args.push(format!("--tools={}", effective_tools.join(",")));
-    }
     if let Some(policy) = &opts.restart {
         args.push(format!("--restart={policy}"));
     }
     args.extend(opts.extra_args.clone());
 
+    let unsupported = validate_runtime_args(&opts.runtime, &args);
+    if !unsupported.is_empty() {
+        eprintln!(
+            "Warning: {} does not accept these flags: {}. They will be passed anyway since they were explicitly requested.",
+            opts.runtime,
+            unsupported.join(", "),
+        );
+    }
+
+    // Channel and tool lists are passed via env vars — runtimes
+    // do NOT accept --channels / --tools CLI flags.
+    let mut combined_env = env_vars;
+    if !resolved_channels.is_empty() {
+        combined_env.push(("CLAWDEN_CHANNELS".to_string(), resolved_channels.join(",")));
+    }
+    if !effective_tools.is_empty() {
+        combined_env.push(("CLAWDEN_TOOLS".to_string(), effective_tools.join(",")));
+    }
+
     let info = process_manager.start_direct_with_env_and_project(
         &opts.runtime,
         &installed.executable,
         &args,
-        &env_vars,
+        &combined_env,
         Some(project_hash()?),
     )?;
     append_audit_file("runtime.start", &opts.runtime, "ok")?;

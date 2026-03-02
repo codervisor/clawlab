@@ -1,3 +1,7 @@
+use crate::docker_runtime::{
+    container_running, get_stored_config, remove_stored_config, restart_container,
+    runtime_config_values, set_stored_config, start_container, stop_container,
+};
 use anyhow::Result;
 use async_trait::async_trait;
 use clawden_core::{
@@ -6,8 +10,14 @@ use clawden_core::{
     RuntimeMetadata, Skill, SkillManifest,
 };
 use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
 
 pub struct ZeroClawAdapter;
+
+fn config_store() -> &'static Mutex<HashMap<String, RuntimeConfig>> {
+    static STORE: OnceLock<Mutex<HashMap<String, RuntimeConfig>>> = OnceLock::new();
+    STORE.get_or_init(|| Mutex::new(HashMap::new()))
+}
 
 #[async_trait]
 impl ClawAdapter for ZeroClawAdapter {
@@ -45,23 +55,39 @@ impl ClawAdapter for ZeroClawAdapter {
     }
 
     async fn start(&self, config: &AgentConfig) -> Result<AgentHandle> {
-        Ok(AgentHandle {
-            id: format!("zeroclaw-{}", config.name),
+        let container_id = start_container(ClawRuntime::ZeroClaw, config)?;
+        let handle = AgentHandle {
+            id: container_id,
             name: config.name.clone(),
             runtime: ClawRuntime::ZeroClaw,
-        })
+        };
+
+        set_stored_config(
+            config_store(),
+            &handle.id,
+            runtime_config_values("zeroclaw", config),
+        );
+
+        Ok(handle)
     }
 
-    async fn stop(&self, _handle: &AgentHandle) -> Result<()> {
+    async fn stop(&self, handle: &AgentHandle) -> Result<()> {
+        stop_container(&handle.id)?;
+        remove_stored_config(config_store(), &handle.id);
         Ok(())
     }
 
-    async fn restart(&self, _handle: &AgentHandle) -> Result<()> {
+    async fn restart(&self, handle: &AgentHandle) -> Result<()> {
+        restart_container(&handle.id)?;
         Ok(())
     }
 
-    async fn health(&self, _handle: &AgentHandle) -> Result<HealthStatus> {
-        Ok(HealthStatus::Unknown)
+    async fn health(&self, handle: &AgentHandle) -> Result<HealthStatus> {
+        if container_running(&handle.id)? {
+            Ok(HealthStatus::Healthy)
+        } else {
+            Ok(HealthStatus::Unhealthy)
+        }
     }
 
     async fn metrics(&self, _handle: &AgentHandle) -> Result<AgentMetrics> {
@@ -82,13 +108,17 @@ impl ClawAdapter for ZeroClawAdapter {
         Ok(vec![])
     }
 
-    async fn get_config(&self, _handle: &AgentHandle) -> Result<RuntimeConfig> {
+    async fn get_config(&self, handle: &AgentHandle) -> Result<RuntimeConfig> {
+        if let Some(config) = get_stored_config(config_store(), &handle.id) {
+            return Ok(config);
+        }
         Ok(RuntimeConfig {
             values: serde_json::json!({ "runtime": "zeroclaw" }),
         })
     }
 
-    async fn set_config(&self, _handle: &AgentHandle, _config: &RuntimeConfig) -> Result<()> {
+    async fn set_config(&self, handle: &AgentHandle, config: &RuntimeConfig) -> Result<()> {
+        set_stored_config(config_store(), &handle.id, config.clone());
         Ok(())
     }
 
@@ -98,5 +128,52 @@ impl ClawAdapter for ZeroClawAdapter {
 
     async fn install_skill(&self, _handle: &AgentHandle, _skill: &SkillManifest) -> Result<()> {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ZeroClawAdapter;
+    use clawden_core::{AgentConfig, ClawAdapter, ClawRuntime};
+
+    #[test]
+    fn start_persists_forwarded_runtime_config() {
+        std::env::set_var("CLAWDEN_ADAPTER_DRY_RUN", "1");
+        let runtime = tokio::runtime::Runtime::new().expect("tokio runtime should initialize");
+        runtime.block_on(async {
+            let adapter = ZeroClawAdapter;
+            let handle = adapter
+                .start(&AgentConfig {
+                    name: "test-agent".to_string(),
+                    runtime: ClawRuntime::ZeroClaw,
+                    model: None,
+                    env_vars: vec![("OPENAI_API_KEY".to_string(), "sk-test".to_string())],
+                    channels: vec!["telegram".to_string()],
+                    tools: vec!["git".to_string(), "http".to_string()],
+                })
+                .await
+                .expect("adapter start should succeed");
+
+            let cfg = adapter
+                .get_config(&handle)
+                .await
+                .expect("adapter config should be readable");
+            assert_eq!(
+                cfg.values["channels"][0].as_str(),
+                Some("telegram"),
+                "channel passthrough should be retained"
+            );
+            assert_eq!(
+                cfg.values["tools"][0].as_str(),
+                Some("git"),
+                "tools passthrough should be retained"
+            );
+            assert_eq!(
+                cfg.values["env_vars"][0][0].as_str(),
+                Some("OPENAI_API_KEY"),
+                "env var passthrough should be retained"
+            );
+        });
+        std::env::remove_var("CLAWDEN_ADAPTER_DRY_RUN");
     }
 }

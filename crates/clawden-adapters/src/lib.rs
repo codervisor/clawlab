@@ -1,3 +1,4 @@
+mod docker_runtime;
 #[cfg(feature = "nanoclaw")]
 mod nanoclaw;
 #[cfg(feature = "openclaw")]

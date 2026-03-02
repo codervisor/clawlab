@@ -109,19 +109,23 @@ pub async fn exec_up(
             ExecutionMode::Direct | ExecutionMode::Auto => {
                 let installed = ensure_installed_runtime(installer, &runtime, pinned_version)?;
 
-                let mut args = installed.start_args.clone();
+                let args = installed.start_args.clone();
+
+                // Channel and tool lists are passed via env vars — runtimes
+                // do NOT accept --channels / --tools CLI flags.
+                let mut combined_env = env_vars.clone();
                 if !channels.is_empty() {
-                    args.push(format!("--channels={}", channels.join(",")));
+                    combined_env.push(("CLAWDEN_CHANNELS".to_string(), channels.join(",")));
                 }
                 if !tools.is_empty() {
-                    args.push(format!("--tools={}", tools.join(",")));
+                    combined_env.push(("CLAWDEN_TOOLS".to_string(), tools.join(",")));
                 }
 
                 let info = process_manager.start_direct_with_env_and_project(
                     &runtime,
                     &installed.executable,
                     &args,
-                    &env_vars,
+                    &combined_env,
                     Some(project_hash()?),
                 )?;
                 append_audit_file("runtime.start", &runtime, "ok")?;

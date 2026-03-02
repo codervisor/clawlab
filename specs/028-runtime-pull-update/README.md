@@ -1,5 +1,5 @@
 ---
-status: planned
+status: in-progress
 created: 2026-03-02
 priority: medium
 tags:
@@ -8,8 +8,12 @@ tags:
 - ux
 - docker-compose-parity
 created_at: 2026-03-02T08:09:01.949191519Z
-updated_at: 2026-03-02T08:09:01.949191519Z
+updated_at: 2026-03-02T09:07:57.464469438Z
+transitions:
+- status: in-progress
+  at: 2026-03-02T09:04:49.597723610Z
 ---
+
 # Runtime Pull & Update — Pre-fetch and Update Management
 
 ## Overview
@@ -266,19 +270,19 @@ This is a natural extension but not required in the initial implementation — D
 
 ## Plan
 
-- [ ] Add `version` field to `RuntimeEntryYaml` in clawden-config
-- [ ] Add `version` as top-level field in `ClawDenYaml` for single-runtime shorthand
-- [ ] Add version constraint parsing (`version_satisfies()`) with semver crate
-- [ ] Add `--upgrade` flag to `Commands::Install` in cli.rs
-- [ ] Add `--outdated` flag to `Commands::Install` in cli.rs
-- [ ] Implement `query_latest_version()` in RuntimeInstaller (GitHub API / npm registry)
-- [ ] Implement `check_for_updates()` in RuntimeInstaller
-- [ ] Implement `--outdated` output formatting and exit codes in exec_install
-- [ ] Implement `--upgrade` logic: compare versions, re-install if newer available, respect pins
-- [ ] Handle `latest` → `latest` case (compare GitHub release tag with installed tag)
-- [ ] Update `ensure_installed_runtime()` to accept and enforce version pins from config
-- [ ] Add audit logging for upgrade events (`runtime.upgrade` distinct from `runtime.install`)
-- [ ] Validate version pins in config validation (`ClawDenYaml::validate()`)
+- [x] Add `version` field to `RuntimeEntryYaml` in clawden-config
+- [x] Add `version` as top-level field in `ClawDenYaml` for single-runtime shorthand
+- [x] Add version constraint parsing (`version_satisfies()`) with semver crate
+- [x] Add `--upgrade` flag to `Commands::Install` in cli.rs
+- [x] Add `--outdated` flag to `Commands::Install` in cli.rs
+- [x] Implement `query_latest_version()` in RuntimeInstaller (GitHub API / npm registry)
+- [x] Implement `check_for_updates()` in RuntimeInstaller
+- [x] Implement `--outdated` output formatting and exit codes in exec_install
+- [x] Implement `--upgrade` logic: compare versions, re-install if newer available, respect pins
+- [x] Handle `latest` → `latest` case (compare GitHub release tag with installed tag)
+- [x] Update `ensure_installed_runtime()` to accept and enforce version pins from config
+- [x] Add audit logging for upgrade events (`runtime.upgrade` distinct from `runtime.install`)
+- [x] Validate version pins in config validation (`ClawDenYaml::validate()`)
 
 ## Test
 
@@ -295,10 +299,10 @@ This is a natural extension but not required in the initial implementation — D
 - [ ] `version: "0.1.3"` exact pin prevents any upgrade
 - [ ] Omitted version defaults to latest behavior (no constraint)
 - [ ] CLI explicit version (`zeroclaw@0.2.1`) overrides clawden.yaml pin
-- [ ] `version_satisfies()` handles semver, wildcards, ranges, and `latest`
-- [ ] Non-semver versions (git refs like `main`) are handled gracefully
+- [x] `version_satisfies()` handles semver, wildcards, ranges, and `latest`
+- [x] Non-semver versions (git refs like `main`) are handled gracefully
 - [ ] Audit log records `runtime.upgrade` events distinctly from `runtime.install`
-- [ ] Config validation rejects malformed version constraint strings
+- [x] Config validation rejects malformed version constraint strings
 
 ## Notes
 

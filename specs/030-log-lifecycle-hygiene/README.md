@@ -1,5 +1,5 @@
 ---
-status: planned
+status: in-progress
 created: 2026-03-02
 priority: high
 tags:
@@ -10,7 +10,10 @@ tags:
 depends_on:
 - 027-docker-compose-ux
 created_at: 2026-03-02T08:34:22.911298893Z
-updated_at: 2026-03-02T08:34:22.911298893Z
+updated_at: 2026-03-02T09:04:49.613153208Z
+transitions:
+- status: in-progress
+  at: 2026-03-02T09:04:49.613153208Z
 ---
 
 # Log Lifecycle Hygiene — Stream Offset, Rotation & Start-Arg Safety
@@ -99,11 +102,11 @@ This requires exposing `runtime_start_args` as `pub` from `clawden-core::install
 
 ## Plan
 
-- [ ] Seed `stream_logs()` offsets to current file size instead of 0
-- [ ] Truncate (or rotate) runtime log files at the start of each `clawden up` / `clawden run` session
-- [ ] Fix `ensure_installed_runtime()` to fall back to `runtime_start_args()` instead of empty vec
-- [ ] Expose `runtime_start_args()` as pub from `clawden-core::install`
-- [ ] Add test: `stream_logs` with pre-existing log content only streams new lines
+- [x] Seed `stream_logs()` offsets to current file size instead of 0
+- [x] Truncate (or rotate) runtime log files at the start of each `clawden up` / `clawden run` session
+- [x] Fix `ensure_installed_runtime()` to fall back to `runtime_start_args()` instead of empty vec
+- [x] Expose `runtime_start_args()` as pub from `clawden-core::install`
+- [x] Add test: `stream_logs` with pre-existing log content only streams new lines
 - [ ] Add test: `ensure_installed_runtime` returns correct `start_args` even when `list_installed` misses the entry
 
 ## Test

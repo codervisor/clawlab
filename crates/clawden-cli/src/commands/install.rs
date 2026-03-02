@@ -3,6 +3,7 @@ use clawden_core::{version_satisfies, RuntimeInstaller};
 use std::collections::HashMap;
 
 use super::up::{load_config, pinned_version_for_runtime};
+use crate::util::append_audit_file;
 use crate::util::parse_runtime_version;
 
 pub fn exec_install(
@@ -98,6 +99,7 @@ pub fn exec_install(
             }
 
             let installed = installer.install_runtime(&runtime_name, Some(&target))?;
+            let _ = append_audit_file("runtime.upgrade", &runtime_name, "ok");
             if let Some(prev) = current {
                 println!(
                     "Upgraded {} {} -> {}",

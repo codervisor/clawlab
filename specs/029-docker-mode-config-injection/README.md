@@ -1,5 +1,5 @@
 ---
-status: planned
+status: in-progress
 created: 2026-03-02
 priority: high
 tags:
@@ -12,7 +12,10 @@ depends_on:
 - 017-docker-runtime-images
 - 013-config-management
 created_at: 2026-03-02T08:27:30.088282380Z
-updated_at: 2026-03-02T08:27:30.088282380Z
+updated_at: 2026-03-02T09:06:43.741656288Z
+transitions:
+- status: in-progress
+  at: 2026-03-02T09:04:49.604493321Z
 ---
 
 # Docker Mode Config Injection — Channel & Env Passthrough
@@ -113,12 +116,12 @@ Apply the same fix to `clawden run` Docker mode — it has the same gap.
 
 ## Plan
 
-- [ ] Hoist `build_runtime_env_vars()` and `channels_for_runtime()` above the mode branch in `up.rs`
-- [ ] Extend `AgentConfig` with `env_vars`, `channels`, and `tools` fields
-- [ ] Pass extracted config into `LifecycleManager::register_agent()` / `start_agent()`
-- [ ] Update `ZeroClawAdapter::start()` to forward env vars and channels to the container
-- [ ] Update other Phase 1 adapters (OpenClaw, PicoClaw, NanoClaw) similarly
-- [ ] Apply the same config injection fix to `clawden run` Docker mode path
+- [x] Hoist `build_runtime_env_vars()` and `channels_for_runtime()` above the mode branch in `up.rs`
+- [x] Extend `AgentConfig` with `env_vars`, `channels`, and `tools` fields
+- [x] Pass extracted config into `LifecycleManager::register_agent()` / `start_agent()`
+- [x] Update `ZeroClawAdapter::start()` to forward env vars and channels to the container
+- [x] Update other Phase 1 adapters (OpenClaw, PicoClaw, NanoClaw) similarly
+- [x] Apply the same config injection fix to `clawden run` Docker mode path
 - [ ] Add integration test: `clawden up` in Docker mode with telegram channel configured → runtime receives `TELEGRAM_BOT_TOKEN` env var
 
 ## Test

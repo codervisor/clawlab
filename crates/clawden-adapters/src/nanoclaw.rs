@@ -1,3 +1,7 @@
+use crate::docker_runtime::{
+    container_running, get_stored_config, remove_stored_config, restart_container,
+    runtime_config_values, set_stored_config, start_container, stop_container,
+};
 use anyhow::Result;
 use async_trait::async_trait;
 use clawden_core::{
@@ -6,8 +10,14 @@ use clawden_core::{
     RuntimeMetadata, Skill, SkillManifest,
 };
 use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
 
 pub struct NanoClawAdapter;
+
+fn config_store() -> &'static Mutex<HashMap<String, RuntimeConfig>> {
+    static STORE: OnceLock<Mutex<HashMap<String, RuntimeConfig>>> = OnceLock::new();
+    STORE.get_or_init(|| Mutex::new(HashMap::new()))
+}
 
 #[async_trait]
 impl ClawAdapter for NanoClawAdapter {
@@ -34,23 +44,39 @@ impl ClawAdapter for NanoClawAdapter {
     }
 
     async fn start(&self, config: &AgentConfig) -> Result<AgentHandle> {
-        Ok(AgentHandle {
-            id: format!("nanoclaw-{}", config.name),
+        let container_id = start_container(ClawRuntime::NanoClaw, config)?;
+        let handle = AgentHandle {
+            id: container_id,
             name: config.name.clone(),
             runtime: ClawRuntime::NanoClaw,
-        })
+        };
+
+        set_stored_config(
+            config_store(),
+            &handle.id,
+            runtime_config_values("nanoclaw", config),
+        );
+
+        Ok(handle)
     }
 
-    async fn stop(&self, _handle: &AgentHandle) -> Result<()> {
+    async fn stop(&self, handle: &AgentHandle) -> Result<()> {
+        stop_container(&handle.id)?;
+        remove_stored_config(config_store(), &handle.id);
         Ok(())
     }
 
-    async fn restart(&self, _handle: &AgentHandle) -> Result<()> {
+    async fn restart(&self, handle: &AgentHandle) -> Result<()> {
+        restart_container(&handle.id)?;
         Ok(())
     }
 
-    async fn health(&self, _handle: &AgentHandle) -> Result<HealthStatus> {
-        Ok(HealthStatus::Unknown)
+    async fn health(&self, handle: &AgentHandle) -> Result<HealthStatus> {
+        if container_running(&handle.id)? {
+            Ok(HealthStatus::Healthy)
+        } else {
+            Ok(HealthStatus::Unhealthy)
+        }
     }
 
     async fn metrics(&self, _handle: &AgentHandle) -> Result<AgentMetrics> {
@@ -71,13 +97,17 @@ impl ClawAdapter for NanoClawAdapter {
         Ok(vec![])
     }
 
-    async fn get_config(&self, _handle: &AgentHandle) -> Result<RuntimeConfig> {
+    async fn get_config(&self, handle: &AgentHandle) -> Result<RuntimeConfig> {
+        if let Some(config) = get_stored_config(config_store(), &handle.id) {
+            return Ok(config);
+        }
         Ok(RuntimeConfig {
             values: serde_json::json!({ "runtime": "nanoclaw" }),
         })
     }
 
-    async fn set_config(&self, _handle: &AgentHandle, _config: &RuntimeConfig) -> Result<()> {
+    async fn set_config(&self, handle: &AgentHandle, config: &RuntimeConfig) -> Result<()> {
+        set_stored_config(config_store(), &handle.id, config.clone());
         Ok(())
     }
 

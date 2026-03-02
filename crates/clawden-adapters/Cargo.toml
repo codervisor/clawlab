@@ -17,3 +17,6 @@ async-trait.workspace = true
 clawden-core = { path = "../clawden-core" }
 serde_json.workspace = true
 tracing.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
