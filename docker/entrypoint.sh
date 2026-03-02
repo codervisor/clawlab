@@ -89,6 +89,16 @@ CLAWDEN_RUNTIMES="${HOME}/.clawden/runtimes"
 
 echo "[clawden] Starting runtime: ${RUNTIME}"
 
+# Default start subcommand per runtime (used when no args are passed)
+runtime_default_args() {
+    case "$1" in
+        zeroclaw)  echo "daemon" ;;
+        picoclaw)  echo "gateway" ;;
+        nullclaw)  echo "daemon" ;;
+        *)         echo "" ;;
+    esac
+}
+
 case "$RUNTIME" in
     zeroclaw|picoclaw|openclaw|nanoclaw)
         LAUNCHER="${CLAWDEN_RUNTIMES}/${RUNTIME}/current/${RUNTIME}"
@@ -96,6 +106,12 @@ case "$RUNTIME" in
             echo "Error: ${RUNTIME} not found at ${LAUNCHER}" >&2
             echo "Run: clawden-cli install ${RUNTIME}" >&2
             exit 1
+        fi
+        if [ $# -eq 0 ]; then
+            DEFAULT_ARGS="$(runtime_default_args "$RUNTIME")"
+            if [ -n "$DEFAULT_ARGS" ]; then
+                exec "$LAUNCHER" $DEFAULT_ARGS
+            fi
         fi
         exec "$LAUNCHER" "$@"
         ;;

@@ -2,7 +2,7 @@ use anyhow::Result;
 use clawden_config::{
     ChannelCredentialMapper, ClawDenYaml, LlmProvider, ProviderEntryYaml, ProviderRefYaml,
 };
-use clawden_core::{ExecutionMode, LifecycleManager, ProcessManager, RuntimeInstaller};
+use clawden_core::{AgentState, ExecutionMode, LifecycleManager, ProcessManager, RuntimeInstaller};
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -166,7 +166,15 @@ pub async fn exec_up(
                     );
                 }
 
-                if started_runtimes.iter().all(|runtime| !runtime_running(process_manager, runtime)) {
+                let all_stopped = match mode {
+                    ExecutionMode::Docker => {
+                        manager.list_agents().iter().all(|a| a.state != AgentState::Running)
+                    }
+                    _ => {
+                        started_runtimes.iter().all(|runtime| !runtime_running(process_manager, runtime))
+                    }
+                };
+                if all_stopped {
                     break;
                 }
             }

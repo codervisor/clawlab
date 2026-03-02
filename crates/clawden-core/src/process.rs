@@ -490,6 +490,19 @@ fn tee_reader_to_log<R: std::io::Read + Send + 'static>(reader: R, file: Arc<Mut
 }
 
 fn is_pid_running(pid: u32) -> bool {
+    // Check /proc/<pid>/stat first to detect zombie processes.
+    // Zombies still respond to kill -0 but are no longer truly running.
+    if let Ok(stat) = fs::read_to_string(format!("/proc/{pid}/stat")) {
+        // The state field is the third field: "<pid> (<comm>) <state> ..."
+        // A zombie has state 'Z'.
+        if let Some(state_start) = stat.rfind(") ") {
+            let after = &stat[state_start + 2..];
+            if after.starts_with('Z') {
+                return false;
+            }
+        }
+    }
+
     Command::new("kill")
         .args(["-0", &pid.to_string()])
         .stdout(Stdio::null())

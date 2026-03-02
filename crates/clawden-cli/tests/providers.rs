@@ -135,7 +135,7 @@ model: gpt-4o-mini
         .env("HOME", &home)
         .env("OPENAI_API_KEY", "sk-launch-test")
         .env("CLAWDEN_ENV_DUMP_FILE", &dump_path)
-        .args(["up", "--no-docker"])
+        .args(["up", "--no-docker", "--detach"])
         .status()
         .expect("up should run");
     assert!(status.success());
