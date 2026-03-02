@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 created: 2026-03-02
 priority: high
 tags:
@@ -14,12 +14,16 @@ depends_on:
 - 025-llm-provider-api-key-management
 parent: 009-orchestration-platform
 created_at: 2026-03-02T01:26:46.553133318Z
-updated_at: 2026-03-02T01:26:46.553133318Z
+updated_at: 2026-03-02T03:08:20.299395462Z
+completed_at: 2026-03-02T03:08:20.299395462Z
+transitions:
+- status: complete
+  at: 2026-03-02T03:08:20.299395462Z
 ---
 
 # Guided Onboarding & First-Run Experience
 
-> **Status**: planned · **Priority**: high · **Created**: 2026-03-02
+> **Status**: complete · **Priority**: high · **Created**: 2026-03-02
 
 ## Overview
 
@@ -191,7 +195,7 @@ Each template pre-fills the YAML with a known-good configuration and annotates w
 - [x] Add first-run detection to `up` and `run` commands
 - [x] Add quick-start templates (telegram-bot, discord-bot, api-only, multi-runtime)
 - [x] Write integration tests for wizard flow (simulated stdin)
-- [ ] Update README with getting-started walkthrough referencing `clawden init`
+- [x] Update README with getting-started walkthrough referencing `clawden init`
 
 ## Test
 
@@ -209,7 +213,7 @@ Each template pre-fills the YAML with a known-good configuration and annotates w
 
 - 013-config-management (complete) — YAML schema and validation
 - 023-cli-direct-architecture (complete) — direct mode runtime resolution
-- 025-llm-provider-api-key-management (in-progress) — provider config section
+- 025-llm-provider-api-key-management (complete) — provider config section
 
 ### Security Rules
 
