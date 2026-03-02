@@ -156,6 +156,12 @@ async fn wait_for_shutdown_or_exit(pids: &[u32]) {
     let ctrl_c = tokio::signal::ctrl_c();
     tokio::pin!(ctrl_c);
 
+    if pids.is_empty() {
+        // No local PIDs to monitor (e.g. docker mode) — just wait for Ctrl+C.
+        let _ = ctrl_c.as_mut().await;
+        return;
+    }
+
     let mut check_interval = tokio::time::interval(std::time::Duration::from_secs(2));
     // Skip the first immediate tick
     check_interval.tick().await;
