@@ -109,7 +109,7 @@ pub async fn exec_run(
         "Running {} in foreground. Press Ctrl+C to stop.",
         opts.runtime
     );
-    let stream = process_manager.stream_logs(&[opts.runtime.clone()])?;
+    let stream = process_manager.stream_logs(std::slice::from_ref(&opts.runtime))?;
     let mut tick = tokio::time::interval(Duration::from_millis(150));
     let ctrl_c = tokio::signal::ctrl_c();
     tokio::pin!(ctrl_c);
