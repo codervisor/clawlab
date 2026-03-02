@@ -98,6 +98,22 @@ clawden start [RUNTIMES...]
 
 - Re-start previously stopped runtimes using last config
 
+### Per-Runtime Start Commands
+
+> **Bug (pre-existing):** The CLI currently hardcodes `"daemon"` as the first argument for all runtimes in direct mode (`up.rs`, `run.rs`). This is only correct for ZeroClaw. Other runtimes use different entry subcommands:
+
+| Runtime | Start command (direct mode) | Notes |
+| --- | --- | --- |
+| ZeroClaw | `zeroclaw daemon` | Rust — `daemon` subcommand |
+| PicoClaw | `picoclaw gateway` | Go — `gateway` for long-running; `agent` for one-shot |
+| NanoClaw | `nanoclaw` (no subcommand) | TypeScript/Node — single process |
+| OpenClaw | `openclaw` (no subcommand) | TypeScript — direct process |
+| NullClaw | `nullclaw daemon` (unconfirmed) | Zig — has `src/daemon.zig` |
+
+The Docker entrypoint (`entrypoint.sh`) sidesteps the bug by using `exec "$LAUNCHER" "$@"` (pass-through).
+
+**Fix:** Add a `start_args` field to the runtime adapter trait / install metadata so each runtime declares its own entry subcommand. Fall back to no subcommand if unset.
+
 ### Log Streaming Architecture
 
 `ProcessManager` gains real-time log streaming via piped stdout/stderr:
@@ -153,6 +169,7 @@ On **second** Ctrl+C during shutdown: immediate SIGKILL all.
 - [ ] Add `clawden start` command
 - [ ] Add `--timeout` flag to `stop`, `down`, `restart`, `up`
 - [ ] Store project ownership (config-path hash) in PID files at start time; use for `down`/orphan scoping
+- [ ] Replace hardcoded `"daemon"` arg with per-runtime `start_args` from install metadata (fixes PicoClaw `gateway`, NanoClaw no-subcommand, etc.)
 - [ ] Audit-log all new lifecycle events: `runtime.down`, `runtime.restart`, `runtime.start`, `runtime.force_kill`
 - [ ] Update CLI help text and clap command descriptions
 
@@ -175,3 +192,5 @@ On **second** Ctrl+C during shutdown: immediate SIGKILL all.
 - [ ] All lifecycle commands (`up`, `down`, `start`, `restart`) emit audit log entries
 - [ ] Forced-kill after timeout emits `runtime.force_kill` audit entry
 - [ ] Log stream drops oldest lines under back-pressure and prints dropped-line warning
+- [ ] `clawden up` with PicoClaw in direct mode uses `gateway` (not `daemon`) as start subcommand
+- [ ] `clawden run nanoclaw` starts with no subcommand (not `daemon`)
