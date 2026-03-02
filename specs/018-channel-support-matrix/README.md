@@ -336,11 +336,11 @@ channels:
 - [x] Add NanoClaw credential mapping for Tier 1 channels (skill injection, env vars)
 - [x] Add PicoClaw credential mapping for Tier 1 channels (JSON config)
 - [x] Implement `clawden channels` and `clawden channels test` CLI commands
-- [ ] Channel health monitoring
+- [x] Channel health monitoring
 
 ### Phase 1b: Tier 2 Channels (Slack, WhatsApp)
-- [ ] Add Slack credential mapping across Phase 1 runtimes (dual token: bot + app)
-- [ ] Add WhatsApp credential mapping across Phase 1 runtimes (Baileys, Meta API, native Go, default)
+- [x] Add Slack credential mapping across Phase 1 runtimes (dual token: bot + app)
+- [x] Add WhatsApp credential mapping across Phase 1 runtimes (Baileys, Meta API, native Go, default)
 - [x] Implement channel proxy for unsupported runtime+channel combos
 
 ### Phase 1c: Tier 3 Channels (Signal, DingTalk, QQ, etc.)

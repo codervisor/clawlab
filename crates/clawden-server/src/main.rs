@@ -3,12 +3,13 @@ mod proxy;
 
 use crate::api::{
     agent_channels, agent_logs, agent_metrics_history, audit_log, binding_conflicts,
-    channel_instances, channel_matrix, channel_support_matrix, create_binding, create_team,
-    delete_binding, delete_channel_config, deploy_runtime, deploy_status, fan_out_task,
-    fleet_status, get_channel_config, health_summary, list_agents, list_bindings, list_channels,
-    list_endpoints, list_runtimes, list_swarm_tasks, list_teams, proxy_status_endpoint,
-    register_agent, register_endpoint, restart_agent, scan_endpoints, send_task, start_agent,
-    stop_agent, test_channel, update_channel_instances, upsert_channel_config, AppState,
+    channel_health, channel_instances, channel_matrix, channel_support_matrix, create_binding,
+    create_team, delete_binding, delete_channel_config, deploy_runtime, deploy_status,
+    fan_out_task, fleet_status, get_channel_config, health_summary, list_agents, list_bindings,
+    list_channels, list_endpoints, list_runtimes, list_swarm_tasks, list_teams,
+    proxy_status_endpoint, register_agent, register_endpoint, restart_agent, scan_endpoints,
+    send_task, start_agent, stop_agent, test_channel, update_channel_instances,
+    upsert_channel_config, AppState,
 };
 use axum::{routing::get, Json, Router};
 use clawden_core::{
@@ -103,6 +104,7 @@ fn build_app(shared_state: AppState) -> Router {
             axum::routing::delete(delete_binding),
         )
         .route("/channels/bindings/conflicts", get(binding_conflicts))
+        .route("/channels/health", get(channel_health))
         .with_state(shared_state)
 }
 
@@ -135,6 +137,7 @@ async fn main() {
         .unwrap_or(1_000);
 
     let monitor_manager = shared_state.manager.clone();
+    let monitor_channels = shared_state.channels.clone();
     let monitor_audit = shared_state.audit.clone();
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_millis(health_interval_ms));
@@ -145,7 +148,19 @@ async fn main() {
                 .refresh_health_with_base_backoff_ms(recovery_base_backoff_ms)
                 .await;
             let recovered = manager.recover_degraded().await;
+
+            // Refresh channel health based on current agent states
+            let agent_states: std::collections::HashMap<String, AgentState> = manager
+                .list_agents()
+                .into_iter()
+                .map(|a| (a.id, a.state))
+                .collect();
             drop(manager);
+
+            let proxy_pairs = std::collections::HashSet::new();
+            let mut channels = monitor_channels.write().await;
+            channels.refresh_channel_health(&agent_states, &proxy_pairs);
+            drop(channels);
 
             append_audit(&monitor_audit, "api", "health.tick", "fleet");
             info!(

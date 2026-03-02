@@ -1076,9 +1076,18 @@ impl ChannelCredentialMapper {
                     "appToken": ch.app_token.as_deref().unwrap_or("")
                 }
             })),
-            "whatsapp" => Ok(serde_json::json!({
-                "whatsapp": { "token": ch.token.as_deref().unwrap_or("") }
-            })),
+            // WhatsApp: Baileys driver uses a phone number; Meta Cloud API uses a bearer token.
+            "whatsapp" => {
+                if let Some(phone) = &ch.phone {
+                    Ok(serde_json::json!({
+                        "whatsapp": { "driver": "baileys", "phone": phone }
+                    }))
+                } else {
+                    Ok(serde_json::json!({
+                        "whatsapp": { "driver": "cloud-api", "token": ch.token.as_deref().unwrap_or("") }
+                    }))
+                }
+            }
             "feishu" | "lark" => Ok(serde_json::json!({
                 "feishu": { "token": ch.token.as_deref().unwrap_or("") }
             })),
@@ -1096,11 +1105,34 @@ impl ChannelCredentialMapper {
     ) -> HashMap<String, String> {
         let prefix = format!("ZEROCLAW_{}", channel_type.to_uppercase());
         let mut vars = HashMap::new();
-        if let Some(token) = &ch.token {
-            vars.insert(format!("{prefix}_BOT_TOKEN"), token.clone());
-        }
-        if let Some(phone) = &ch.phone {
-            vars.insert(format!("{prefix}_PHONE"), phone.clone());
+        match channel_type {
+            "slack" => {
+                // Slack requires both bot token (RTM/Events) and app token (Socket Mode).
+                if let Some(bt) = &ch.bot_token {
+                    vars.insert(format!("{prefix}_BOT_TOKEN"), bt.clone());
+                }
+                if let Some(at) = &ch.app_token {
+                    vars.insert(format!("{prefix}_APP_TOKEN"), at.clone());
+                }
+            }
+            "whatsapp" => {
+                // WhatsApp: Baileys uses phone number; Meta Cloud API uses bearer token.
+                if let Some(phone) = &ch.phone {
+                    vars.insert(format!("{prefix}_PHONE"), phone.clone());
+                    vars.insert(format!("{prefix}_DRIVER"), "baileys".to_string());
+                } else if let Some(token) = &ch.token {
+                    vars.insert(format!("{prefix}_TOKEN"), token.clone());
+                    vars.insert(format!("{prefix}_DRIVER"), "cloud-api".to_string());
+                }
+            }
+            _ => {
+                if let Some(token) = &ch.token {
+                    vars.insert(format!("{prefix}_BOT_TOKEN"), token.clone());
+                }
+                if let Some(phone) = &ch.phone {
+                    vars.insert(format!("{prefix}_PHONE"), phone.clone());
+                }
+            }
         }
         vars
     }
@@ -1113,14 +1145,37 @@ impl ChannelCredentialMapper {
     ) -> HashMap<String, String> {
         let prefix = format!("NANOCLAW_{}", channel_type.to_uppercase());
         let mut vars = HashMap::new();
-        if let Some(token) = &ch.token {
-            vars.insert(format!("{prefix}_TOKEN"), token.clone());
-        }
-        if let Some(bt) = &ch.bot_token {
-            vars.insert(format!("{prefix}_BOT_TOKEN"), bt.clone());
-        }
-        if let Some(at) = &ch.app_token {
-            vars.insert(format!("{prefix}_APP_TOKEN"), at.clone());
+        match channel_type {
+            "slack" => {
+                // Slack requires both bot token and app token.
+                if let Some(bt) = &ch.bot_token {
+                    vars.insert(format!("{prefix}_BOT_TOKEN"), bt.clone());
+                }
+                if let Some(at) = &ch.app_token {
+                    vars.insert(format!("{prefix}_APP_TOKEN"), at.clone());
+                }
+            }
+            "whatsapp" => {
+                // WhatsApp: Baileys uses phone number; Meta Cloud API uses bearer token.
+                if let Some(phone) = &ch.phone {
+                    vars.insert(format!("{prefix}_PHONE"), phone.clone());
+                    vars.insert(format!("{prefix}_DRIVER"), "baileys".to_string());
+                } else if let Some(token) = &ch.token {
+                    vars.insert(format!("{prefix}_TOKEN"), token.clone());
+                    vars.insert(format!("{prefix}_DRIVER"), "cloud-api".to_string());
+                }
+            }
+            _ => {
+                if let Some(token) = &ch.token {
+                    vars.insert(format!("{prefix}_TOKEN"), token.clone());
+                }
+                if let Some(bt) = &ch.bot_token {
+                    vars.insert(format!("{prefix}_BOT_TOKEN"), bt.clone());
+                }
+                if let Some(at) = &ch.app_token {
+                    vars.insert(format!("{prefix}_APP_TOKEN"), at.clone());
+                }
+            }
         }
         vars
     }
@@ -1140,6 +1195,16 @@ impl ChannelCredentialMapper {
         }
         if let Some(at) = &ch.app_token {
             cfg.insert("app_token".to_string(), Value::String(at.clone()));
+        }
+        // WhatsApp (Baileys): include phone number and driver hint.
+        if channel_type == "whatsapp" {
+            if let Some(phone) = &ch.phone {
+                cfg.insert("phone".to_string(), Value::String(phone.clone()));
+                cfg.insert("driver".to_string(), Value::String("baileys".to_string()));
+            } else if !cfg.contains_key("token") {
+                // no credentials at all — mark driver but leave empty
+                cfg.insert("driver".to_string(), Value::String("cloud-api".to_string()));
+            }
         }
         Ok(serde_json::json!({ channel_type: cfg }))
     }

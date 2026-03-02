@@ -5,13 +5,12 @@ use axum::http::StatusCode;
 use axum::Json;
 use clawden_core::{
     append_audit, AgentRecord, AgentState, AuditEvent, AuditLog, BindChannelRequest,
-    BindingConflict, ChannelConfigRequest, ChannelStore, ChannelTypeSummary, ClawRuntime,
-    DiscoveredEndpoint, DiscoveryMethod, DiscoveryService, LifecycleManager, MatrixRow,
-    RuntimeMetadata, SwarmCoordinator, SwarmMember, SwarmRole,
+    BindingConflict, ChannelConfigRequest, ChannelHealthEntry, ChannelStore, ChannelTypeSummary,
+    ClawRuntime, DiscoveredEndpoint, DiscoveryMethod, DiscoveryService, LifecycleManager,
+    MatrixRow, RuntimeMetadata, SwarmCoordinator, SwarmMember, SwarmRole,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
-
 #[derive(Clone)]
 pub struct AppState {
     pub manager: Arc<RwLock<LifecycleManager>>,
@@ -549,6 +548,12 @@ pub async fn agent_channels(
         })
         .collect();
     Json(result)
+}
+
+/// GET /channels/health — per-instance channel health report
+pub async fn channel_health(State(state): State<AppState>) -> Json<Vec<ChannelHealthEntry>> {
+    let channels = state.channels.read().await;
+    Json(channels.channel_health_report())
 }
 
 pub async fn channel_matrix(State(state): State<AppState>) -> Json<Vec<MatrixRow>> {

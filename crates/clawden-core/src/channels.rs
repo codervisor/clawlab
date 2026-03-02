@@ -4,9 +4,19 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::{
-    ChannelBinding, ChannelBindingStatus, ChannelConnectionStatus, ChannelInstanceConfig,
-    ChannelType,
+    AgentState, ChannelBinding, ChannelBindingStatus, ChannelConnectionStatus,
+    ChannelInstanceConfig, ChannelType,
 };
+
+/// Health report entry for a single channel instance.
+#[derive(Debug, Clone, Serialize)]
+pub struct ChannelHealthEntry {
+    pub instance_name: String,
+    pub channel_type: String,
+    pub agent_id: Option<String>,
+    pub status: ChannelConnectionStatus,
+    pub last_checked_unix_ms: Option<u64>,
+}
 
 #[derive(Default)]
 pub struct ChannelStore {
@@ -15,6 +25,8 @@ pub struct ChannelStore {
     next_binding_id: u64,
     assignments: HashMap<String, Vec<String>>,
     connection_status: HashMap<(String, String), ChannelConnectionStatus>,
+    /// Unix ms timestamp of the last channel health refresh.
+    last_health_check_unix_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -222,6 +234,84 @@ impl ChannelStore {
             .get(&(agent_id.to_string(), channel_name.to_string()))
             .cloned()
             .unwrap_or(ChannelConnectionStatus::Disconnected)
+    }
+
+    /// Set the connection status for a channel instance assigned to an agent.
+    pub fn set_connection_status(
+        &mut self,
+        agent_id: &str,
+        channel_name: &str,
+        status: ChannelConnectionStatus,
+    ) {
+        self.connection_status
+            .insert((agent_id.to_string(), channel_name.to_string()), status);
+    }
+
+    /// Refresh channel health based on current agent states.
+    ///
+    /// For each `(agent_id, channel_instance)` assignment:
+    /// - Agent is `Running` and channel is natively supported → `Connected`
+    /// - Agent is `Running` but channel is proxied → `Proxied`
+    /// - Agent is in any other state → `Disconnected`
+    ///
+    /// `proxy_pairs` is the set of `(agent_id, instance_name)` pairs that
+    /// should be marked `Proxied` rather than `Connected`. The caller
+    /// populates this using adapter metadata from `LifecycleManager`.
+    pub fn refresh_channel_health(
+        &mut self,
+        agent_states: &HashMap<String, AgentState>,
+        proxy_pairs: &std::collections::HashSet<(String, String)>,
+    ) {
+        self.last_health_check_unix_ms = Some(current_unix_ms());
+        for (agent_id, instance_names) in &self.assignments {
+            let running = matches!(agent_states.get(agent_id), Some(AgentState::Running));
+            for instance_name in instance_names {
+                let status = if running {
+                    if proxy_pairs.contains(&(agent_id.clone(), instance_name.clone())) {
+                        ChannelConnectionStatus::Proxied
+                    } else {
+                        ChannelConnectionStatus::Connected
+                    }
+                } else {
+                    ChannelConnectionStatus::Disconnected
+                };
+                self.connection_status
+                    .insert((agent_id.clone(), instance_name.clone()), status);
+            }
+        }
+    }
+
+    /// Return a per-instance health report across all configured channels.
+    pub fn channel_health_report(&self) -> Vec<ChannelHealthEntry> {
+        // Build a reverse lookup: instance_name → (agent_id, status)
+        let mut instance_agent: HashMap<String, (String, ChannelConnectionStatus)> = HashMap::new();
+        for ((agent_id, instance_name), status) in &self.connection_status {
+            instance_agent
+                .entry(instance_name.clone())
+                .or_insert_with(|| (agent_id.clone(), status.clone()));
+        }
+
+        let mut report: Vec<ChannelHealthEntry> = self
+            .configs
+            .values()
+            .map(|config| {
+                let (agent_id, status) = instance_agent
+                    .get(&config.instance_name)
+                    .map(|(aid, s)| (Some(aid.clone()), s.clone()))
+                    .unwrap_or((None, ChannelConnectionStatus::Disconnected));
+                ChannelHealthEntry {
+                    instance_name: config.instance_name.clone(),
+                    channel_type: config.channel_type.to_string(),
+                    agent_id,
+                    status,
+                    last_checked_unix_ms: self.last_health_check_unix_ms,
+                }
+            })
+            .collect();
+
+        // Sort for deterministic output
+        report.sort_by(|a, b| a.instance_name.cmp(&b.instance_name));
+        report
     }
 
     pub fn build_matrix(&self, agents: &[(String, String)]) -> Vec<MatrixRow> {

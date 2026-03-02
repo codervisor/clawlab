@@ -14,8 +14,8 @@ use std::collections::HashMap;
 
 pub use audit::{append_audit, AuditEvent, AuditLog};
 pub use channels::{
-    BindChannelRequest, BindingConflict, ChannelConfigRequest, ChannelStore, ChannelTypeSummary,
-    MatrixRow,
+    BindChannelRequest, BindingConflict, ChannelConfigRequest, ChannelHealthEntry, ChannelStore,
+    ChannelTypeSummary, MatrixRow,
 };
 pub use discovery::{DiscoveredEndpoint, DiscoveryMethod, DiscoveryService};
 pub use install::{InstallOutcome, InstalledRuntime, RuntimeInstaller};
