@@ -458,6 +458,61 @@ pub async fn channel_instances(
     Json(configs)
 }
 
+#[derive(Debug, Deserialize)]
+pub struct AssignChannelInstancesRequest {
+    pub agent_id: String,
+    #[serde(default)]
+    pub instance_names: Vec<String>,
+}
+
+/// PUT /channels/{channel_type}/instances
+///
+/// Assigns channel instances to an agent and pushes the translated config to
+/// the running adapter via `set_config`. If the agent is not yet running the
+/// assignment is stored and will be applied at start time.
+pub async fn update_channel_instances(
+    State(state): State<AppState>,
+    Path(_channel_type): Path<String>,
+    Json(req): Json<AssignChannelInstancesRequest>,
+) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, String)> {
+    // Store channel assignments
+    {
+        let mut channels = state.channels.write().await;
+        for instance_name in &req.instance_names {
+            channels.assign_channel(&req.agent_id, instance_name);
+        }
+    }
+
+    // Collect all configs now assigned to this agent
+    let channel_configs: Vec<clawden_core::ChannelInstanceConfig> = {
+        let channels = state.channels.read().await;
+        channels
+            .get_agent_channels(&req.agent_id)
+            .into_iter()
+            .cloned()
+            .collect()
+    };
+
+    // Push translated config to the running adapter (no-op if not yet running)
+    let manager = state.manager.read().await;
+    if let Err(e) = manager
+        .push_channel_configs(&req.agent_id, channel_configs)
+        .await
+    {
+        tracing::warn!(
+            agent_id = %req.agent_id,
+            error = %e,
+            "push_channel_configs failed; config will be applied at next start"
+        );
+    }
+
+    append_audit(&state.audit, "api", "channel.assign", &req.agent_id);
+    Ok((
+        StatusCode::OK,
+        Json(serde_json::json!({ "agent_id": req.agent_id, "assigned": req.instance_names })),
+    ))
+}
+
 pub async fn test_channel(
     State(state): State<AppState>,
     Path(channel_type): Path<String>,

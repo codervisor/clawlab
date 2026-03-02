@@ -187,7 +187,7 @@ Fleet → **Runtimes** (NEW) → **Channels** (NEW) → Tasks → Config → Aud
 - [x] Build ChannelOverview grid with status indicators
 - [x] Build ChannelConfigForm with per-channel credential fields
 - [x] Build ChannelAssignment + ChannelStatusMatrix components
-- [ ] Implement auto-config push (channel → translator → set_config)
+- [x] Implement auto-config push (channel → translator → set_config)
 - [x] Add "Channels" nav item and wire end-to-end
 - [x] Implement channel_bindings store with token uniqueness enforcement
 - [x] Add conflict detection endpoint and dashboard warnings
@@ -196,7 +196,7 @@ Fleet → **Runtimes** (NEW) → **Channels** (NEW) → Tasks → Config → Aud
 - [x] Link runtime cards to channel support badges (native vs proxied)
 - [x] Add deployment + channel events to audit log
 - [x] Toast notifications, loading skeletons, empty states for new pages
-- [ ] Dark/light theme support, keyboard shortcuts (R → Runtimes, C → Channels)
+- [x] Dark/light theme support, keyboard shortcuts (R → Runtimes, C → Channels)
 
 ## Test
 

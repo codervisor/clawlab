@@ -5,8 +5,8 @@ use std::sync::Arc;
 use serde::Serialize;
 
 use crate::{
-    AgentConfig, AgentHandle, AgentMessage, AgentResponse, AgentState, ClawAdapter, ClawRuntime,
-    HealthStatus, RuntimeMetadata,
+    AgentConfig, AgentHandle, AgentMessage, AgentResponse, AgentState, ChannelInstanceConfig,
+    ClawAdapter, ClawRuntime, HealthStatus, RuntimeConfig, RuntimeMetadata,
 };
 
 #[derive(Debug, Clone, Serialize)]
@@ -69,6 +69,36 @@ impl LifecycleManager {
         let mut agents: Vec<_> = self.agents.values().cloned().collect();
         agents.sort_by(|a, b| a.id.cmp(&b.id));
         agents
+    }
+
+    /// Push channel configs to a running agent's adapter.
+    /// Translates the channel instance configs into a `RuntimeConfig` and
+    /// calls `set_config` on the appropriate adapter. If the agent is not yet
+    /// running (no handle), the call is a no-op — config will be applied at
+    /// start time instead.
+    pub async fn push_channel_configs(
+        &self,
+        agent_id: &str,
+        channel_configs: Vec<ChannelInstanceConfig>,
+    ) -> Result<(), String> {
+        let Some(record) = self.agents.get(agent_id) else {
+            return Err(format!("agent {agent_id} not found"));
+        };
+        let runtime = record.runtime.clone();
+        let Some(handle) = self.handles.get(agent_id).cloned() else {
+            // Agent not yet running — config stored, applied at start
+            return Ok(());
+        };
+        let Some(adapter) = self.adapters.get(&runtime) else {
+            return Err(format!("no adapter registered for runtime {runtime:?}"));
+        };
+        let values =
+            serde_json::to_value(&channel_configs).unwrap_or(serde_json::Value::Array(vec![]));
+        let config = RuntimeConfig { values };
+        adapter
+            .set_config(&handle, &config)
+            .await
+            .map_err(|e| format!("set_config failed: {e}"))
     }
 
     pub fn list_runtime_metadata(&self) -> Vec<RuntimeMetadata> {

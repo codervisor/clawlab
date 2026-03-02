@@ -8,7 +8,7 @@ use crate::api::{
     fleet_status, get_channel_config, health_summary, list_agents, list_bindings, list_channels,
     list_endpoints, list_runtimes, list_swarm_tasks, list_teams, proxy_status_endpoint,
     register_agent, register_endpoint, restart_agent, scan_endpoints, send_task, start_agent,
-    stop_agent, test_channel, upsert_channel_config, AppState,
+    stop_agent, test_channel, update_channel_instances, upsert_channel_config, AppState,
 };
 use axum::{routing::get, Json, Router};
 use clawden_core::{
@@ -83,7 +83,10 @@ fn build_app(shared_state: AppState) -> Router {
                 .put(upsert_channel_config)
                 .delete(delete_channel_config),
         )
-        .route("/channels/{channel_type}/instances", get(channel_instances))
+        .route(
+            "/channels/{channel_type}/instances",
+            get(channel_instances).put(update_channel_instances),
+        )
         .route(
             "/channels/{channel_type}/test",
             axum::routing::post(test_channel),

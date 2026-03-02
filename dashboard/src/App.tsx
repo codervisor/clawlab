@@ -68,6 +68,26 @@ export function App() {
   // Initialize theme on mount
   useTheme();
 
+  // --- Keyboard shortcuts ---
+  // r → Runtimes, c → Channels (skip when focus is on an editable element)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT' ||
+        target.isContentEditable
+      )
+        return;
+      if (e.key === 'r') setView('runtimes');
+      else if (e.key === 'c') setView('channels');
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   // --- WebSocket ---
   useEffect(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
