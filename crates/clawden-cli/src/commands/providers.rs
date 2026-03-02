@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clawden_config::ClawDenYaml;
-use reqwest::blocking::Client;
+use reqwest::Client;
 use std::collections::HashMap;
 use std::io::{self, IsTerminal, Write};
 use std::time::Duration;
@@ -8,10 +8,10 @@ use std::time::Duration;
 use crate::cli::ProviderCommand;
 use crate::util::{get_provider_key_from_vault, store_provider_key_in_vault};
 
-pub fn exec_providers(command: Option<ProviderCommand>) -> Result<()> {
+pub async fn exec_providers(command: Option<ProviderCommand>) -> Result<()> {
     match command {
         None => list_providers(),
-        Some(ProviderCommand::Test { provider }) => test_providers(provider),
+        Some(ProviderCommand::Test { provider }) => test_providers(provider).await,
         Some(ProviderCommand::SetKey { provider }) => set_provider_key(&provider),
     }
 }
@@ -45,7 +45,7 @@ fn list_providers() -> Result<()> {
     Ok(())
 }
 
-fn test_providers(only: Option<String>) -> Result<()> {
+async fn test_providers(only: Option<String>) -> Result<()> {
     let yaml_path = std::env::current_dir()?.join("clawden.yaml");
     if !yaml_path.exists() {
         println!("No clawden.yaml found in current directory");
@@ -76,7 +76,7 @@ fn test_providers(only: Option<String>) -> Result<()> {
             println!("provider={name}\ttest=fail\terror=missing api_key");
             continue;
         }
-        match test_provider_endpoint(name, &base_url, &api_key) {
+        match test_provider_endpoint(name, &base_url, &api_key).await {
                 Ok(()) => println!("provider={name}\ttest=ok"),
                 Err(err) => println!("provider={name}\ttest=fail\terror={err}"),
         }
@@ -93,7 +93,7 @@ fn test_providers(only: Option<String>) -> Result<()> {
     Ok(())
 }
 
-fn test_provider_endpoint(provider: &str, base_url: &str, api_key: &str) -> Result<()> {
+async fn test_provider_endpoint(provider: &str, base_url: &str, api_key: &str) -> Result<()> {
     let endpoint = if provider == "anthropic" {
         format!("{}/v1/models", base_url.trim_end_matches('/'))
     } else {
@@ -113,7 +113,7 @@ fn test_provider_endpoint(provider: &str, base_url: &str, api_key: &str) -> Resu
         }
     }
 
-    let response = req.send()?;
+    let response = req.send().await?;
     if response.status().is_success() {
         Ok(())
     } else {

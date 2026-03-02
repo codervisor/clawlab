@@ -73,7 +73,7 @@ async fn main() -> Result<()> {
         Commands::Dashboard { port } => commands::exec_dashboard(port)?,
         Commands::Doctor => commands::exec_doctor(&installer)?,
         Commands::Channels { command } => commands::exec_channels(command, &mut manager)?,
-        Commands::Providers { command } => commands::exec_providers(command)?,
+        Commands::Providers { command } => commands::exec_providers(command).await?,
     }
 
     Ok(())

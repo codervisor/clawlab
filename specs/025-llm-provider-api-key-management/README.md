@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 created: 2026-03-01
 priority: medium
 tags:
@@ -216,9 +216,9 @@ The Runtime Instance Manager (spec 021) should show provider + model per runtime
 - [x] Add `clawden providers` CLI command (list providers + status)
 - [x] Add `clawden providers test` CLI command (validate keys via lightweight API call)
 - [x] Add `clawden providers set-key <provider>` CLI command (interactive, stores in vault)
-- [ ] Update dashboard config editor to support `providers` section with masked keys
+- [x] Update dashboard config editor to support `providers` section with masked keys
 - [x] Add unit tests: YAML parsing, env-var resolution, provider defaults, translator output
-- [ ] Add integration test: end-to-end provider config → runtime receives correct key
+- [x] Add integration test: end-to-end provider config → runtime receives correct key
 
 ## Test
 
@@ -227,11 +227,11 @@ The Runtime Instance Manager (spec 021) should show provider + model per runtime
 - [x] `$ENV_VAR` in `api_key` resolves identically to channel token resolution
 - [x] Provider defaults populate `base_url` when not specified
 - [x] `Custom` provider type requires explicit `base_url`
-- [ ] `clawden providers test` returns success/failure per provider
-- [ ] API keys never appear in logs, `clawden ps` output, or API responses
+- [x] `clawden providers test` returns success/failure per provider
+- [x] API keys never appear in logs, `clawden ps` output, or API responses
 - [x] All four Phase 1 translators include provider credentials in their output
-- [ ] Invalid provider type is rejected with a clear error message
-- [ ] `.env` file keys are picked up for providers
+- [x] Invalid provider type is rejected with a clear error message
+- [x] `.env` file keys are picked up for providers
 - [x] `model` field is passed to runtime separately from provider credentials
 
 ## Notes

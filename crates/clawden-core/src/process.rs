@@ -96,6 +96,16 @@ impl ProcessManager {
         executable: &Path,
         args: &[String],
     ) -> Result<ProcessInfo> {
+        self.start_direct_with_env(runtime, executable, args, &[])
+    }
+
+    pub fn start_direct_with_env(
+        &self,
+        runtime: &str,
+        executable: &Path,
+        args: &[String],
+        env_vars: &[(String, String)],
+    ) -> Result<ProcessInfo> {
         if !executable.exists() {
             return Err(anyhow!(
                 "runtime executable not found: {}",
@@ -128,6 +138,7 @@ impl ProcessManager {
                 .arg(audit_path)
                 .arg(runtime);
             cmd.args(&runtime_args);
+            cmd.envs(env_vars.iter().map(|(k, v)| (k.as_str(), v.as_str())));
             cmd.stdout(Stdio::null());
             cmd.stderr(Stdio::null());
             cmd
@@ -141,6 +152,7 @@ impl ProcessManager {
 
             let mut cmd = Command::new(executable);
             cmd.args(&runtime_args);
+            cmd.envs(env_vars.iter().map(|(k, v)| (k.as_str(), v.as_str())));
             cmd.stdout(Stdio::from(stdout));
             cmd.stderr(Stdio::from(stderr));
             cmd

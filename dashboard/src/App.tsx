@@ -602,10 +602,40 @@ function TaskMonitor({ agents, loading }: { agents: AgentRecord[]; loading: bool
 
 // --- Config Editor ---
 
+interface ProviderEditorEntry {
+  type?: string;
+  api_key?: string;
+  base_url?: string;
+  org_id?: string;
+}
+
+interface ConfigEditorModel {
+  providers?: Record<string, ProviderEditorEntry>;
+  [key: string]: unknown;
+}
+
+function parseConfigEditorModel(configText: string): ConfigEditorModel | null {
+  try {
+    return JSON.parse(configText) as ConfigEditorModel;
+  } catch {
+    return null;
+  }
+}
+
+function stringifyConfigEditorModel(model: ConfigEditorModel): string {
+  return JSON.stringify(model, null, 2);
+}
+
 function ConfigEditor() {
   const [configText, setConfigText] = useState<string>(
     JSON.stringify(
       {
+        providers: {
+          openai: {
+            type: 'openai',
+            api_key: '$OPENAI_API_KEY',
+          },
+        },
         agent: {
           name: 'my-agent',
           runtime: 'open-claw',
@@ -621,6 +651,60 @@ function ConfigEditor() {
   );
   const [parseError, setParseError] = useState<string | null>(null);
   const [confirmDeploy, setConfirmDeploy] = useState(false);
+  const [newProviderName, setNewProviderName] = useState('');
+
+  const parsedModel = useMemo(() => parseConfigEditorModel(configText), [configText]);
+  const providerEntries = useMemo(() => {
+    if (!parsedModel?.providers || typeof parsedModel.providers !== 'object') {
+      return [] as Array<[string, ProviderEditorEntry]>;
+    }
+    return Object.entries(parsedModel.providers);
+  }, [parsedModel]);
+
+  const updateConfigModel = (updater: (model: ConfigEditorModel) => void) => {
+    const parsed = parseConfigEditorModel(configText);
+    if (!parsed) {
+      setParseError('Invalid JSON');
+      return;
+    }
+    updater(parsed);
+    setConfigText(stringifyConfigEditorModel(parsed));
+    setParseError(null);
+  };
+
+  const updateProviderField = (
+    providerName: string,
+    field: keyof ProviderEditorEntry,
+    value: string,
+  ) => {
+    updateConfigModel((model) => {
+      if (!model.providers) {
+        model.providers = {};
+      }
+      const current = model.providers[providerName] ?? {};
+      model.providers[providerName] = {
+        ...current,
+        [field]: value,
+      };
+    });
+  };
+
+  const addProvider = () => {
+    const trimmed = newProviderName.trim();
+    if (!trimmed) {
+      toast.error('Provider name is required');
+      return;
+    }
+    updateConfigModel((model) => {
+      if (!model.providers) {
+        model.providers = {};
+      }
+      if (!model.providers[trimmed]) {
+        model.providers[trimmed] = { type: trimmed };
+      }
+    });
+    setNewProviderName('');
+  };
 
   const handleValidate = () => {
     try {
@@ -682,6 +766,66 @@ function ConfigEditor() {
       </div>
 
       <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-semibold">Providers</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!parsedModel && (
+              <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-xs text-destructive">
+                Fix JSON syntax to edit providers.
+              </div>
+            )}
+
+            {parsedModel && providerEntries.length === 0 && (
+              <div className="rounded-lg border border-muted bg-muted/30 p-3 text-xs text-muted-foreground">
+                No providers configured.
+              </div>
+            )}
+
+            {providerEntries.map(([providerName, provider]) => (
+              <div key={providerName} className="space-y-2 rounded-lg border p-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {providerName}
+                </div>
+                <input
+                  value={provider.type ?? ''}
+                  onChange={(e) => updateProviderField(providerName, 'type', e.target.value)}
+                  className="w-full rounded-md border bg-background px-2 py-1 text-sm"
+                  placeholder="type"
+                  aria-label={`${providerName} type`}
+                />
+                <input
+                  type="password"
+                  value={provider.api_key ?? ''}
+                  onChange={(e) => updateProviderField(providerName, 'api_key', e.target.value)}
+                  className="w-full rounded-md border bg-background px-2 py-1 text-sm"
+                  placeholder="api_key"
+                  aria-label={`${providerName} api key`}
+                />
+                <input
+                  value={provider.base_url ?? ''}
+                  onChange={(e) => updateProviderField(providerName, 'base_url', e.target.value)}
+                  className="w-full rounded-md border bg-background px-2 py-1 text-sm"
+                  placeholder="base_url"
+                  aria-label={`${providerName} base url`}
+                />
+              </div>
+            ))}
+
+            <div className="flex gap-2">
+              <input
+                value={newProviderName}
+                onChange={(e) => setNewProviderName(e.target.value)}
+                className="w-full rounded-md border bg-background px-2 py-1 text-sm"
+                placeholder="new provider name"
+                aria-label="New provider name"
+              />
+              <Button variant="outline" onClick={addProvider}>Add</Button>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-semibold">Actions</CardTitle>

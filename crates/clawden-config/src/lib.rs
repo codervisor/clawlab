@@ -1152,6 +1152,18 @@ mod tests {
     use crate::{AgentConfig, ChannelConfig, SecurityConfig, ToolConfig};
     use clawden_core::ClawRuntime;
     use serde_json::Map;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_dir(name: &str) -> std::path::PathBuf {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be after unix epoch")
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("clawden-config-{name}-{stamp}"));
+        fs::create_dir_all(&path).expect("temp dir should be created");
+        path
+    }
 
     fn sample_config(runtime: ClawRuntime) -> ClawDenConfig {
         ClawDenConfig {
@@ -1428,5 +1440,36 @@ runtimes:
         assert!(errors
             .iter()
             .any(|e| e.contains("references provider 'not-a-real-provider'")));
+    }
+
+    #[test]
+    fn from_file_loads_dotenv_for_provider_keys() {
+        let dir = temp_dir("dotenv-provider");
+        fs::write(dir.join(".env"), "MISTRAL_API_KEY=sk-from-dotenv\n")
+            .expect("dotenv file should be written");
+        fs::write(
+            dir.join("clawden.yaml"),
+            "runtime: zeroclaw\nprovider: mistral\nmodel: mistral-small-latest\n",
+        )
+        .expect("yaml should be written");
+
+        let mut parsed = ClawDenYaml::from_file(&dir.join("clawden.yaml"))
+            .expect("yaml should load from file");
+        parsed.resolve_env_vars().expect("env vars should resolve");
+
+        let ProviderRefYaml::Inline(provider) = parsed.provider.expect("provider should exist") else {
+            panic!("provider shorthand should resolve into inline provider")
+        };
+        assert_eq!(provider.api_key.as_deref(), Some("sk-from-dotenv"));
+    }
+
+    #[test]
+    fn invalid_provider_type_is_rejected_with_clear_error() {
+        let err = ClawDenYaml::parse_yaml(
+            "runtime: zeroclaw\nproviders:\n  openai:\n    type: open_ai\n",
+        )
+        .expect_err("invalid provider type should fail parsing");
+        assert!(err.contains("unknown variant `open_ai`"));
+        assert!(err.contains("openai"));
     }
 }
