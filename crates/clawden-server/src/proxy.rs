@@ -62,3 +62,64 @@ pub fn create_proxy_message(
 pub fn format_proxy_response(response: &AgentResponse) -> String {
     response.content.clone()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::needs_proxy;
+    use clawden_adapters::{NanoClawAdapter, OpenClawAdapter, PicoClawAdapter, ZeroClawAdapter};
+    use clawden_core::{ChannelType, ClawAdapter, ClawRuntime, RuntimeMetadata};
+    use std::collections::HashMap;
+
+    #[test]
+    fn tier3_signal_proxy_matrix_matches_support_model() {
+        let open = OpenClawAdapter.metadata();
+        let zero = ZeroClawAdapter.metadata();
+        let nano = NanoClawAdapter.metadata();
+        let pico = PicoClawAdapter.metadata();
+
+        assert!(!needs_proxy(&open, &ChannelType::Signal));
+        assert!(!needs_proxy(&zero, &ChannelType::Signal));
+        assert!(needs_proxy(&nano, &ChannelType::Signal));
+        assert!(needs_proxy(&pico, &ChannelType::Signal));
+    }
+
+    #[test]
+    fn tier3_dingtalk_proxy_matrix_matches_support_model() {
+        let open = OpenClawAdapter.metadata();
+        let zero = ZeroClawAdapter.metadata();
+        let nano = NanoClawAdapter.metadata();
+        let pico = PicoClawAdapter.metadata();
+
+        assert!(needs_proxy(&open, &ChannelType::Dingtalk));
+        assert!(needs_proxy(&zero, &ChannelType::Dingtalk));
+        assert!(needs_proxy(&nano, &ChannelType::Dingtalk));
+        assert!(!needs_proxy(&pico, &ChannelType::Dingtalk));
+    }
+
+    #[test]
+    fn tier3_qq_proxy_matrix_matches_support_model() {
+        let open = OpenClawAdapter.metadata();
+        let zero = ZeroClawAdapter.metadata();
+        let nano = NanoClawAdapter.metadata();
+        let pico = PicoClawAdapter.metadata();
+
+        assert!(needs_proxy(&open, &ChannelType::Qq));
+        assert!(needs_proxy(&zero, &ChannelType::Qq));
+        assert!(needs_proxy(&nano, &ChannelType::Qq));
+        assert!(!needs_proxy(&pico, &ChannelType::Qq));
+    }
+
+    #[test]
+    fn telegram_is_proxied_when_runtime_has_no_native_support() {
+        let metadata = RuntimeMetadata {
+            runtime: ClawRuntime::NullClaw,
+            version: "test".to_string(),
+            language: "zig".to_string(),
+            capabilities: vec![],
+            default_port: None,
+            config_format: Some("json".to_string()),
+            channel_support: HashMap::new(),
+        };
+        assert!(needs_proxy(&metadata, &ChannelType::Telegram));
+    }
+}

@@ -5,12 +5,62 @@ use axum::http::StatusCode;
 use axum::Json;
 use clawden_core::{
     append_audit, AgentRecord, AgentState, AuditEvent, AuditLog, BindChannelRequest,
-    BindingConflict, ChannelConfigRequest, ChannelHealthEntry, ChannelStore, ChannelTypeSummary,
-    ClawRuntime, DiscoveredEndpoint, DiscoveryMethod, DiscoveryService, LifecycleManager,
-    MatrixRow, RuntimeMetadata, SwarmCoordinator, SwarmMember, SwarmRole,
+    BindingConflict, ChannelConfigRequest, ChannelHealthEntry, ChannelInstanceConfig, ChannelStore,
+    ChannelTypeSummary, ClawRuntime, DiscoveredEndpoint, DiscoveryMethod, DiscoveryService,
+    LifecycleManager, MatrixRow, RuntimeMetadata, SwarmCoordinator, SwarmMember, SwarmRole,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
+
+fn is_sensitive_key(key: &str) -> bool {
+    let lower = key.to_ascii_lowercase();
+    ["token", "secret", "password", "api_key", "key"]
+        .iter()
+        .any(|needle| lower.contains(needle))
+}
+
+fn redact_value(value: &serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::Object(map) => {
+            let mut redacted = serde_json::Map::new();
+            for (k, v) in map {
+                if is_sensitive_key(k) {
+                    redacted.insert(
+                        k.clone(),
+                        serde_json::Value::String("<redacted>".to_string()),
+                    );
+                } else {
+                    redacted.insert(k.clone(), redact_value(v));
+                }
+            }
+            serde_json::Value::Object(redacted)
+        }
+        serde_json::Value::Array(arr) => {
+            serde_json::Value::Array(arr.iter().map(redact_value).collect())
+        }
+        _ => value.clone(),
+    }
+}
+
+fn redacted_channel_config(config: &ChannelInstanceConfig) -> serde_json::Value {
+    serde_json::json!({
+        "instance_name": config.instance_name,
+        "channel_type": config.channel_type.to_string(),
+        "credentials": config
+            .credentials
+            .keys()
+            .map(|k| (k.clone(), "<redacted>".to_string()))
+            .collect::<std::collections::HashMap<String, String>>(),
+        "options": redact_value(&serde_json::Value::Object(
+            config
+                .options
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
+        )),
+    })
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub manager: Arc<RwLock<LifecycleManager>>,
@@ -396,7 +446,7 @@ pub async fn get_channel_config(
         Some(ct) => channels
             .list_configs_by_type(&ct)
             .into_iter()
-            .map(|c| serde_json::to_value(c).unwrap_or_default())
+            .map(redacted_channel_config)
             .collect(),
         None => vec![],
     };
@@ -418,10 +468,7 @@ pub async fn upsert_channel_config(
         "channel.configure",
         &config.instance_name,
     );
-    Ok((
-        StatusCode::OK,
-        Json(serde_json::to_value(config).unwrap_or_default()),
-    ))
+    Ok((StatusCode::OK, Json(redacted_channel_config(&config))))
 }
 
 pub async fn delete_channel_config(
@@ -450,7 +497,7 @@ pub async fn channel_instances(
         Some(ct) => channels
             .list_configs_by_type(&ct)
             .into_iter()
-            .map(|c| serde_json::to_value(c).unwrap_or_default())
+            .map(redacted_channel_config)
             .collect(),
         None => vec![],
     };
@@ -516,18 +563,48 @@ pub async fn test_channel(
     State(state): State<AppState>,
     Path(channel_type): Path<String>,
 ) -> Json<serde_json::Value> {
-    // Stub: validate that we have configs for this type
     let channels = state.channels.read().await;
     let ct = clawden_core::ChannelType::from_str_loose(&channel_type);
-    let count = match ct {
-        Some(ct) => channels.list_configs_by_type(&ct).len(),
-        None => 0,
+    let checks = match ct {
+        Some(ct) => channels.validate_channel_type_credentials(&ct),
+        None => vec![],
     };
+    let count = checks.len();
+    let failed = checks.iter().filter(|c| !c.ok).count();
     Json(serde_json::json!({
         "channel_type": channel_type,
         "instances_tested": count,
-        "status": if count > 0 { "ok" } else { "no_instances" },
+        "status": if count == 0 { "no_instances" } else if failed == 0 { "ok" } else { "invalid_credentials" },
+        "failed": failed,
+        "checks": checks,
     }))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ChannelAuthorizeRequest {
+    pub instance_name: String,
+    pub sender_id: String,
+    #[serde(default)]
+    pub sender_role: Option<String>,
+}
+
+pub async fn authorize_channel_sender(
+    State(state): State<AppState>,
+    Json(req): Json<ChannelAuthorizeRequest>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let channels = state.channels.read().await;
+    let allowed = channels
+        .authorize_sender_for_channel(
+            &req.instance_name,
+            &req.sender_id,
+            req.sender_role.as_deref(),
+        )
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+    Ok(Json(serde_json::json!({
+        "instance_name": req.instance_name,
+        "sender_id": req.sender_id,
+        "allowed": allowed,
+    })))
 }
 
 pub async fn agent_channels(

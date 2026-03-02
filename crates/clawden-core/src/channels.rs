@@ -44,6 +44,15 @@ pub struct ChannelTypeSummary {
     pub disconnected: usize,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChannelCredentialCheck {
+    pub instance_name: String,
+    pub channel_type: String,
+    pub ok: bool,
+    #[serde(default)]
+    pub errors: Vec<String>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct ChannelConfigRequest {
     pub instance_name: String,
@@ -92,6 +101,113 @@ impl ChannelStore {
             .values()
             .filter(|c| &c.channel_type == channel_type)
             .collect()
+    }
+
+    pub fn validate_channel_type_credentials(
+        &self,
+        channel_type: &ChannelType,
+    ) -> Vec<ChannelCredentialCheck> {
+        self.list_configs_by_type(channel_type)
+            .into_iter()
+            .map(Self::validate_channel_config)
+            .collect()
+    }
+
+    pub fn validate_channel_config(config: &ChannelInstanceConfig) -> ChannelCredentialCheck {
+        let mut errors = Vec::new();
+        let get = |k: &str| {
+            config
+                .credentials
+                .get(k)
+                .map(|v| v.trim())
+                .filter(|v| !v.is_empty())
+        };
+
+        match config.channel_type {
+            ChannelType::Telegram | ChannelType::Discord | ChannelType::Feishu => {
+                if get("token").is_none() {
+                    errors.push("missing required credential: token".to_string());
+                }
+            }
+            ChannelType::Slack => {
+                if get("bot_token").is_none() {
+                    errors.push("missing required credential: bot_token".to_string());
+                }
+                if get("app_token").is_none() {
+                    errors.push("missing required credential: app_token".to_string());
+                }
+            }
+            ChannelType::Whatsapp => {
+                if get("token").is_none() && get("phone").is_none() {
+                    errors.push("missing required credential: token or phone".to_string());
+                }
+            }
+            ChannelType::Signal => {
+                if get("phone").is_none() {
+                    errors.push("missing required credential: phone".to_string());
+                }
+            }
+            ChannelType::Dingtalk => {
+                if get("app_id").is_none() {
+                    errors.push("missing required credential: app_id".to_string());
+                }
+                if get("app_secret").is_none() {
+                    errors.push("missing required credential: app_secret".to_string());
+                }
+            }
+            ChannelType::Qq => {
+                if get("uin").is_none() && get("token").is_none() {
+                    errors.push("missing required credential: uin or token".to_string());
+                }
+            }
+            _ => {
+                if get("token").is_none() {
+                    errors.push("missing required credential: token".to_string());
+                }
+            }
+        }
+
+        ChannelCredentialCheck {
+            instance_name: config.instance_name.clone(),
+            channel_type: config.channel_type.to_string(),
+            ok: errors.is_empty(),
+            errors,
+        }
+    }
+
+    /// Allowlist model:
+    /// - [] or missing: deny all
+    /// - ["*"]: allow all
+    /// - otherwise: exact match only
+    pub fn authorize_sender_for_channel(
+        &self,
+        instance_name: &str,
+        sender_id: &str,
+        sender_role: Option<&str>,
+    ) -> Result<bool, String> {
+        let config = self
+            .configs
+            .get(instance_name)
+            .ok_or_else(|| format!("channel instance '{instance_name}' not found"))?;
+
+        let users = list_option_strings(&config.options, "allowed_users");
+        let roles = list_option_strings(&config.options, "allowed_roles");
+
+        if users.is_empty() && roles.is_empty() {
+            return Ok(false);
+        }
+        if users.iter().any(|v| v == "*") || roles.iter().any(|v| v == "*") {
+            return Ok(true);
+        }
+        if users.iter().any(|v| v == sender_id) {
+            return Ok(true);
+        }
+        if let Some(role) = sender_role {
+            if roles.iter().any(|v| v == role) {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     pub fn list_channel_summaries(&self) -> Vec<ChannelTypeSummary> {
@@ -361,4 +477,76 @@ fn current_unix_ms() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .expect("system clock before UNIX_EPOCH")
         .as_millis() as u64
+}
+
+fn list_option_strings(options: &HashMap<String, serde_json::Value>, key: &str) -> Vec<String> {
+    options
+        .get(key)
+        .and_then(serde_json::Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(serde_json::Value::as_str)
+                .map(ToString::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ChannelType;
+
+    fn config(instance_name: &str, channel_type: ChannelType) -> ChannelInstanceConfig {
+        ChannelInstanceConfig {
+            instance_name: instance_name.to_string(),
+            channel_type,
+            credentials: HashMap::new(),
+            options: HashMap::new(),
+        }
+    }
+
+    #[test]
+    fn validate_slack_requires_dual_tokens() {
+        let mut cfg = config("slack-main", ChannelType::Slack);
+        cfg.credentials
+            .insert("bot_token".to_string(), "xoxb-1".to_string());
+        let check = ChannelStore::validate_channel_config(&cfg);
+        assert!(!check.ok);
+        assert!(check
+            .errors
+            .iter()
+            .any(|e| e.contains("missing required credential: app_token")));
+    }
+
+    #[test]
+    fn authorize_sender_allowlist_rules() {
+        let mut store = ChannelStore::new();
+        let mut cfg = config("tg-main", ChannelType::Telegram);
+        cfg.options.insert(
+            "allowed_users".to_string(),
+            serde_json::json!(["123", "456"]),
+        );
+        store.configs.insert(cfg.instance_name.clone(), cfg);
+
+        assert!(store
+            .authorize_sender_for_channel("tg-main", "123", None)
+            .expect("authorization should work"));
+        assert!(!store
+            .authorize_sender_for_channel("tg-main", "999", None)
+            .expect("authorization should work"));
+    }
+
+    #[test]
+    fn authorize_sender_wildcard_allows_all() {
+        let mut store = ChannelStore::new();
+        let mut cfg = config("discord-main", ChannelType::Discord);
+        cfg.options
+            .insert("allowed_roles".to_string(), serde_json::json!(["*"]));
+        store.configs.insert(cfg.instance_name.clone(), cfg);
+
+        assert!(store
+            .authorize_sender_for_channel("discord-main", "u1", Some("member"))
+            .expect("authorization should work"));
+    }
 }

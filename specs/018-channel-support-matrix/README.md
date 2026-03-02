@@ -344,31 +344,31 @@ channels:
 - [x] Implement channel proxy for unsupported runtime+channel combos
 
 ### Phase 1c: Tier 3 Channels (Signal, DingTalk, QQ, etc.)
-- [ ] Add Signal credential mapping (OpenClaw + ZeroClaw native; proxy for NanoClaw, PicoClaw)
-- [ ] Add DingTalk credential mapping (PicoClaw native; proxy for others)
-- [ ] Add QQ credential mapping (PicoClaw native; proxy for others)
-- [ ] Validate channel proxy across all Tier 3 channels
+- [x] Add Signal credential mapping (OpenClaw + ZeroClaw native; proxy for NanoClaw, PicoClaw)
+- [x] Add DingTalk credential mapping (PicoClaw native; proxy for others)
+- [x] Add QQ credential mapping (PicoClaw native; proxy for others)
+- [x] Validate channel proxy across all Tier 3 channels
 
 ### Phase 2: IronClaw, NullClaw, MicroClaw & Dashboard
-- [ ] Add IronClaw credential mapping (WASM capabilities, secret injection)
-- [ ] Add NullClaw credential mapping (JSON config)
-- [ ] Add MicroClaw credential mapping (YAML config)
-- [ ] Add channel status to dashboard (spec 021)
+- [x] Add IronClaw credential mapping (WASM capabilities, secret injection)
+- [x] Add NullClaw credential mapping (JSON config)
+- [x] Add MicroClaw credential mapping (YAML config)
+- [x] Add channel status to dashboard (spec 021)
 
 ## Test
 
 - [ ] `clawden.yaml` with telegram channel instance + ZeroClaw runtime connects and responds
-- [ ] $ENV_VAR references resolve correctly from environment and .env file
-- [ ] Same channel instance assigned to two runtimes → clear error at startup
-- [ ] Same resolved token across two instances of the same type → clear error at startup
-- [ ] Channel instance with unknown name and no `type` field → clear error at startup
-- [ ] Runtime references undefined channel instance → clear error at startup
-- [ ] Type inference works: instance name `telegram` → type `telegram` without explicit `type` field
-- [ ] Multiple telegram instances with different tokens + different runtimes → works correctly
-- [ ] Channel proxy bridges Telegram to a runtime without native support
-- [ ] `clawden channels test` validates credentials without starting runtimes
-- [ ] Credentials never appear in logs or `clawden ps` output
-- [ ] Allowlist correctly restricts who can message the agent
+- [x] $ENV_VAR references resolve correctly from environment and .env file
+- [x] Same channel instance assigned to two runtimes → clear error at startup
+- [x] Same resolved token across two instances of the same type → clear error at startup
+- [x] Channel instance with unknown name and no `type` field → clear error at startup
+- [x] Runtime references undefined channel instance → clear error at startup
+- [x] Type inference works: instance name `telegram` → type `telegram` without explicit `type` field
+- [x] Multiple telegram instances with different tokens + different runtimes → works correctly
+- [x] Channel proxy bridges Telegram to a runtime without native support
+- [x] `clawden channels test` validates credentials without starting runtimes
+- [x] Credentials never appear in logs or `clawden ps` output
+- [x] Allowlist correctly restricts who can message the agent
 
 ## Notes
 

@@ -2,11 +2,11 @@ mod api;
 mod proxy;
 
 use crate::api::{
-    agent_channels, agent_logs, agent_metrics_history, audit_log, binding_conflicts,
-    channel_health, channel_instances, channel_matrix, channel_support_matrix, create_binding,
-    create_team, delete_binding, delete_channel_config, deploy_runtime, deploy_status,
-    fan_out_task, fleet_status, get_channel_config, health_summary, list_agents, list_bindings,
-    list_channels, list_endpoints, list_runtimes, list_swarm_tasks, list_teams,
+    agent_channels, agent_logs, agent_metrics_history, audit_log, authorize_channel_sender,
+    binding_conflicts, channel_health, channel_instances, channel_matrix, channel_support_matrix,
+    create_binding, create_team, delete_binding, delete_channel_config, deploy_runtime,
+    deploy_status, fan_out_task, fleet_status, get_channel_config, health_summary, list_agents,
+    list_bindings, list_channels, list_endpoints, list_runtimes, list_swarm_tasks, list_teams,
     proxy_status_endpoint, register_agent, register_endpoint, restart_agent, scan_endpoints,
     send_task, start_agent, stop_agent, test_channel, update_channel_instances,
     upsert_channel_config, AppState,
@@ -91,6 +91,10 @@ fn build_app(shared_state: AppState) -> Router {
         .route(
             "/channels/{channel_type}/test",
             axum::routing::post(test_channel),
+        )
+        .route(
+            "/channels/authorize",
+            axum::routing::post(authorize_channel_sender),
         )
         .route("/agents/{agent_id}/channels", get(agent_channels))
         .route("/channels/matrix", get(channel_matrix))
@@ -231,7 +235,7 @@ async fn main() {
 mod tests {
     use super::*;
     use axum::body::Body;
-    use axum::http::{Request, StatusCode};
+    use axum::http::{Method, Request, StatusCode};
     use tower::util::ServiceExt;
 
     fn test_state() -> AppState {
@@ -275,5 +279,67 @@ mod tests {
                 "endpoint {endpoint} returned unexpected status"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn channel_config_responses_redact_credentials() {
+        let app = build_app(test_state());
+
+        let put_body = serde_json::json!({
+            "instance_name": "telegram",
+            "channel_type": "telegram",
+            "credentials": { "token": "secret-token" },
+            "options": {}
+        })
+        .to_string();
+
+        let put_req = Request::builder()
+            .method(Method::PUT)
+            .uri("/channels/telegram")
+            .header("content-type", "application/json")
+            .body(Body::from(put_body))
+            .expect("request should build");
+        let put_res = app
+            .clone()
+            .oneshot(put_req)
+            .await
+            .expect("request should succeed");
+        assert_eq!(put_res.status(), StatusCode::OK);
+        let put_bytes = axum::body::to_bytes(put_res.into_body(), usize::MAX)
+            .await
+            .expect("body should decode");
+        let put_json: serde_json::Value =
+            serde_json::from_slice(&put_bytes).expect("json should decode");
+        assert_eq!(
+            put_json
+                .get("credentials")
+                .and_then(|v| v.get("token"))
+                .and_then(|v| v.as_str()),
+            Some("<redacted>")
+        );
+
+        let get_req = Request::builder()
+            .uri("/channels/telegram")
+            .body(Body::empty())
+            .expect("request should build");
+        let get_res = app
+            .clone()
+            .oneshot(get_req)
+            .await
+            .expect("request should succeed");
+        assert_eq!(get_res.status(), StatusCode::OK);
+        let get_bytes = axum::body::to_bytes(get_res.into_body(), usize::MAX)
+            .await
+            .expect("body should decode");
+        let get_json: serde_json::Value =
+            serde_json::from_slice(&get_bytes).expect("json should decode");
+        assert_eq!(
+            get_json
+                .get(0)
+                .and_then(|v| v.get("credentials"))
+                .and_then(|v| v.get("token"))
+                .and_then(|v| v.as_str()),
+            Some("<redacted>")
+        );
     }
 }

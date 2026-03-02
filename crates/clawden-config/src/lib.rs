@@ -335,6 +335,33 @@ impl ClawDenYaml {
             }
         }
 
+        // Enforce token uniqueness per channel type to avoid bot conflicts.
+        // We use `token` where available and fall back to `bot_token`.
+        let mut seen_tokens: HashMap<(String, String), String> = HashMap::new();
+        for (name, ch) in &self.channels {
+            let Some(channel_type) = Self::resolve_channel_type(name, ch) else {
+                continue;
+            };
+            let token = ch
+                .token
+                .clone()
+                .or_else(|| ch.bot_token.clone())
+                .unwrap_or_default();
+            if token.is_empty() {
+                continue;
+            }
+            let key = (channel_type, token.clone());
+            if let Some(other_name) = seen_tokens.get(&key) {
+                errors.push(format!(
+                    "Channels '{}' and '{}' resolve to the same {} token. \
+                     Each bot token can only be used by one channel instance.",
+                    other_name, name, key.0
+                ));
+            } else {
+                seen_tokens.insert(key, name.clone());
+            }
+        }
+
         for (provider_name, provider) in &self.providers {
             let resolved_type = provider.resolved_type(provider_name);
             if resolved_type.is_none() {
@@ -1088,6 +1115,12 @@ impl ChannelCredentialMapper {
                     }))
                 }
             }
+            "signal" => Ok(serde_json::json!({
+                "signal": {
+                    "phone": ch.phone.as_deref().unwrap_or(""),
+                    "token": ch.token.as_deref().unwrap_or("")
+                }
+            })),
             "feishu" | "lark" => Ok(serde_json::json!({
                 "feishu": { "token": ch.token.as_deref().unwrap_or("") }
             })),
@@ -1106,6 +1139,14 @@ impl ChannelCredentialMapper {
         let prefix = format!("ZEROCLAW_{}", channel_type.to_uppercase());
         let mut vars = HashMap::new();
         match channel_type {
+            "signal" => {
+                if let Some(phone) = &ch.phone {
+                    vars.insert(format!("{prefix}_PHONE"), phone.clone());
+                }
+                if let Some(token) = &ch.token {
+                    vars.insert(format!("{prefix}_TOKEN"), token.clone());
+                }
+            }
             "slack" => {
                 // Slack requires both bot token (RTM/Events) and app token (Socket Mode).
                 if let Some(bt) = &ch.bot_token {
@@ -1206,6 +1247,98 @@ impl ChannelCredentialMapper {
                 cfg.insert("driver".to_string(), Value::String("cloud-api".to_string()));
             }
         }
+
+        if channel_type == "dingtalk" {
+            if let Some(app_id) = ch.extra.get("app_id").and_then(Value::as_str) {
+                cfg.insert("app_id".to_string(), Value::String(app_id.to_string()));
+            }
+            if let Some(app_secret) = ch.extra.get("app_secret").and_then(Value::as_str) {
+                cfg.insert(
+                    "app_secret".to_string(),
+                    Value::String(app_secret.to_string()),
+                );
+            }
+        }
+
+        if channel_type == "qq" {
+            if let Some(uin) = ch.extra.get("uin").and_then(Value::as_str) {
+                cfg.insert("uin".to_string(), Value::String(uin.to_string()));
+            }
+        }
+
+        Ok(serde_json::json!({ channel_type: cfg }))
+    }
+
+    /// Generate IronClaw WASM capability config for a channel instance.
+    /// IronClaw channels are represented as capability descriptors.
+    pub fn ironclaw_channel_config(
+        channel_type: &str,
+        ch: &ChannelInstanceYaml,
+    ) -> Result<Value, String> {
+        let mut capability = serde_json::Map::new();
+        capability.insert("type".to_string(), Value::String(channel_type.to_string()));
+
+        if let Some(token) = &ch.token {
+            capability.insert("token".to_string(), Value::String(token.clone()));
+        }
+        if let Some(bt) = &ch.bot_token {
+            capability.insert("bot_token".to_string(), Value::String(bt.clone()));
+        }
+        if let Some(at) = &ch.app_token {
+            capability.insert("app_token".to_string(), Value::String(at.clone()));
+        }
+        if let Some(phone) = &ch.phone {
+            capability.insert("phone".to_string(), Value::String(phone.clone()));
+        }
+        for (k, v) in &ch.extra {
+            capability.insert(k.clone(), v.clone());
+        }
+
+        Ok(serde_json::json!({
+            "wasm_capabilities": [capability]
+        }))
+    }
+
+    /// Generate NullClaw JSON config fragment for a channel instance.
+    pub fn nullclaw_channel_config(
+        channel_type: &str,
+        ch: &ChannelInstanceYaml,
+    ) -> Result<Value, String> {
+        let mut cfg = serde_json::Map::new();
+        if let Some(token) = &ch.token {
+            cfg.insert("token".to_string(), Value::String(token.clone()));
+        }
+        if let Some(phone) = &ch.phone {
+            cfg.insert("phone".to_string(), Value::String(phone.clone()));
+        }
+        for (k, v) in &ch.extra {
+            cfg.insert(k.clone(), v.clone());
+        }
+        Ok(serde_json::json!({ channel_type: cfg }))
+    }
+
+    /// Generate MicroClaw YAML-like map fragment for a channel instance.
+    /// We return JSON values because the config layer normalizes to `serde_json::Value`.
+    pub fn microclaw_channel_config(
+        channel_type: &str,
+        ch: &ChannelInstanceYaml,
+    ) -> Result<Value, String> {
+        let mut cfg = serde_json::Map::new();
+        if let Some(token) = &ch.token {
+            cfg.insert("token".to_string(), Value::String(token.clone()));
+        }
+        if let Some(bt) = &ch.bot_token {
+            cfg.insert("bot_token".to_string(), Value::String(bt.clone()));
+        }
+        if let Some(at) = &ch.app_token {
+            cfg.insert("app_token".to_string(), Value::String(at.clone()));
+        }
+        if let Some(phone) = &ch.phone {
+            cfg.insert("phone".to_string(), Value::String(phone.clone()));
+        }
+        for (k, v) in &ch.extra {
+            cfg.insert(k.clone(), v.clone());
+        }
         Ok(serde_json::json!({ channel_type: cfg }))
     }
 }
@@ -1213,15 +1346,32 @@ impl ChannelCredentialMapper {
 #[cfg(test)]
 mod tests {
     use super::{
-        diff_configs, ClawDenConfig, ClawDenYaml, LlmProvider, ModelConfig,
-        NanoClawConfigTranslator, OpenClawConfigTranslator, PicoClawConfigTranslator,
-        ProviderRefYaml, RuntimeConfigTranslator, SecretVault, ZeroClawConfigTranslator,
+        diff_configs, ChannelCredentialMapper, ChannelInstanceYaml, ClawDenConfig, ClawDenYaml,
+        LlmProvider, ModelConfig, NanoClawConfigTranslator, OpenClawConfigTranslator,
+        PicoClawConfigTranslator, ProviderRefYaml, RuntimeConfigTranslator, SecretVault,
+        ZeroClawConfigTranslator,
     };
     use crate::{AgentConfig, ChannelConfig, SecurityConfig, ToolConfig};
     use clawden_core::ClawRuntime;
     use serde_json::Map;
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn sample_channel() -> ChannelInstanceYaml {
+        ChannelInstanceYaml {
+            channel_type: None,
+            token: None,
+            bot_token: None,
+            app_token: None,
+            phone: None,
+            guild: None,
+            allowed_users: vec![],
+            allowed_roles: vec![],
+            allowed_channels: vec![],
+            group_mode: None,
+            extra: std::collections::HashMap::new(),
+        }
+    }
 
     fn temp_dir(name: &str) -> std::path::PathBuf {
         let stamp = SystemTime::now()
@@ -1550,5 +1700,262 @@ runtimes:
         .expect_err("invalid provider type should fail parsing");
         assert!(err.contains("unknown variant `open_ai`"));
         assert!(err.contains("openai"));
+    }
+
+    #[test]
+    fn validation_fails_when_channel_type_is_missing_and_not_inferable() {
+        let yaml = r#"
+runtimes:
+  - name: zeroclaw
+    channels: [my-chat]
+channels:
+  my-chat:
+    token: abc
+"#;
+        let parsed = ClawDenYaml::parse_yaml(yaml).expect("yaml should parse");
+        let errors = parsed.validate().expect_err("validation should fail");
+        assert!(errors
+            .iter()
+            .any(|e| e.contains("has no 'type' field") && e.contains("my-chat")));
+    }
+
+    #[test]
+    fn validation_fails_when_runtime_references_undefined_channel() {
+        let yaml = r#"
+runtimes:
+  - name: zeroclaw
+    channels: [ghost]
+channels:
+  telegram:
+    token: t1
+"#;
+        let parsed = ClawDenYaml::parse_yaml(yaml).expect("yaml should parse");
+        let errors = parsed.validate().expect_err("validation should fail");
+        assert!(errors
+            .iter()
+            .any(|e| e.contains("references channel 'ghost'")));
+    }
+
+    #[test]
+    fn validation_fails_when_same_channel_instance_assigned_to_two_runtimes() {
+        let yaml = r#"
+runtimes:
+  - name: zeroclaw
+    channels: [support-tg]
+  - name: picoclaw
+    channels: [support-tg]
+channels:
+  support-tg:
+    type: telegram
+    token: t1
+"#;
+        let parsed = ClawDenYaml::parse_yaml(yaml).expect("yaml should parse");
+        let errors = parsed.validate().expect_err("validation should fail");
+        assert!(errors.iter().any(|e| e.contains("assigned to both")));
+    }
+
+    #[test]
+    fn validation_fails_when_same_token_reused_for_same_channel_type() {
+        let yaml = r#"
+runtimes:
+  - name: zeroclaw
+    channels: [support-tg]
+  - name: picoclaw
+    channels: [creative-tg]
+channels:
+  support-tg:
+    type: telegram
+    token: same-token
+  creative-tg:
+    type: telegram
+    token: same-token
+"#;
+        let parsed = ClawDenYaml::parse_yaml(yaml).expect("yaml should parse");
+        let errors = parsed.validate().expect_err("validation should fail");
+        assert!(errors
+            .iter()
+            .any(|e| e.contains("resolve to the same telegram token")));
+    }
+
+    #[test]
+    fn channel_type_inference_works_for_known_instance_name() {
+        let ch = ChannelInstanceYaml {
+            channel_type: None,
+            token: None,
+            bot_token: None,
+            app_token: None,
+            phone: None,
+            guild: None,
+            allowed_users: vec![],
+            allowed_roles: vec![],
+            allowed_channels: vec![],
+            group_mode: None,
+            extra: std::collections::HashMap::new(),
+        };
+        assert_eq!(
+            ClawDenYaml::resolve_channel_type("telegram", &ch).as_deref(),
+            Some("telegram")
+        );
+    }
+
+    #[test]
+    fn channel_env_var_references_resolve() {
+        std::env::set_var("TELEGRAM_BOT_TOKEN", "resolved-token");
+        let yaml = r#"
+runtimes:
+  - name: zeroclaw
+    channels: [telegram]
+channels:
+  telegram:
+    token: $TELEGRAM_BOT_TOKEN
+"#;
+        let mut parsed = ClawDenYaml::parse_yaml(yaml).expect("yaml should parse");
+        parsed.resolve_env_vars().expect("env vars should resolve");
+        let token = parsed
+            .channels
+            .get("telegram")
+            .and_then(|c| c.token.as_deref());
+        assert_eq!(token, Some("resolved-token"));
+    }
+
+    #[test]
+    fn multiple_telegram_instances_with_unique_tokens_validate() {
+        let yaml = r#"
+runtimes:
+  - name: zeroclaw
+    channels: [support-tg]
+  - name: picoclaw
+    channels: [creative-tg]
+channels:
+  support-tg:
+    type: telegram
+    token: tg-a
+  creative-tg:
+    type: telegram
+    token: tg-b
+"#;
+        let parsed = ClawDenYaml::parse_yaml(yaml).expect("yaml should parse");
+        parsed.validate().expect("validation should pass");
+    }
+
+    #[test]
+    fn zeroclaw_signal_mapping_uses_phone_and_token() {
+        let mut ch = sample_channel();
+        ch.phone = Some("+123456789".to_string());
+        ch.token = Some("sig-token".to_string());
+        let vars = ChannelCredentialMapper::zeroclaw_env_vars("signal", &ch);
+        assert_eq!(
+            vars.get("ZEROCLAW_SIGNAL_PHONE").map(String::as_str),
+            Some("+123456789")
+        );
+        assert_eq!(
+            vars.get("ZEROCLAW_SIGNAL_TOKEN").map(String::as_str),
+            Some("sig-token")
+        );
+    }
+
+    #[test]
+    fn openclaw_signal_mapping_contains_signal_block() {
+        let mut ch = sample_channel();
+        ch.phone = Some("+15551234567".to_string());
+        let cfg = ChannelCredentialMapper::openclaw_channel_config("signal", &ch)
+            .expect("signal config should map");
+        assert_eq!(
+            cfg.get("signal")
+                .and_then(|v| v.get("phone"))
+                .and_then(|v| v.as_str()),
+            Some("+15551234567")
+        );
+    }
+
+    #[test]
+    fn picoclaw_dingtalk_mapping_uses_extra_fields() {
+        let mut ch = sample_channel();
+        ch.extra
+            .insert("app_id".to_string(), serde_json::json!("dt-app"));
+        ch.extra
+            .insert("app_secret".to_string(), serde_json::json!("dt-secret"));
+        let cfg = ChannelCredentialMapper::picoclaw_channel_config("dingtalk", &ch)
+            .expect("dingtalk config should map");
+        assert_eq!(
+            cfg.get("dingtalk")
+                .and_then(|v| v.get("app_id"))
+                .and_then(|v| v.as_str()),
+            Some("dt-app")
+        );
+        assert_eq!(
+            cfg.get("dingtalk")
+                .and_then(|v| v.get("app_secret"))
+                .and_then(|v| v.as_str()),
+            Some("dt-secret")
+        );
+    }
+
+    #[test]
+    fn picoclaw_qq_mapping_uses_uin() {
+        let mut ch = sample_channel();
+        ch.extra
+            .insert("uin".to_string(), serde_json::json!("10001"));
+        let cfg = ChannelCredentialMapper::picoclaw_channel_config("qq", &ch)
+            .expect("qq config should map");
+        assert_eq!(
+            cfg.get("qq")
+                .and_then(|v| v.get("uin"))
+                .and_then(|v| v.as_str()),
+            Some("10001")
+        );
+    }
+
+    #[test]
+    fn ironclaw_mapping_uses_wasm_capability_shape() {
+        let mut ch = sample_channel();
+        ch.token = Some("iron-token".to_string());
+        let cfg = ChannelCredentialMapper::ironclaw_channel_config("telegram", &ch)
+            .expect("ironclaw config should map");
+        assert_eq!(
+            cfg.get("wasm_capabilities")
+                .and_then(|v| v.as_array())
+                .and_then(|arr| arr.first())
+                .and_then(|v| v.get("type"))
+                .and_then(|v| v.as_str()),
+            Some("telegram")
+        );
+    }
+
+    #[test]
+    fn nullclaw_mapping_includes_extra_fields() {
+        let mut ch = sample_channel();
+        ch.token = Some("null-token".to_string());
+        ch.extra
+            .insert("endpoint".to_string(), serde_json::json!("https://hook"));
+        let cfg = ChannelCredentialMapper::nullclaw_channel_config("matrix", &ch)
+            .expect("nullclaw config should map");
+        assert_eq!(
+            cfg.get("matrix")
+                .and_then(|v| v.get("endpoint"))
+                .and_then(|v| v.as_str()),
+            Some("https://hook")
+        );
+    }
+
+    #[test]
+    fn microclaw_mapping_includes_phone_and_token() {
+        let mut ch = sample_channel();
+        ch.token = Some("micro-token".to_string());
+        ch.phone = Some("+18885550123".to_string());
+        let cfg = ChannelCredentialMapper::microclaw_channel_config("signal", &ch)
+            .expect("microclaw config should map");
+        assert_eq!(
+            cfg.get("signal")
+                .and_then(|v| v.get("token"))
+                .and_then(|v| v.as_str()),
+            Some("micro-token")
+        );
+        assert_eq!(
+            cfg.get("signal")
+                .and_then(|v| v.get("phone"))
+                .and_then(|v| v.as_str()),
+            Some("+18885550123")
+        );
     }
 }
