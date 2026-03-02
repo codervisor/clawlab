@@ -1,7 +1,11 @@
 use anyhow::Result;
 use clawden_core::{ExecutionMode, LifecycleManager, ProcessManager, RuntimeInstaller};
 
-use crate::util::{append_audit_file, ensure_installed, env_no_docker_enabled, parse_runtime};
+use crate::commands::InitOptions;
+use crate::util::{
+    append_audit_file, ensure_installed, env_no_docker_enabled, is_first_run_context, parse_runtime,
+    prompt_yes_no,
+};
 
 pub async fn exec_run(
     runtime: Option<String>,
@@ -13,6 +17,24 @@ pub async fn exec_run(
     process_manager: &ProcessManager,
     manager: &mut LifecycleManager,
 ) -> Result<()> {
+    if runtime.is_none() && is_first_run_context(installer)? {
+        let run_wizard = prompt_yes_no(
+            "No project config found. Run setup wizard before starting a runtime?",
+            true,
+        )?;
+        if run_wizard {
+            super::exec_init(InitOptions {
+                runtime: "zeroclaw".to_string(),
+                multi: false,
+                template: None,
+                reconfigure: false,
+                non_interactive: false,
+                yes: false,
+                force: false,
+            })?;
+        }
+    }
+
     let rt = runtime.unwrap_or_else(|| "zeroclaw".to_string());
     let tools_list = tools
         .map(|t| {

@@ -2,7 +2,11 @@ use anyhow::Result;
 use clawden_config::ClawDenYaml;
 use clawden_core::{ExecutionMode, LifecycleManager, ProcessManager, RuntimeInstaller};
 
-use crate::util::{append_audit_file, ensure_installed, env_no_docker_enabled, parse_runtime};
+use crate::commands::InitOptions;
+use crate::util::{
+    append_audit_file, ensure_installed, env_no_docker_enabled, is_first_run_context, parse_runtime,
+    prompt_yes_no,
+};
 
 pub async fn exec_up(
     runtimes: Vec<String>,
@@ -11,6 +15,27 @@ pub async fn exec_up(
     process_manager: &ProcessManager,
     manager: &mut LifecycleManager,
 ) -> Result<()> {
+    if runtimes.is_empty() && is_first_run_context(installer)? {
+        let run_wizard = prompt_yes_no(
+            "No clawden.yaml found and no installed runtimes. Run setup wizard now?",
+            true,
+        )?;
+        if run_wizard {
+            super::exec_init(InitOptions {
+                runtime: "zeroclaw".to_string(),
+                multi: false,
+                template: None,
+                reconfigure: false,
+                non_interactive: false,
+                yes: false,
+                force: false,
+            })?;
+        } else {
+            println!("Setup skipped.");
+            return Ok(());
+        }
+    }
+
     let mode = process_manager.resolve_mode(no_docker || env_no_docker_enabled());
 
     // Determine target runtimes: CLI args > clawden.yaml > installed runtimes

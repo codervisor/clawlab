@@ -19,8 +19,20 @@ async fn main() -> Result<()> {
         Commands::Init {
             runtime,
             multi,
+            template,
+            reconfigure,
+            non_interactive,
+            yes,
             force,
-        } => commands::exec_init(runtime, multi, force)?,
+        } => commands::exec_init(commands::InitOptions {
+            runtime,
+            multi,
+            template,
+            reconfigure,
+            non_interactive,
+            yes,
+            force,
+        })?,
         Commands::Install { runtime, all, list } => {
             commands::exec_install(&installer, runtime, all, list)?
         }
@@ -61,6 +73,7 @@ async fn main() -> Result<()> {
         Commands::Dashboard { port } => commands::exec_dashboard(port)?,
         Commands::Doctor => commands::exec_doctor(&installer)?,
         Commands::Channels { command } => commands::exec_channels(command, &mut manager)?,
+        Commands::Providers { command } => commands::exec_providers(command)?,
     }
 
     Ok(())

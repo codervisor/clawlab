@@ -20,6 +20,18 @@ pub enum Commands {
         /// Generate a multi-runtime template instead of single-runtime shorthand
         #[arg(long)]
         multi: bool,
+        /// Use a named quick-start template
+        #[arg(long)]
+        template: Option<String>,
+        /// Reconfigure an existing project instead of failing when clawden.yaml exists
+        #[arg(long, default_value_t = false)]
+        reconfigure: bool,
+        /// Skip interactive prompts and use defaults
+        #[arg(long, default_value_t = false)]
+        non_interactive: bool,
+        /// Assume yes for prompts (CI friendly)
+        #[arg(long, default_value_t = false)]
+        yes: bool,
         /// Overwrite existing clawden.yaml
         #[arg(long)]
         force: bool,
@@ -79,6 +91,11 @@ pub enum Commands {
         #[command(subcommand)]
         command: Option<ChannelCommand>,
     },
+    /// LLM provider management
+    Providers {
+        #[command(subcommand)]
+        command: Option<ProviderCommand>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -87,5 +104,19 @@ pub enum ChannelCommand {
     Test {
         /// Specific channel type to test
         channel_type: Option<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ProviderCommand {
+    /// Validate configured provider credentials
+    Test {
+        /// Optional provider name to test
+        provider: Option<String>,
+    },
+    /// Set a provider API key in local .env
+    SetKey {
+        /// Provider name (e.g. openai, anthropic, google)
+        provider: String,
     },
 }

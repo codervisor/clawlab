@@ -1,5 +1,5 @@
 ---
-status: planned
+status: in-progress
 created: 2026-03-02
 priority: high
 tags:
@@ -178,29 +178,29 @@ Each template pre-fills the YAML with a known-good configuration and annotates w
 
 ## Plan
 
-- [ ] Auto-detect provider env vars (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY` / `GOOGLE_API_KEY`, etc.) and surface detected keys in the wizard. For Google/Gemini, check both `GEMINI_API_KEY` (primary, per Google quickstart docs) and `GOOGLE_API_KEY` (alias, takes precedence per SDK if both set)
-- [ ] Add `dialoguer` (or similar) crate for interactive terminal prompts
-- [ ] Refactor `init` command to support interactive wizard flow
-- [ ] Add `--non-interactive` / `--yes` flag to preserve CI-friendly behavior
-- [ ] Preserve existing `--runtime`, `--multi`, and `--force` flags: `--runtime` sets the default selection in the wizard, `--multi` selects the multi-runtime template path, `--force` allows overwriting existing config
-- [ ] Add `--template <name>` flag with bundled templates
-- [ ] Add `--reconfigure` flag for additive config updates
-- [ ] Extend `doctor` command with config validation section
+- [x] Auto-detect provider env vars (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY` / `GOOGLE_API_KEY`, etc.) and surface detected keys in the wizard. For Google/Gemini, check both `GEMINI_API_KEY` (primary, per Google quickstart docs) and `GOOGLE_API_KEY` (alias, takes precedence per SDK if both set)
+- [x] Add `dialoguer` (or similar) crate for interactive terminal prompts
+- [x] Refactor `init` command to support interactive wizard flow
+- [x] Add `--non-interactive` / `--yes` flag to preserve CI-friendly behavior
+- [x] Preserve existing `--runtime`, `--multi`, and `--force` flags: `--runtime` sets the default selection in the wizard, `--multi` selects the multi-runtime template path, `--force` allows overwriting existing config
+- [x] Add `--template <name>` flag with bundled templates
+- [x] Add `--reconfigure` flag for additive config updates
+- [x] Extend `doctor` command with config validation section
 - [ ] Extend `doctor` command with credential testing (lightweight auth pings)
-- [ ] Extend `doctor` command with runtime availability checks
-- [ ] Add first-run detection to `up` and `run` commands
-- [ ] Add quick-start templates (telegram-bot, discord-bot, api-only, multi-runtime)
+- [x] Extend `doctor` command with runtime availability checks
+- [x] Add first-run detection to `up` and `run` commands
+- [x] Add quick-start templates (telegram-bot, discord-bot, api-only, multi-runtime)
 - [ ] Write integration tests for wizard flow (simulated stdin)
 - [ ] Update README with getting-started walkthrough referencing `clawden init`
 
 ## Test
 
-- [ ] `clawden init` in empty directory launches interactive wizard and produces valid `clawden.yaml` + `.env`
-- [ ] `clawden init --yes` produces config non-interactively (CI-safe)
-- [ ] `clawden init --template telegram-bot` generates correct template with placeholder env vars
+- [x] `clawden init` in empty directory launches interactive wizard and produces valid `clawden.yaml` + `.env`
+- [x] `clawden init --yes` produces config non-interactively (CI-safe)
+- [x] `clawden init --template telegram-bot` generates correct template with placeholder env vars
 - [ ] `clawden init --reconfigure` on existing project merges without data loss
-- [ ] `clawden doctor` reports config errors and credential issues with actionable messages
-- [ ] `clawden up` with no config triggers first-run prompt
+- [x] `clawden doctor` reports config errors and credential issues with actionable messages
+- [x] `clawden up` with no config triggers first-run prompt
 - [ ] Wizard masks credential input (no plaintext API keys on screen)
 
 ## Notes

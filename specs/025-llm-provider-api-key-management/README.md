@@ -209,12 +209,12 @@ The Runtime Instance Manager (spec 021) should show provider + model per runtime
 - [x] Add `provider` and `model` fields to `RuntimeEntryYaml`
 - [x] Implement provider defaults lookup (base URL, env var convention)
 - [x] Extend `resolve_env_vars()` to cover provider `api_key` and `base_url` fields
-- [ ] Support `provider: <name>` string shorthand in YAML (single-runtime sugar)
-- [ ] Support `provider: <name>` reference to `providers.<name>` entry (multi-runtime)
+- [x] Support `provider: <name>` string shorthand in YAML (single-runtime sugar)
+- [x] Support `provider: <name>` reference to `providers.<name>` entry (multi-runtime)
 - [x] Update `OpenClawConfigTranslator` to include API key in runtime output
-- [ ] Ensure all four Phase 1 translators consistently map provider credentials + model
-- [ ] Add `clawden providers` CLI command (list providers + status)
-- [ ] Add `clawden providers test` CLI command (validate keys via lightweight API call)
+- [x] Ensure all four Phase 1 translators consistently map provider credentials + model
+- [x] Add `clawden providers` CLI command (list providers + status)
+- [x] Add `clawden providers test` CLI command (validate keys via lightweight API call)
 - [ ] Add `clawden providers set-key <provider>` CLI command (interactive, stores in vault)
 - [ ] Update dashboard config editor to support `providers` section with masked keys
 - [x] Add unit tests: YAML parsing, env-var resolution, provider defaults, translator output
@@ -222,17 +222,17 @@ The Runtime Instance Manager (spec 021) should show provider + model per runtime
 
 ## Test
 
-- [ ] `provider: openai` shorthand resolves `$OPENAI_API_KEY` from environment without explicit `api_key` field
-- [ ] `providers` section with multiple entries parses correctly; each runtime references the right one
-- [ ] `$ENV_VAR` in `api_key` resolves identically to channel token resolution
-- [ ] Provider defaults populate `base_url` when not specified
-- [ ] `Custom` provider type requires explicit `base_url`
+- [x] `provider: openai` shorthand resolves `$OPENAI_API_KEY` from environment without explicit `api_key` field
+- [x] `providers` section with multiple entries parses correctly; each runtime references the right one
+- [x] `$ENV_VAR` in `api_key` resolves identically to channel token resolution
+- [x] Provider defaults populate `base_url` when not specified
+- [x] `Custom` provider type requires explicit `base_url`
 - [ ] `clawden providers test` returns success/failure per provider
 - [ ] API keys never appear in logs, `clawden ps` output, or API responses
-- [ ] All four Phase 1 translators include provider credentials in their output
+- [x] All four Phase 1 translators include provider credentials in their output
 - [ ] Invalid provider type is rejected with a clear error message
 - [ ] `.env` file keys are picked up for providers
-- [ ] `model` field is passed to runtime separately from provider credentials
+- [x] `model` field is passed to runtime separately from provider credentials
 
 ## Notes
 

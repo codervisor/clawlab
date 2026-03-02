@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clawden_core::{ClawRuntime, RuntimeInstaller};
 use std::fs::OpenOptions;
-use std::io::Write;
+use std::io::{self, IsTerminal, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -62,4 +62,28 @@ pub fn append_audit_file(action: &str, runtime: &str, outcome: &str) -> Result<(
         .open(log_path)?;
     file.write_all(line.as_bytes())?;
     Ok(())
+}
+
+pub fn is_first_run_context(installer: &RuntimeInstaller) -> Result<bool> {
+    let home = std::env::var("HOME")?;
+    let clawden_home_exists = PathBuf::from(home).join(".clawden").exists();
+    let cwd_has_yaml = std::env::current_dir()?.join("clawden.yaml").exists();
+    let has_installed_runtimes = !installer.list_installed()?.is_empty();
+    Ok(!clawden_home_exists && !cwd_has_yaml && !has_installed_runtimes)
+}
+
+pub fn prompt_yes_no(question: &str, default_yes: bool) -> Result<bool> {
+    if !io::stdin().is_terminal() {
+        return Ok(false);
+    }
+    let suffix = if default_yes { "[Y/n]" } else { "[y/N]" };
+    print!("{question} {suffix} ");
+    io::stdout().flush()?;
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+    let normalized = input.trim().to_ascii_lowercase();
+    if normalized.is_empty() {
+        return Ok(default_yes);
+    }
+    Ok(matches!(normalized.as_str(), "y" | "yes"))
 }

@@ -201,11 +201,23 @@ impl LlmProvider {
         match self {
             Self::OpenAi => Some("OPENAI_API_KEY"),
             Self::Anthropic => Some("ANTHROPIC_API_KEY"),
-            Self::Google => Some("GOOGLE_API_KEY"),
+            Self::Google => Some("GEMINI_API_KEY"),
             Self::Mistral => Some("MISTRAL_API_KEY"),
             Self::Groq => Some("GROQ_API_KEY"),
             Self::OpenRouter => Some("OPENROUTER_API_KEY"),
             Self::Ollama | Self::Custom(_) => None,
+        }
+    }
+
+    fn resolve_api_key_from_env(&self) -> Option<String> {
+        match self {
+            // Match SDK behavior: GOOGLE_API_KEY takes precedence over GEMINI_API_KEY.
+            Self::Google => std::env::var("GOOGLE_API_KEY")
+                .ok()
+                .or_else(|| std::env::var("GEMINI_API_KEY").ok()),
+            _ => self
+                .default_api_key_env()
+                .and_then(|env| std::env::var(env).ok()),
         }
     }
 }
@@ -388,32 +400,57 @@ impl ClawDenYaml {
 
             if let Some(provider_type) = provider.resolved_type(name) {
                 if provider.api_key.is_none() {
-                    if let Some(env_var) = provider_type.default_api_key_env() {
-                        if let Ok(api_key) = std::env::var(env_var) {
-                            provider.api_key = Some(api_key);
-                        }
-                    }
+                    provider.api_key = provider_type.resolve_api_key_from_env();
                 }
                 if provider.base_url.is_none() {
                     provider.base_url = provider_type.default_base_url().map(str::to_string);
                 }
             }
         }
-        if let Some(ProviderRefYaml::Inline(provider)) = &mut self.provider {
+        if let Some(provider_ref) = &mut self.provider {
+            let provider_map = self.providers.clone();
+            let mut resolved_provider = match provider_ref {
+                ProviderRefYaml::Inline(provider) => provider.clone(),
+                ProviderRefYaml::Name(name) => provider_map
+                    .get(name)
+                    .cloned()
+                    .unwrap_or(ProviderEntryYaml {
+                        provider_type: LlmProvider::from_name(name),
+                        api_key: None,
+                        base_url: None,
+                        org_id: None,
+                        extra: HashMap::new(),
+                    }),
+            };
+
             resolve_field(
-                &mut provider.api_key,
+                &mut resolved_provider.api_key,
                 "Provider",
                 "provider",
                 "api_key",
                 &mut errors,
             );
             resolve_field(
-                &mut provider.base_url,
+                &mut resolved_provider.base_url,
                 "Provider",
                 "provider",
                 "base_url",
                 &mut errors,
             );
+
+            let provider_name = match provider_ref {
+                ProviderRefYaml::Name(name) => name.as_str(),
+                ProviderRefYaml::Inline(_) => "provider",
+            };
+            if let Some(provider_type) = resolved_provider.resolved_type(provider_name) {
+                if resolved_provider.api_key.is_none() {
+                    resolved_provider.api_key = provider_type.resolve_api_key_from_env();
+                }
+                if resolved_provider.base_url.is_none() {
+                    resolved_provider.base_url = provider_type.default_base_url().map(str::to_string);
+                }
+            }
+            *provider_ref = ProviderRefYaml::Inline(resolved_provider);
         }
         if errors.is_empty() {
             Ok(())
@@ -542,6 +579,7 @@ pub trait RuntimeConfigTranslator {
 pub struct OpenClawConfigTranslator;
 pub struct ZeroClawConfigTranslator;
 pub struct PicoClawConfigTranslator;
+pub struct NanoClawConfigTranslator;
 
 impl RuntimeConfigTranslator for OpenClawConfigTranslator {
     fn runtime(&self) -> ClawRuntime {
@@ -684,6 +722,56 @@ impl RuntimeConfigTranslator for PicoClawConfigTranslator {
         let mut config =
             base_config_with_runtime(name, ClawRuntime::PicoClaw, provider, model, runtime_config);
         config.agent.model.api_key_ref = llm
+            .get("apiKeyRef")
+            .and_then(Value::as_str)
+            .map(ToString::to_string);
+        Ok(config)
+    }
+}
+
+impl RuntimeConfigTranslator for NanoClawConfigTranslator {
+    fn runtime(&self) -> ClawRuntime {
+        ClawRuntime::NanoClaw
+    }
+
+    fn to_runtime_config(&self, canonical: &ClawDenConfig) -> Result<Value, String> {
+        canonical.validate()?;
+        Ok(serde_json::json!({
+            "runtime": "nanoclaw",
+            "agent": {
+                "name": canonical.agent.name,
+                "provider": canonical.agent.model.provider,
+                "model": canonical.agent.model.name,
+                "apiKeyRef": canonical.agent.model.api_key_ref,
+            },
+            "tools": canonical.agent.tools,
+            "channels": canonical.agent.channels,
+            "security": canonical.agent.security,
+            "extras": canonical.agent.extras,
+        }))
+    }
+
+    fn from_runtime_config(&self, runtime_config: &Value) -> Result<ClawDenConfig, String> {
+        let agent_obj = runtime_config
+            .get("agent")
+            .and_then(Value::as_object)
+            .ok_or_else(|| "missing nanoclaw agent object".to_string())?;
+        let name = agent_obj
+            .get("name")
+            .and_then(Value::as_str)
+            .ok_or_else(|| "missing nanoclaw agent.name".to_string())?;
+        let provider = agent_obj
+            .get("provider")
+            .and_then(Value::as_str)
+            .ok_or_else(|| "missing nanoclaw agent.provider".to_string())?;
+        let model = agent_obj
+            .get("model")
+            .and_then(Value::as_str)
+            .ok_or_else(|| "missing nanoclaw agent.model".to_string())?;
+
+        let mut config =
+            base_config_with_runtime(name, ClawRuntime::NanoClaw, provider, model, runtime_config);
+        config.agent.model.api_key_ref = agent_obj
             .get("apiKeyRef")
             .and_then(Value::as_str)
             .map(ToString::to_string);
@@ -1007,8 +1095,8 @@ impl ChannelCredentialMapper {
 mod tests {
     use super::{
         diff_configs, ClawDenConfig, ClawDenYaml, LlmProvider, ModelConfig,
-        OpenClawConfigTranslator, PicoClawConfigTranslator, RuntimeConfigTranslator, SecretVault,
-        ZeroClawConfigTranslator,
+        NanoClawConfigTranslator, OpenClawConfigTranslator, PicoClawConfigTranslator,
+        ProviderRefYaml, RuntimeConfigTranslator, SecretVault, ZeroClawConfigTranslator,
     };
     use crate::{AgentConfig, ChannelConfig, SecurityConfig, ToolConfig};
     use clawden_core::ClawRuntime;
@@ -1094,6 +1182,23 @@ mod tests {
             decoded.agent.model.api_key_ref.as_deref(),
             Some("secret/openai")
         );
+    }
+
+    #[test]
+    fn nanoclaw_roundtrip_preserves_core_fields() {
+        let translator = NanoClawConfigTranslator;
+        let canonical = sample_config(ClawRuntime::NanoClaw);
+        let native = translator
+            .to_runtime_config(&canonical)
+            .expect("nanoclaw to native should succeed");
+        let decoded = translator
+            .from_runtime_config(&native)
+            .expect("nanoclaw from native should succeed");
+
+        assert_eq!(decoded.agent.runtime, ClawRuntime::NanoClaw);
+        assert_eq!(decoded.agent.name, "alpha");
+        assert_eq!(decoded.agent.model.provider, "openai");
+        assert_eq!(decoded.agent.model.name, "gpt-5-mini");
     }
 
     #[test]
@@ -1186,6 +1291,40 @@ providers:
             provider.base_url.as_deref(),
             Some("https://api.openai.com/v1")
         );
+    }
+
+    #[test]
+    fn single_runtime_provider_shorthand_resolves_defaults() {
+        std::env::set_var("OPENAI_API_KEY", "sk-shorthand");
+        let yaml = r#"
+runtime: zeroclaw
+provider: openai
+model: gpt-4o-mini
+"#;
+        let mut parsed = ClawDenYaml::parse_yaml(yaml).expect("yaml should parse");
+        parsed.resolve_env_vars().expect("env vars should resolve");
+
+        let ProviderRefYaml::Inline(provider) = parsed.provider.expect("provider should exist") else {
+            panic!("provider shorthand should be normalized to inline provider");
+        };
+        assert_eq!(provider.api_key.as_deref(), Some("sk-shorthand"));
+        assert_eq!(provider.base_url.as_deref(), Some("https://api.openai.com/v1"));
+    }
+
+    #[test]
+    fn google_provider_prefers_google_api_key_over_gemini() {
+        std::env::set_var("GOOGLE_API_KEY", "google-key");
+        std::env::set_var("GEMINI_API_KEY", "gemini-key");
+        let yaml = r#"
+runtime: zeroclaw
+providers:
+  google: {}
+"#;
+        let mut parsed = ClawDenYaml::parse_yaml(yaml).expect("yaml should parse");
+        parsed.resolve_env_vars().expect("env vars should resolve");
+
+        let provider = parsed.providers.get("google").expect("provider should exist");
+        assert_eq!(provider.api_key.as_deref(), Some("google-key"));
     }
 
     #[test]

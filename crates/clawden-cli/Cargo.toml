@@ -10,4 +10,5 @@ clap.workspace = true
 clawden-adapters = {path = "../clawden-adapters"}
 clawden-config = {path = "../clawden-config"}
 clawden-core = {path = "../clawden-core"}
+reqwest.workspace = true
 tokio.workspace = true
