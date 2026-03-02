@@ -125,8 +125,8 @@ pub async fn exec_run(
                 break;
             }
             _ = tick.tick() => {
-                while let Ok(line) = stream.receiver.try_recv() {
-                    println!("{}", render_log_line(&line.runtime, &line.text, true, false));
+                for line in stream.drain() {
+                    println!("{}", render_log_line(&line.runtime, &line.text, true, None));
                 }
 
                 let status = process_manager.list_statuses()?.into_iter().find(|s| s.runtime == opts.runtime);

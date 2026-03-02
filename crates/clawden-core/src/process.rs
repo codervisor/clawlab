@@ -1,11 +1,11 @@
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -52,7 +52,42 @@ pub struct LogLine {
 }
 
 pub struct LogStream {
-    pub receiver: mpsc::Receiver<LogLine>,
+    inner: Arc<Mutex<LogStreamInner>>,
+}
+
+struct LogStreamInner {
+    queue: VecDeque<LogLine>,
+    dropped: HashMap<String, usize>,
+}
+
+const LOG_STREAM_CAPACITY: usize = 4096;
+
+impl LogStream {
+    pub fn drain(&self) -> Vec<LogLine> {
+        let mut inner = match self.inner.lock() {
+            Ok(guard) => guard,
+            Err(_) => return Vec::new(),
+        };
+
+        let mut out = Vec::new();
+        while let Some(line) = inner.queue.pop_front() {
+            out.push(line);
+        }
+
+        if inner.queue.is_empty() && !inner.dropped.is_empty() {
+            let mut dropped: Vec<_> = inner.dropped.drain().collect();
+            dropped.sort_by(|a, b| a.0.cmp(&b.0));
+            for (runtime, count) in dropped {
+                out.push(LogLine {
+                    runtime,
+                    timestamp_ms: now_ms(),
+                    text: format!("WARNING: {count} log lines dropped (slow consumer)"),
+                });
+            }
+        }
+
+        out
+    }
 }
 
 pub struct ProcessManager {
@@ -323,7 +358,12 @@ impl ProcessManager {
             watched.push((runtime.clone(), self.log_dir.join(format!("{runtime}.log"))));
         }
 
-        let (sender, receiver) = mpsc::channel();
+        let inner = Arc::new(Mutex::new(LogStreamInner {
+            queue: VecDeque::with_capacity(LOG_STREAM_CAPACITY),
+            dropped: HashMap::new(),
+        }));
+
+        let stream_inner = Arc::clone(&inner);
         thread::spawn(move || {
             let mut offsets: HashMap<String, usize> = HashMap::new();
             loop {
@@ -343,16 +383,23 @@ impl ProcessManager {
 
                     let chunk = &content[*offset..];
                     for line in chunk.lines() {
-                        if sender
-                            .send(LogLine {
-                                runtime: runtime.clone(),
-                                timestamp_ms: now_ms(),
-                                text: line.to_string(),
-                            })
-                            .is_err()
-                        {
+                        let Ok(mut state) = stream_inner.lock() else {
                             return;
+                        };
+
+                        while state.queue.len() >= LOG_STREAM_CAPACITY {
+                            if let Some(dropped_line) = state.queue.pop_front() {
+                                *state.dropped.entry(dropped_line.runtime).or_insert(0) += 1;
+                            } else {
+                                break;
+                            }
                         }
+
+                        state.queue.push_back(LogLine {
+                            runtime: runtime.clone(),
+                            timestamp_ms: now_ms(),
+                            text: line.to_string(),
+                        });
                         any_sent = true;
                     }
                     *offset = content.len();
@@ -364,7 +411,7 @@ impl ProcessManager {
             }
         });
 
-        Ok(LogStream { receiver })
+        Ok(LogStream { inner })
     }
 
     fn finish_start(

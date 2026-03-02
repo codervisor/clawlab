@@ -29,7 +29,8 @@ pub async fn exec_logs(
     for runtime in &selected {
         let logs = process_manager.tail_logs(runtime, tail)?;
         for line in logs.lines() {
-            println!("{}", render_log_line(runtime, line, true, timestamps));
+            let ts = if timestamps { Some(now_ms()) } else { None };
+            println!("{}", render_log_line(runtime, line, true, ts));
         }
     }
 
@@ -47,12 +48,20 @@ pub async fn exec_logs(
         tokio::select! {
             _ = &mut ctrl_c => break,
             _ = tick.tick() => {
-                while let Ok(line) = stream.receiver.try_recv() {
-                    println!("{}", render_log_line(&line.runtime, &line.text, true, timestamps));
+                for line in stream.drain() {
+                    let ts = if timestamps { Some(line.timestamp_ms) } else { None };
+                    println!("{}", render_log_line(&line.runtime, &line.text, true, ts));
                 }
             }
         }
     }
 
     Ok(())
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("system time before unix epoch")
+        .as_millis() as u64
 }

@@ -15,7 +15,6 @@ transitions:
 - status: in-progress
   at: 2026-03-02T07:39:53.249540900Z
 ---
-
 # Docker Compose UX — CLI Command Overhaul
 
 ## Overview
@@ -160,21 +159,21 @@ On **second** Ctrl+C during shutdown: immediate SIGKILL all.
 
 ## Plan
 
-- [ ] Add `LogStream`/`LogLine` types and `stream_logs()` to `ProcessManager`
-- [ ] Refactor process spawning to capture stdout/stderr via pipe (tee to log file + stream)
-- [ ] Implement color-coded log multiplexer in `clawden-cli`
-- [ ] Rewrite `clawden up` — foreground streaming default, add `-d`/`--detach`
-- [ ] Implement double-Ctrl+C shutdown (graceful then forced)
-- [ ] Add `clawden down` command with PID cleanup and `--remove-orphans` (project-scoped via config-path hash)
-- [ ] Rewrite `clawden run` — foreground streaming default, add `--detach`
-- [ ] Enhance `clawden logs` — add `-f`/`--follow`, multi-runtime mux, `--timestamps`
-- [ ] Add `clawden restart` command
-- [ ] Add `clawden start` command
-- [ ] Add `--timeout` flag to `stop`, `down`, `restart`, `up`
-- [ ] Store project ownership (config-path hash) in PID files at start time; use for `down`/orphan scoping
-- [ ] Replace hardcoded `"daemon"` arg with per-runtime `start_args` from install metadata (fixes PicoClaw `gateway`, NanoClaw no-subcommand, etc.)
-- [ ] Audit-log all new lifecycle events: `runtime.down`, `runtime.restart`, `runtime.start`, `runtime.force_kill`
-- [ ] Update CLI help text and clap command descriptions
+- [x] Add `LogStream`/`LogLine` types and `stream_logs()` to `ProcessManager`
+- [x] Refactor process spawning to capture stdout/stderr via pipe (tee to log file + stream)
+- [x] Implement color-coded log multiplexer in `clawden-cli`
+- [x] Rewrite `clawden up` — foreground streaming default, add `-d`/`--detach`
+- [x] Implement double-Ctrl+C shutdown (graceful then forced)
+- [x] Add `clawden down` command with PID cleanup and `--remove-orphans` (project-scoped via config-path hash)
+- [x] Rewrite `clawden run` — foreground streaming default, add `--detach`
+- [x] Enhance `clawden logs` — add `-f`/`--follow`, multi-runtime mux, `--timestamps`
+- [x] Add `clawden restart` command
+- [x] Add `clawden start` command
+- [x] Add `--timeout` flag to `stop`, `down`, `restart`, `up`
+- [x] Store project ownership (config-path hash) in PID files at start time; use for `down`/orphan scoping
+- [x] Replace hardcoded `"daemon"` arg with per-runtime `start_args` from install metadata (fixes PicoClaw `gateway`, NanoClaw no-subcommand, etc.)
+- [x] Audit-log all new lifecycle events: `runtime.down`, `runtime.restart`, `runtime.start`, `runtime.force_kill`
+- [x] Update CLI help text and clap command descriptions
 
 ## Test
 
@@ -189,11 +188,11 @@ On **second** Ctrl+C during shutdown: immediate SIGKILL all.
 - [ ] `clawden logs -f zeroclaw nanoclaw` multiplexes with color prefixes
 - [ ] `clawden restart` stops then re-starts specified runtimes
 - [ ] Log lines are color-coded per runtime when multiple are active
-- [ ] `--timeout` is respected during shutdown
+- [x] `--timeout` is respected during shutdown
 - [ ] `clawden down --remove-orphans` removes runtimes not in clawden.yaml but owned by this project
 - [ ] `clawden down --remove-orphans` does NOT stop runtimes owned by other projects
-- [ ] All lifecycle commands (`up`, `down`, `start`, `restart`) emit audit log entries
-- [ ] Forced-kill after timeout emits `runtime.force_kill` audit entry
-- [ ] Log stream drops oldest lines under back-pressure and prints dropped-line warning
-- [ ] `clawden up` with PicoClaw in direct mode uses `gateway` (not `daemon`) as start subcommand
-- [ ] `clawden run nanoclaw` starts with no subcommand (not `daemon`)
+- [x] All lifecycle commands (`up`, `down`, `start`, `restart`) emit audit log entries
+- [x] Forced-kill after timeout emits `runtime.force_kill` audit entry
+- [x] Log stream drops oldest lines under back-pressure and prints dropped-line warning
+- [x] `clawden up` with PicoClaw in direct mode uses `gateway` (not `daemon`) as start subcommand
+- [x] `clawden run nanoclaw` starts with no subcommand (not `daemon`)

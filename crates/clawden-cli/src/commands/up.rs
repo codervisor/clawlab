@@ -159,8 +159,11 @@ pub async fn exec_up(
                 break;
             }
             _ = tick.tick() => {
-                while let Ok(line) = stream.receiver.try_recv() {
-                    println!("{}", render_log_line(&line.runtime, &line.text, !opts.no_log_prefix, false));
+                for line in stream.drain() {
+                    println!(
+                        "{}",
+                        render_log_line(&line.runtime, &line.text, !opts.no_log_prefix, None)
+                    );
                 }
 
                 if started_runtimes.iter().all(|runtime| !runtime_running(process_manager, runtime)) {
@@ -215,11 +218,11 @@ pub(crate) fn render_log_line(
     runtime: &str,
     text: &str,
     use_prefix: bool,
-    timestamps: bool,
+    timestamp_ms: Option<u64>,
 ) -> String {
     let mut body = String::new();
-    if timestamps {
-        body.push_str(&format!("[{}] ", now_timestamp_secs()));
+    if let Some(ts) = timestamp_ms {
+        body.push_str(&format!("[{}] ", ts / 1000));
     }
 
     if use_prefix {
@@ -240,13 +243,6 @@ fn color_prefix(runtime: &str) -> String {
     }
     let color = COLORS[hash % COLORS.len()];
     format!("\x1b[{color}m{:<10} |\x1b[0m ", runtime)
-}
-
-fn now_timestamp_secs() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("system time before unix epoch")
-        .as_secs()
 }
 
 pub(crate) fn load_config() -> Result<Option<ClawDenYaml>> {
