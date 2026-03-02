@@ -126,8 +126,8 @@ Apply the same fix to `clawden run` Docker mode — it has the same gap.
 ## Test
 
 - [x] `clawden up` in Docker mode with `channels.telegram.token` in `clawden.yaml` → runtime starts with Telegram channel active (not "No real-time channels configured")
-- [ ] `clawden up` in Docker mode with `provider` and `model` in `clawden.yaml` → runtime receives provider API key and model env vars
+- [x] `clawden up` in Docker mode with `provider` and `model` in `clawden.yaml` → runtime receives provider API key and model env vars
 - [x] `clawden up` in Docker mode with `tools: [git, http]` → container's `TOOLS` env var is set to `git,http`
 - [x] `clawden run zeroclaw` in Docker mode passes channel and provider config to the container
-- [ ] Direct mode behavior is unchanged (no regression)
-- [ ] Missing env var references (e.g. `$UNSET_VAR`) produce a clear error at startup, not a silent empty value
+- [x] Direct mode behavior is unchanged (no regression)
+- [x] Missing env var references (e.g. `$UNSET_VAR`) produce a clear error at startup, not a silent empty value

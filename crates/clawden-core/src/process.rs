@@ -639,6 +639,8 @@ mod tests {
     use super::{ExecutionMode, ProcessManager};
     use std::fs;
     use std::io::Write;
+    use std::os::unix::fs::PermissionsExt;
+    use std::path::Path;
     use std::sync::{Mutex, OnceLock};
     use std::thread;
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -700,5 +702,54 @@ mod tests {
             std::env::remove_var("HOME");
         }
         let _ = fs::remove_dir_all(tmp_home);
+    }
+
+    #[test]
+    fn start_direct_truncates_previous_log_content() {
+        let _guard = env_lock().lock().expect("env lock poisoned");
+        let original_home = std::env::var("HOME").ok();
+
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time should be after UNIX_EPOCH")
+            .as_nanos();
+        let tmp_home = std::env::temp_dir().join(format!("clawden-process-test-{unique}"));
+        fs::create_dir_all(&tmp_home).expect("failed to create temporary HOME dir");
+        std::env::set_var("HOME", &tmp_home);
+
+        let manager = ProcessManager::new(ExecutionMode::Direct).expect("process manager init");
+        let runtime = "zeroclaw";
+        let log_path = manager.log_dir().join("zeroclaw.log");
+        fs::write(&log_path, "stale line\n").expect("seed stale content");
+
+        let script = tmp_home.join("echo-runtime.sh");
+        write_executable(&script, "#!/usr/bin/env sh\necho fresh line\nexit 0\n");
+
+        let _info = manager
+            .start_direct_with_env(runtime, &script, &[], &[])
+            .expect("runtime should start");
+
+        thread::sleep(Duration::from_millis(250));
+        let content = fs::read_to_string(&log_path).expect("log file should be readable");
+        assert!(content.contains("fresh line"));
+        assert!(!content.contains("stale line"));
+
+        let _ = manager.stop_with_timeout(runtime, 1);
+
+        if let Some(home) = original_home {
+            std::env::set_var("HOME", home);
+        } else {
+            std::env::remove_var("HOME");
+        }
+        let _ = fs::remove_dir_all(tmp_home);
+    }
+
+    fn write_executable(path: &Path, body: &str) {
+        fs::write(path, body).expect("script should be written");
+        let mut perms = fs::metadata(path)
+            .expect("metadata should be available")
+            .permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(path, perms).expect("script should be executable");
     }
 }

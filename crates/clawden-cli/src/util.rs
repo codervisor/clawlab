@@ -58,12 +58,7 @@ pub fn ensure_installed_runtime(
             }
         }
 
-        let start_args = installer
-            .list_installed()?
-            .into_iter()
-            .find(|row| row.runtime == runtime)
-            .map(|row| row.start_args)
-            .unwrap_or_else(|| runtime_start_args(runtime));
+        let start_args = resolve_start_args(runtime, &installer.list_installed()?);
         return Ok(InstalledRuntime {
             runtime: runtime.to_string(),
             version: "current".to_string(),
@@ -152,6 +147,14 @@ fn provider_secret_name(provider: &str) -> String {
     format!("provider/{}", provider.to_ascii_lowercase())
 }
 
+fn resolve_start_args(runtime: &str, installed: &[InstalledRuntime]) -> Vec<String> {
+    installed
+        .iter()
+        .find(|row| row.runtime == runtime)
+        .map(|row| row.start_args.clone())
+        .unwrap_or_else(|| runtime_start_args(runtime))
+}
+
 fn vault_key() -> Vec<u8> {
     std::env::var("CLAWDEN_VAULT_KEY")
         .unwrap_or_else(|_| "clawden-local-vault-key".to_string())
@@ -197,4 +200,30 @@ fn save_vault(vault: &SecretVault, path: &PathBuf) -> Result<()> {
     }
     std::fs::write(path, format!("{}\n", lines.join("\n")))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_start_args;
+    use clawden_core::InstalledRuntime;
+    use std::path::PathBuf;
+
+    #[test]
+    fn resolve_start_args_uses_fallback_when_runtime_missing() {
+        let args = resolve_start_args("zeroclaw", &[]);
+        assert_eq!(args, vec!["daemon".to_string()]);
+    }
+
+    #[test]
+    fn resolve_start_args_prefers_installed_entry_when_present() {
+        let installed = vec![InstalledRuntime {
+            runtime: "zeroclaw".to_string(),
+            version: "0.2.1".to_string(),
+            executable: PathBuf::from("/tmp/zeroclaw"),
+            start_args: vec!["custom".to_string()],
+        }];
+
+        let args = resolve_start_args("zeroclaw", &installed);
+        assert_eq!(args, vec!["custom".to_string()]);
+    }
 }

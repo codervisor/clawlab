@@ -108,6 +108,8 @@ channels:
     assert!(log.contains("RUNTIME=zeroclaw"));
     assert!(log.contains("TOOLS=git,http"));
     assert!(log.contains("OPENAI_API_KEY=sk-up-test"));
+    assert!(log.contains("CLAWDEN_LLM_MODEL=gpt-4o-mini"));
+    assert!(log.contains("ZEROCLAW_LLM_MODEL=gpt-4o-mini"));
     assert!(log.contains("--channels=telegram"));
 }
 
@@ -161,5 +163,48 @@ channels:
     assert!(log.contains("RUNTIME=zeroclaw"));
     assert!(log.contains("TOOLS=git,http"));
     assert!(log.contains("OPENAI_API_KEY=sk-run-test"));
+    assert!(log.contains("CLAWDEN_LLM_MODEL=gpt-4o-mini"));
+    assert!(log.contains("ZEROCLAW_LLM_MODEL=gpt-4o-mini"));
     assert!(log.contains("--channels=discord"));
+}
+
+#[test]
+fn up_fails_with_clear_error_when_env_reference_is_missing() {
+    let dir = temp_dir("docker-fake-missing-env");
+    let home = dir.join("home");
+    let project = dir.join("project");
+
+    fs::create_dir_all(&home).expect("home should be created");
+    fs::create_dir_all(&project).expect("project should be created");
+
+    let yaml = r#"
+runtime: zeroclaw
+channels:
+  telegram:
+    token: $TELEGRAM_BOT_TOKEN
+"#;
+    fs::write(project.join("clawden.yaml"), yaml).expect("yaml should be written");
+
+    let output = Command::new(binary_path())
+        .current_dir(&project)
+        .env("HOME", &home)
+        .env_remove("TELEGRAM_BOT_TOKEN")
+        .args(["up", "--detach"])
+        .output()
+        .expect("up should execute");
+
+    assert!(!output.status.success());
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        combined.contains("failed to resolve environment variables in clawden.yaml"),
+        "combined output was: {combined}"
+    );
+    assert!(
+        combined.contains("TELEGRAM_BOT_TOKEN"),
+        "combined output was: {combined}"
+    );
 }

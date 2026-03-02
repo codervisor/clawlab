@@ -107,12 +107,12 @@ This requires exposing `runtime_start_args` as `pub` from `clawden-core::install
 - [x] Fix `ensure_installed_runtime()` to fall back to `runtime_start_args()` instead of empty vec
 - [x] Expose `runtime_start_args()` as pub from `clawden-core::install`
 - [x] Add test: `stream_logs` with pre-existing log content only streams new lines
-- [ ] Add test: `ensure_installed_runtime` returns correct `start_args` even when `list_installed` misses the entry
+- [x] Add test: `ensure_installed_runtime` returns correct `start_args` even when `list_installed` misses the entry
 
 ## Test
 
-- [ ] `clawden up` after a previous session only shows output from the current run (no stale replay)
-- [ ] Log file is truncated/rotated on each new `clawden up` invocation
+- [x] `clawden up` after a previous session only shows output from the current run (no stale replay)
+- [x] Log file is truncated/rotated on each new `clawden up` invocation
 - [ ] A runtime whose symlink is broken still launches with the correct subcommand (e.g. `daemon` for zeroclaw)
 - [ ] `clawden logs -f` after `clawden up -d` streams only current-session output
 - [ ] Direct mode behavior is unchanged aside from the log fixes (no regression)

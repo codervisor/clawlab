@@ -286,12 +286,12 @@ This is a natural extension but not required in the initial implementation — D
 
 ## Test
 
-- [ ] `clawden install --outdated` shows correct version table for all installed runtimes
-- [ ] `clawden install --outdated` exits 0 when all up to date, exits 1 when updates available
+- [x] `clawden install --outdated` shows correct version table for all installed runtimes
+- [x] `clawden install --outdated` exits 0 when all up to date, exits 1 when updates available
 - [ ] `clawden install zeroclaw --upgrade` re-installs to latest version
 - [ ] `clawden install --upgrade` upgrades all installed runtimes
 - [ ] Already up-to-date runtimes are skipped with "already up to date" message
-- [ ] `--upgrade` without any installed runtimes prints helpful message
+- [x] `--upgrade` without any installed runtimes prints helpful message
 - [ ] `clawden up` auto-installs missing runtimes but does NOT auto-upgrade
 - [ ] `clawden up` with pinned version installs the pinned version, not latest
 - [ ] `clawden up` with incompatible installed version re-installs to match pin
