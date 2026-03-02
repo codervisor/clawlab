@@ -11,6 +11,7 @@ tags:
 depends_on:
 - 013-config-management
 - 023-cli-direct-architecture
+- 025-llm-provider-api-key-management
 parent: 009-orchestration-platform
 created_at: 2026-03-02T01:26:46.553133318Z
 updated_at: 2026-03-02T01:26:46.553133318Z
@@ -149,7 +150,7 @@ Overall: 1 error, 1 warning — fix errors before running `clawden up`
 
 ### 3. First-Run Detection
 
-Detect when a user is running ClawDen for the first time (no `~/.clawden/` directory or no `clawden.yaml` in CWD) and automatically suggest or launch the wizard:
+Detect when a user is running ClawDen for the first time — all three conditions must be true: no `~/.clawden/` directory, no `clawden.yaml` in CWD, **and** no installed runtimes. If any installed runtimes exist, fall through to the current `up` behavior (run installed runtimes) to avoid interrupting existing workflows. Users can suppress the prompt with `--no-prompt`:
 
 ```
 $ clawden up
@@ -177,10 +178,11 @@ Each template pre-fills the YAML with a known-good configuration and annotates w
 
 ## Plan
 
-- [ ] Auto-detect provider env vars (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY`, etc.) and surface detected keys in the wizard
+- [ ] Auto-detect provider env vars (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY` / `GOOGLE_API_KEY`, etc.) and surface detected keys in the wizard. For Google/Gemini, check both `GEMINI_API_KEY` (primary, per Google quickstart docs) and `GOOGLE_API_KEY` (alias, takes precedence per SDK if both set)
 - [ ] Add `dialoguer` (or similar) crate for interactive terminal prompts
 - [ ] Refactor `init` command to support interactive wizard flow
 - [ ] Add `--non-interactive` / `--yes` flag to preserve CI-friendly behavior
+- [ ] Preserve existing `--runtime`, `--multi`, and `--force` flags: `--runtime` sets the default selection in the wizard, `--multi` selects the multi-runtime template path, `--force` allows overwriting existing config
 - [ ] Add `--template <name>` flag with bundled templates
 - [ ] Add `--reconfigure` flag for additive config updates
 - [ ] Extend `doctor` command with config validation section
@@ -208,6 +210,11 @@ Each template pre-fills the YAML with a known-good configuration and annotates w
 - 013-config-management (complete) — YAML schema and validation
 - 023-cli-direct-architecture (complete) — direct mode runtime resolution
 - 025-llm-provider-api-key-management (in-progress) — provider config section
+
+### Security Rules
+
+- The wizard must never write resolved secret values to disk. Generated `.env` files should contain placeholder references (e.g., `OPENAI_API_KEY=`) rather than copying detected values from the host environment.
+- Credential input during the wizard must be masked (no plaintext API keys on screen).
 
 ### Non-Goals
 

@@ -143,7 +143,7 @@ Known providers carry sensible defaults so users only specify what differs:
 | ---------- | ------------------------------------------- | ---------------------- |
 | OpenAI     | `https://api.openai.com/v1`                 | `OPENAI_API_KEY`       |
 | Anthropic  | `https://api.anthropic.com`                 | `ANTHROPIC_API_KEY`    |
-| Google     | `https://generativelanguage.googleapis.com` | `GOOGLE_API_KEY`       |
+| Google     | `https://generativelanguage.googleapis.com` | `GEMINI_API_KEY` (also accepts `GOOGLE_API_KEY`; if both set, `GOOGLE_API_KEY` takes precedence per SDK) |
 | Mistral    | `https://api.mistral.ai/v1`                 | `MISTRAL_API_KEY`      |
 | Groq       | `https://api.groq.com/openai/v1`            | `GROQ_API_KEY`         |
 | OpenRouter | `https://openrouter.ai/api/v1`              | `OPENROUTER_API_KEY`   |
