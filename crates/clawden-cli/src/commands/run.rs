@@ -1,4 +1,5 @@
 use anyhow::Result;
+use clawden_config::ClawDenYaml;
 use clawden_core::{ExecutionMode, LifecycleManager, ProcessManager, RuntimeInstaller};
 
 use crate::commands::InitOptions;
@@ -54,9 +55,29 @@ pub async fn exec_run(
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
+
+    // Load clawden.yaml if available for config/env enrichment
+    let yaml_path = std::env::current_dir()?.join("clawden.yaml");
+    let config = if yaml_path.exists() {
+        let mut cfg = ClawDenYaml::from_file(&yaml_path).map_err(|e| anyhow::anyhow!("{}", e))?;
+        let _ = cfg.resolve_env_vars();
+        Some(cfg)
+    } else {
+        None
+    };
+
+    // Resolve channels: CLI args > clawden.yaml
+    let resolved_channels = if !channel.is_empty() {
+        channel
+    } else if let Some(cfg) = config.as_ref() {
+        cfg.channels.keys().cloned().collect()
+    } else {
+        Vec::new()
+    };
+
     println!(
         "Running {} with channels {:?} and tools {:?}",
-        rt, channel, tools_list
+        rt, resolved_channels, tools_list
     );
 
     let mode = process_manager.resolve_mode(no_docker || env_no_docker_enabled());
@@ -80,15 +101,25 @@ pub async fn exec_run(
         ExecutionMode::Direct | ExecutionMode::Auto => {
             let executable = ensure_installed(installer, &rt)?;
 
-            let mut args = Vec::new();
-            if !channel.is_empty() {
-                args.push(format!("--channels={}", channel.join(",")));
+            let mut args = vec!["daemon".to_string()];
+            if !resolved_channels.is_empty() {
+                args.push(format!("--channels={}", resolved_channels.join(",")));
+            }
+            if !tools_list.is_empty() {
+                args.push(format!("--tools={}", tools_list.join(",")));
             }
             if let Some(policy) = restart {
                 args.push(format!("--restart={policy}"));
             }
 
-            let info = process_manager.start_direct(&rt, &executable, &args)?;
+            // Build env vars from clawden.yaml (channel creds + provider config)
+            let env_vars = if let Some(cfg) = config.as_ref() {
+                super::up::build_runtime_env_vars(cfg, &rt)?
+            } else {
+                Vec::new()
+            };
+
+            let info = process_manager.start_direct_with_env(&rt, &executable, &args, &env_vars)?;
             append_audit_file("runtime.start", &rt, "ok")?;
             println!(
                 "Started {} in direct mode (pid {}, logs: {})",

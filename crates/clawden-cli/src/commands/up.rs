@@ -1,5 +1,7 @@
 use anyhow::Result;
-use clawden_config::{ClawDenYaml, LlmProvider, ProviderEntryYaml, ProviderRefYaml};
+use clawden_config::{
+    ChannelCredentialMapper, ClawDenYaml, LlmProvider, ProviderEntryYaml, ProviderRefYaml,
+};
 use clawden_core::{ExecutionMode, LifecycleManager, ProcessManager, RuntimeInstaller};
 use std::collections::HashMap;
 
@@ -82,6 +84,9 @@ pub async fn exec_up(
         return Ok(());
     }
 
+    let mut started_runtimes = Vec::new();
+    let mut started_pids = Vec::new();
+
     for runtime in target_runtimes {
         match mode {
             ExecutionMode::Docker => {
@@ -97,23 +102,88 @@ pub async fn exec_up(
                     .map_err(anyhow::Error::msg)?;
                 append_audit_file("runtime.start", &runtime, "ok")?;
                 println!("Started {runtime} via adapter (docker mode)");
+                started_runtimes.push(runtime.clone());
             }
             ExecutionMode::Direct | ExecutionMode::Auto => {
                 let executable = ensure_installed(installer, &runtime)?;
                 let env_vars = if let Some(cfg) = config.as_ref() {
-                    runtime_env_vars(cfg, &runtime)?
+                    build_runtime_env_vars(cfg, &runtime)?
                 } else {
                     Vec::new()
                 };
-                let info =
-                    process_manager.start_direct_with_env(&runtime, &executable, &[], &env_vars)?;
+
+                let channels = if let Some(cfg) = config.as_ref() {
+                    channels_for_runtime(cfg, &runtime)
+                } else {
+                    Vec::new()
+                };
+
+                let mut args = vec!["daemon".to_string()];
+                if !channels.is_empty() {
+                    args.push(format!("--channels={}", channels.join(",")));
+                }
+
+                let info = process_manager.start_direct_with_env(
+                    &runtime,
+                    &executable,
+                    &args,
+                    &env_vars,
+                )?;
                 append_audit_file("runtime.start", &runtime, "ok")?;
                 println!("Started {runtime} (pid {})", info.pid);
+                started_runtimes.push(runtime.clone());
+                started_pids.push(info.pid);
+            }
+        }
+    }
+
+    if !started_runtimes.is_empty() {
+        println!("All runtimes started. Press Ctrl+C to stop.");
+        wait_for_shutdown_or_exit(&started_pids).await;
+        println!("Shutting down...");
+        for runtime in &started_runtimes {
+            if let Err(e) = process_manager.stop(runtime) {
+                eprintln!("Warning: failed to stop {runtime}: {e}");
             }
         }
     }
 
     Ok(())
+}
+
+/// Wait until Ctrl+C is received or all runtime processes have exited.
+async fn wait_for_shutdown_or_exit(pids: &[u32]) {
+    let ctrl_c = tokio::signal::ctrl_c();
+    tokio::pin!(ctrl_c);
+
+    let mut check_interval = tokio::time::interval(std::time::Duration::from_secs(2));
+    // Skip the first immediate tick
+    check_interval.tick().await;
+
+    loop {
+        tokio::select! {
+            _ = &mut ctrl_c => break,
+            _ = check_interval.tick() => {
+                if pids.iter().all(|pid| !is_process_alive(*pid)) {
+                    break;
+                }
+            }
+        }
+    }
+}
+
+/// Check if a process is alive (not a zombie) by inspecting /proc/<pid>/status.
+fn is_process_alive(pid: u32) -> bool {
+    let status_path = format!("/proc/{pid}/status");
+    match std::fs::read_to_string(status_path) {
+        Ok(content) => {
+            // A zombie process has "State:\tZ" — treat zombies as dead.
+            !content
+                .lines()
+                .any(|line| line.starts_with("State:") && line.contains('Z'))
+        }
+        Err(_) => false, // process no longer exists
+    }
 }
 
 /// Extract runtime names from a parsed clawden.yaml config.
@@ -125,51 +195,87 @@ fn runtimes_from_config(config: &ClawDenYaml) -> Vec<String> {
     }
 }
 
-fn runtime_env_vars(config: &ClawDenYaml, runtime: &str) -> Result<Vec<(String, String)>> {
-    let Some((provider_name, mut provider, model)) = runtime_provider_and_model(config, runtime)
-    else {
-        return Ok(Vec::new());
-    };
-
-    if provider.api_key.is_none() {
-        provider.api_key = get_provider_key_from_vault(&provider_name)?;
+/// Extract channel names relevant to a specific runtime from clawden.yaml.
+fn channels_for_runtime(config: &ClawDenYaml, runtime: &str) -> Vec<String> {
+    // Single-runtime shorthand: all channels belong to this runtime
+    if config.runtime.as_deref() == Some(runtime) {
+        return config.channels.keys().cloned().collect();
     }
+    // Multi-runtime: use the channel list from the runtime entry
+    if let Some(entry) = config.runtimes.iter().find(|e| e.name == runtime) {
+        return entry.channels.clone();
+    }
+    Vec::new()
+}
 
-    let provider_type = provider
-        .provider_type
-        .clone()
-        .or_else(|| infer_provider_type(&provider_name));
-    let provider_label = provider_type
-        .as_ref()
-        .map(provider_slug)
-        .unwrap_or_else(|| provider_name.to_ascii_lowercase());
-    let runtime_key = runtime.to_ascii_uppercase().replace('-', "_");
-
+/// Build all env vars a runtime needs: LLM provider config + channel credentials.
+/// Public so `exec_run` can reuse this.
+pub fn build_runtime_env_vars(
+    config: &ClawDenYaml,
+    runtime: &str,
+) -> Result<Vec<(String, String)>> {
     let mut env = HashMap::new();
-    env.insert("CLAWDEN_LLM_PROVIDER".to_string(), provider_label.clone());
-    env.insert(format!("{runtime_key}_LLM_PROVIDER"), provider_label);
 
-    if let Some(model_name) = model {
-        env.insert("CLAWDEN_LLM_MODEL".to_string(), model_name.clone());
-        env.insert(format!("{runtime_key}_LLM_MODEL"), model_name);
-    }
+    // --- LLM provider env vars ---
+    if let Some((provider_name, mut provider, model)) = runtime_provider_and_model(config, runtime)
+    {
+        if provider.api_key.is_none() {
+            provider.api_key = get_provider_key_from_vault(&provider_name)?;
+        }
 
-    if let Some(api_key) = provider.api_key {
-        env.insert("CLAWDEN_LLM_API_KEY".to_string(), api_key.clone());
-        env.insert(format!("{runtime_key}_LLM_API_KEY"), api_key.clone());
-        for env_name in provider_key_env_names(provider_type.as_ref(), &provider_name) {
-            env.insert(env_name.to_string(), api_key.clone());
+        let provider_type = provider
+            .provider_type
+            .clone()
+            .or_else(|| infer_provider_type(&provider_name));
+        let provider_label = provider_type
+            .as_ref()
+            .map(provider_slug)
+            .unwrap_or_else(|| provider_name.to_ascii_lowercase());
+        let runtime_key = runtime.to_ascii_uppercase().replace('-', "_");
+
+        env.insert("CLAWDEN_LLM_PROVIDER".to_string(), provider_label.clone());
+        env.insert(format!("{runtime_key}_LLM_PROVIDER"), provider_label);
+
+        if let Some(model_name) = model {
+            env.insert("CLAWDEN_LLM_MODEL".to_string(), model_name.clone());
+            env.insert(format!("{runtime_key}_LLM_MODEL"), model_name);
+        }
+
+        if let Some(api_key) = provider.api_key {
+            env.insert("CLAWDEN_LLM_API_KEY".to_string(), api_key.clone());
+            env.insert(format!("{runtime_key}_LLM_API_KEY"), api_key.clone());
+            for env_name in provider_key_env_names(provider_type.as_ref(), &provider_name) {
+                env.insert(env_name.to_string(), api_key.clone());
+            }
+        }
+
+        if let Some(base_url) = provider.base_url {
+            env.insert("CLAWDEN_LLM_BASE_URL".to_string(), base_url.clone());
+            env.insert(format!("{runtime_key}_LLM_BASE_URL"), base_url);
+        }
+
+        if let Some(org_id) = provider.org_id {
+            env.insert("CLAWDEN_LLM_ORG_ID".to_string(), org_id.clone());
+            env.insert(format!("{runtime_key}_LLM_ORG_ID"), org_id);
         }
     }
 
-    if let Some(base_url) = provider.base_url {
-        env.insert("CLAWDEN_LLM_BASE_URL".to_string(), base_url.clone());
-        env.insert(format!("{runtime_key}_LLM_BASE_URL"), base_url);
-    }
+    // --- Channel credential env vars ---
+    let channel_names = channels_for_runtime(config, runtime);
+    let runtime_slug = runtime.to_ascii_lowercase().replace('-', "");
+    for ch_name in &channel_names {
+        if let Some(ch_instance) = config.channels.get(ch_name) {
+            let ch_type = ClawDenYaml::resolve_channel_type(ch_name, ch_instance)
+                .unwrap_or_else(|| ch_name.clone());
 
-    if let Some(org_id) = provider.org_id {
-        env.insert("CLAWDEN_LLM_ORG_ID".to_string(), org_id.clone());
-        env.insert(format!("{runtime_key}_LLM_ORG_ID"), org_id);
+            // Use runtime-specific env var mappers where available
+            let channel_vars = match runtime_slug.as_str() {
+                "zeroclaw" => ChannelCredentialMapper::zeroclaw_env_vars(&ch_type, ch_instance),
+                "nanoclaw" => ChannelCredentialMapper::nanoclaw_env_vars(&ch_type, ch_instance),
+                _ => ChannelCredentialMapper::zeroclaw_env_vars(&ch_type, ch_instance),
+            };
+            env.extend(channel_vars);
+        }
     }
 
     let mut pairs: Vec<_> = env.into_iter().collect();
@@ -272,7 +378,7 @@ fn provider_key_env_names(
 
 #[cfg(test)]
 mod tests {
-    use super::{runtime_env_vars, ClawDenYaml};
+    use super::{build_runtime_env_vars, ClawDenYaml};
 
     #[test]
     fn runtime_env_vars_include_provider_key_and_model() {
@@ -290,7 +396,7 @@ providers:
             .resolve_env_vars()
             .expect("env vars should resolve without references");
 
-        let env = runtime_env_vars(&config, "zeroclaw").expect("env vars should build");
+        let env = build_runtime_env_vars(&config, "zeroclaw").expect("env vars should build");
         assert!(env
             .iter()
             .any(|(k, v)| k == "OPENAI_API_KEY" && v == "sk-test"));
