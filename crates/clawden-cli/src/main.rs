@@ -1,104 +1,11 @@
+mod cli;
+mod commands;
+mod util;
+
 use anyhow::Result;
-use clap::{Parser, Subcommand};
-use clawden_config::ClawDenYaml;
-use clawden_core::{
-    ClawRuntime, ExecutionMode, LifecycleManager, ProcessManager, RuntimeInstaller,
-};
-use std::fs::OpenOptions;
-use std::io::Write;
-use std::path::PathBuf;
-use std::process::{Command, Stdio};
-use std::time::{SystemTime, UNIX_EPOCH};
-
-#[derive(Debug, Parser)]
-#[command(name = "clawden", version, about = "ClawDen orchestration CLI")]
-struct Cli {
-    #[arg(long, global = true, default_value_t = false)]
-    no_docker: bool,
-
-    #[command(subcommand)]
-    command: Commands,
-}
-
-#[derive(Debug, Subcommand)]
-enum Commands {
-    /// Scaffold a new clawden.yaml project config
-    Init {
-        /// Runtime to use (default: zeroclaw)
-        #[arg(long, default_value = "zeroclaw")]
-        runtime: String,
-        /// Generate a multi-runtime template instead of single-runtime shorthand
-        #[arg(long)]
-        multi: bool,
-        /// Overwrite existing clawden.yaml
-        #[arg(long)]
-        force: bool,
-    },
-    /// Install runtimes for direct execution mode.
-    Install {
-        runtime: Option<String>,
-        #[arg(long)]
-        all: bool,
-        #[arg(long)]
-        list: bool,
-    },
-    /// Remove a directly installed runtime.
-    Uninstall {
-        runtime: String,
-    },
-    /// Start all runtimes from clawden.yaml
-    Up {
-        /// Specific runtimes to start (starts all if empty)
-        runtimes: Vec<String>,
-    },
-    /// Run a single runtime
-    Run {
-        runtime: Option<String>,
-        /// Channels to connect
-        #[arg(long)]
-        channel: Vec<String>,
-        /// Tools to enable
-        #[arg(long = "with")]
-        tools: Option<String>,
-        /// Restart on failure policy.
-        #[arg(long)]
-        restart: Option<String>,
-    },
-    /// Show running runtimes
-    Ps,
-    /// Stop runtimes
-    Stop {
-        /// Specific runtime to stop (stops all if empty)
-        runtime: Option<String>,
-    },
-    /// Tail runtime log files.
-    Logs {
-        runtime: String,
-        #[arg(long, default_value_t = 50)]
-        lines: usize,
-    },
-    /// Start local dashboard server and open browser.
-    Dashboard {
-        #[arg(long, default_value_t = 8080)]
-        port: u16,
-    },
-    /// Check local direct-install prerequisites.
-    Doctor,
-    /// Channel management
-    Channels {
-        #[command(subcommand)]
-        command: Option<ChannelCommand>,
-    },
-}
-
-#[derive(Debug, Subcommand)]
-enum ChannelCommand {
-    /// Test all channel credentials
-    Test {
-        /// Specific channel type to test
-        channel_type: Option<String>,
-    },
-}
+use clap::Parser;
+use cli::{Cli, Commands};
+use clawden_core::{ExecutionMode, LifecycleManager, ProcessManager, RuntimeInstaller};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -113,176 +20,20 @@ async fn main() -> Result<()> {
             runtime,
             multi,
             force,
-        } => {
-            let yaml_path = std::env::current_dir()?.join("clawden.yaml");
-            if yaml_path.exists() && !force {
-                anyhow::bail!(
-                    "clawden.yaml already exists. Use --force to overwrite."
-                );
-            }
-
-            let _ = parse_runtime(&runtime)?;
-
-            let yaml_content = if multi {
-                format!(
-                    "# ClawDen multi-runtime config\n\
-                     # Docs: https://github.com/codervisor/clawden\n\n\
-                     channels:\n\
-                     #  my-telegram:\n\
-                     #    type: telegram\n\
-                     #    token: $TELEGRAM_BOT_TOKEN\n\n\
-                     providers:\n\
-                     #  main:\n\
-                     #    type: openai\n\
-                     #    api_key: $OPENAI_API_KEY\n\n\
-                     runtimes:\n\
-                     \x20 - name: {}\n\
-                     #    channels: [my-telegram]\n\
-                     \x20   tools: [git, http]\n\
-                     #    provider: main\n\
-                     #    model: gpt-4\n",
-                    runtime
-                )
-            } else {
-                format!(
-                    "# ClawDen single-runtime config\n\
-                     # Docs: https://github.com/codervisor/clawden\n\n\
-                     runtime: {}\n\n\
-                     channels: {{}}\n\
-                     #  telegram:\n\
-                     #    token: $TELEGRAM_BOT_TOKEN\n\n\
-                     tools:\n\
-                     \x20 - git\n\
-                     \x20 - http\n\n\
-                     # provider: openai\n\
-                     # model: gpt-4\n",
-                    runtime
-                )
-            };
-
-            std::fs::write(&yaml_path, &yaml_content)?;
-            println!("Created {}", yaml_path.display());
-
-            let env_path = yaml_path.parent().unwrap().join(".env");
-            if !env_path.exists() {
-                std::fs::write(
-                    &env_path,
-                    "# ClawDen environment variables\n\
-                     # TELEGRAM_BOT_TOKEN=\n\
-                     # OPENAI_API_KEY=\n\
-                     # ANTHROPIC_API_KEY=\n",
-                )?;
-                println!("Created {}", env_path.display());
-            }
-
-            append_audit_file("project.init", &runtime, "ok")?;
-        }
+        } => commands::exec_init(runtime, multi, force)?,
         Commands::Install { runtime, all, list } => {
-            if list {
-                let installed = installer.list_installed()?;
-                if installed.is_empty() {
-                    println!("No runtimes installed");
-                } else {
-                    for row in installed {
-                        println!(
-                            "{}\t{}\t{}",
-                            row.runtime,
-                            row.version,
-                            row.executable.display()
-                        );
-                    }
-                }
-                return Ok(());
-            }
-
-            if all {
-                let installed = installer.install_all()?;
-                for row in installed {
-                    println!(
-                        "Installed {}@{} at {}",
-                        row.runtime,
-                        row.version,
-                        row.executable.display()
-                    );
-                }
-                return Ok(());
-            }
-
-            let Some(runtime_spec) = runtime else {
-                anyhow::bail!("specify a runtime (e.g. clawden install zeroclaw or --all)");
-            };
-
-            let (runtime_name, version) = parse_runtime_version(&runtime_spec);
-            let installed = installer.install_runtime(&runtime_name, version.as_deref())?;
-            println!(
-                "Installed {}@{} at {}",
-                installed.runtime,
-                installed.version,
-                installed.executable.display()
-            );
+            commands::exec_install(&installer, runtime, all, list)?
         }
-        Commands::Uninstall { runtime } => {
-            installer.uninstall_runtime(&runtime)?;
-            println!("Uninstalled {runtime}");
-        }
+        Commands::Uninstall { runtime } => commands::exec_uninstall(&installer, runtime)?,
         Commands::Up { runtimes } => {
-            let mode = process_manager.resolve_mode(cli.no_docker || env_no_docker_enabled());
-
-            // Determine target runtimes: CLI args > clawden.yaml > installed runtimes
-            let target_runtimes = if !runtimes.is_empty() {
-                runtimes
-            } else {
-                let yaml_path = std::env::current_dir()?.join("clawden.yaml");
-                if yaml_path.exists() {
-                    let config = ClawDenYaml::from_file(&yaml_path)
-                        .map_err(|e| anyhow::anyhow!("{}", e))?;
-                    if let Err(errs) = config.validate() {
-                        anyhow::bail!("clawden.yaml validation failed:\n{}", errs.join("\n"));
-                    }
-                    let from_config = runtimes_from_config(&config);
-                    if from_config.is_empty() {
-                        anyhow::bail!("clawden.yaml does not define any runtimes");
-                    }
-                    println!("Using runtimes from clawden.yaml: {}", from_config.join(", "));
-                    from_config
-                } else {
-                    installer
-                        .list_installed()?
-                        .into_iter()
-                        .map(|row| row.runtime)
-                        .collect::<Vec<_>>()
-                }
-            };
-
-            if target_runtimes.is_empty() {
-                println!("No runtimes to start. Create a clawden.yaml with 'clawden init' or install one with 'clawden install zeroclaw'");
-                return Ok(());
-            }
-
-            for runtime in target_runtimes {
-                match mode {
-                    ExecutionMode::Docker => {
-                        let rt = parse_runtime(&runtime)?;
-                        let record = manager.register_agent(
-                            format!("{}-default", rt.as_slug()),
-                            rt,
-                            vec!["chat".to_string()],
-                        );
-                        manager
-                            .start_agent(&record.id)
-                            .await
-                            .map_err(anyhow::Error::msg)?;
-                        append_audit_file("runtime.start", &runtime, "ok")?;
-                        println!("Started {runtime} via adapter (docker mode)");
-                    }
-                    ExecutionMode::Direct | ExecutionMode::Auto => {
-                        let executable = ensure_installed(&installer, &runtime)?;
-                        let info = process_manager.start_direct(&runtime, &executable, &[])?;
-                        append_audit_file("runtime.start", &runtime, "ok")?;
-                        println!("Started {runtime} (pid {})", info.pid);
-                    }
-                }
-            }
+            commands::exec_up(
+                runtimes,
+                cli.no_docker,
+                &installer,
+                &process_manager,
+                &mut manager,
+            )
+            .await?
         }
         Commands::Run {
             runtime,
@@ -290,239 +41,27 @@ async fn main() -> Result<()> {
             tools,
             restart,
         } => {
-            let rt = runtime.unwrap_or_else(|| "zeroclaw".to_string());
-            let tools_list = tools
-                .map(|t| {
-                    t.split(',')
-                        .map(|s| s.trim().to_string())
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
-            println!(
-                "Running {} with channels {:?} and tools {:?}",
-                rt, channel, tools_list
-            );
-
-            let mode = process_manager.resolve_mode(cli.no_docker || env_no_docker_enabled());
-            match mode {
-                ExecutionMode::Docker => {
-                    let runtime = parse_runtime(&rt)?;
-                    let record = manager.register_agent(
-                        format!("{}-default", runtime.as_slug()),
-                        runtime,
-                        vec!["chat".to_string()],
-                    );
-                    manager
-                        .start_agent(&record.id)
-                        .await
-                        .map_err(anyhow::Error::msg)?;
-                    println!(
-                        "Started {} via core adapter path (docker available, server not required)",
-                        rt
-                    );
-                }
-                ExecutionMode::Direct | ExecutionMode::Auto => {
-                    let executable = ensure_installed(&installer, &rt)?;
-
-                    let mut args = Vec::new();
-                    if !channel.is_empty() {
-                        args.push(format!("--channels={}", channel.join(",")));
-                    }
-                    if let Some(policy) = restart {
-                        args.push(format!("--restart={policy}"));
-                    }
-
-                    let info = process_manager.start_direct(&rt, &executable, &args)?;
-                    append_audit_file("runtime.start", &rt, "ok")?;
-                    println!(
-                        "Started {} in direct mode (pid {}, logs: {})",
-                        rt,
-                        info.pid,
-                        info.log_path.display()
-                    );
-                }
-            }
+            commands::exec_run(
+                runtime,
+                channel,
+                tools,
+                restart,
+                cli.no_docker,
+                &installer,
+                &process_manager,
+                &mut manager,
+            )
+            .await?
         }
-        Commands::Ps => {
-            let statuses = process_manager.list_statuses()?;
-            if statuses.is_empty() {
-                println!("No running runtimes");
-            } else {
-                println!(
-                    "{:<14} {:<8} {:<10} {:<10} {:<10} LOG",
-                    "RUNTIME", "PID", "MODE", "STATE", "HEALTH"
-                );
-                for status in statuses {
-                    println!(
-                        "{:<14} {:<8} {:<10} {:<10} {:<10} {}",
-                        status.runtime,
-                        status
-                            .pid
-                            .map(|pid| pid.to_string())
-                            .unwrap_or_else(|| "-".to_string()),
-                        format!("{:?}", status.mode),
-                        if status.running { "running" } else { "stopped" },
-                        status.health,
-                        status.log_path.display(),
-                    );
-                }
-            }
-        }
-        Commands::Stop { runtime } => {
-            if let Some(rt) = runtime {
-                println!("Stopping {}...", rt);
-                process_manager.stop(&rt)?;
-                append_audit_file("runtime.stop", &rt, "ok")?;
-            } else {
-                println!("Stopping all runtimes...");
-                for status in process_manager.list_statuses()? {
-                    process_manager.stop(&status.runtime)?;
-                    append_audit_file("runtime.stop", &status.runtime, "ok")?;
-                    println!("Stopped {}", status.runtime);
-                }
-            }
-        }
+        Commands::Ps => commands::exec_ps(&process_manager)?,
+        Commands::Stop { runtime } => commands::exec_stop(&process_manager, runtime)?,
         Commands::Logs { runtime, lines } => {
-            let logs = process_manager.tail_logs(&runtime, lines)?;
-            if logs.is_empty() {
-                println!("No logs for {runtime}");
-            } else {
-                println!("{logs}");
-            }
+            commands::exec_logs(&process_manager, runtime, lines)?
         }
-        Commands::Dashboard { port } => {
-            let url = format!("http://127.0.0.1:{port}");
-            let _ = Command::new("open")
-                .arg(&url)
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .spawn();
-            println!("Starting dashboard server on {url}");
-
-            let status = if command_exists("clawden-server") {
-                Command::new("clawden-server")
-                    .env("CLAWDEN_SERVER_PORT", port.to_string())
-                    .status()?
-            } else {
-                Command::new("cargo")
-                    .arg("run")
-                    .arg("-p")
-                    .arg("clawden-server")
-                    .env("CLAWDEN_SERVER_PORT", port.to_string())
-                    .status()?
-            };
-            if !status.success() {
-                anyhow::bail!("clawden-server exited with status {status}");
-            }
-        }
-        Commands::Doctor => {
-            println!("docker_available={}", ProcessManager::docker_available());
-            println!("node_available={}", command_exists("node"));
-            println!("npm_available={}", command_exists("npm"));
-            println!("git_available={}", command_exists("git"));
-            println!(
-                "curl_available={}",
-                command_exists("curl") || command_exists("wget")
-            );
-            println!("clawden_home={}", installer.root_dir().display());
-            for row in installer.list_installed()? {
-                println!("installed={}@{}", row.runtime, row.version);
-            }
-        }
-        Commands::Channels { command } => match command {
-            None => {
-                let metadata = manager.list_runtime_metadata();
-                for runtime in metadata {
-                    println!("{}", runtime.runtime.as_slug());
-                    for (channel, support) in runtime.channel_support {
-                        println!("  {}: {:?}", channel, support);
-                    }
-                }
-            }
-            Some(ChannelCommand::Test { channel_type }) => {
-                if let Some(ct) = channel_type {
-                    println!(
-                        "Channel config test for '{ct}' is available in dashboard server mode"
-                    );
-                } else {
-                    println!("Channel config test requires a channel type");
-                }
-            }
-        },
+        Commands::Dashboard { port } => commands::exec_dashboard(port)?,
+        Commands::Doctor => commands::exec_doctor(&installer)?,
+        Commands::Channels { command } => commands::exec_channels(command, &mut manager)?,
     }
 
-    Ok(())
-}
-
-fn parse_runtime(value: &str) -> Result<ClawRuntime> {
-    ClawRuntime::from_str_loose(value).ok_or_else(|| anyhow::anyhow!("unknown runtime: {value}"))
-}
-
-fn parse_runtime_version(spec: &str) -> (String, Option<String>) {
-    if let Some((runtime, version)) = spec.split_once('@') {
-        (runtime.to_string(), Some(version.to_string()))
-    } else {
-        (spec.to_string(), None)
-    }
-}
-
-fn command_exists(command: &str) -> bool {
-    Command::new("which")
-        .arg(command)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map(|status| status.success())
-        .unwrap_or(false)
-}
-
-/// Extract runtime names from a parsed clawden.yaml config.
-fn runtimes_from_config(config: &ClawDenYaml) -> Vec<String> {
-    if let Some(rt) = &config.runtime {
-        vec![rt.clone()]
-    } else {
-        config.runtimes.iter().map(|r| r.name.clone()).collect()
-    }
-}
-
-/// Return the executable for a runtime, auto-installing it if missing.
-fn ensure_installed(
-    installer: &RuntimeInstaller,
-    runtime: &str,
-) -> Result<std::path::PathBuf> {
-    if let Some(exe) = installer.runtime_executable(runtime) {
-        return Ok(exe);
-    }
-    println!("Runtime '{runtime}' not installed. Installing...");
-    let installed = installer.install_runtime(runtime, None)?;
-    println!(
-        "Installed {}@{}",
-        installed.runtime, installed.version
-    );
-    Ok(installed.executable)
-}
-
-fn env_no_docker_enabled() -> bool {
-    std::env::var("CLAWDEN_NO_DOCKER")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false)
-}
-
-fn append_audit_file(action: &str, runtime: &str, outcome: &str) -> Result<()> {
-    let home = std::env::var("HOME")?;
-    let log_dir = PathBuf::from(home).join(".clawden").join("logs");
-    std::fs::create_dir_all(&log_dir)?;
-    let log_path = log_dir.join("audit.log");
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system clock before UNIX_EPOCH")
-        .as_millis();
-    let line = format!("{now}\t{action}\t{runtime}\t{outcome}\n");
-
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(log_path)?;
-    file.write_all(line.as_bytes())?;
     Ok(())
 }
