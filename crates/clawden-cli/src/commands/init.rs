@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clawden_config::{ClawDenYaml, ProviderRefYaml};
-use dialoguer::{Confirm, Input, MultiSelect, Select};
+use dialoguer::{Confirm, MultiSelect, Select};
 use std::collections::BTreeSet;
 use std::io::{self, IsTerminal, Write};
 
@@ -35,6 +35,20 @@ struct WizardSelection {
     model: Option<String>,
     channels: Vec<String>,
     tools: Vec<String>,
+}
+
+#[derive(Clone, Copy)]
+struct ProviderOption {
+    id: &'static str,
+    label: &'static str,
+    detected_env_names: &'static [&'static str],
+}
+
+#[derive(Clone, Copy)]
+struct RuntimeOption {
+    id: &'static str,
+    label: &'static str,
+    hint: &'static str,
 }
 
 pub fn exec_init(options: InitOptions) -> Result<()> {
@@ -148,10 +162,12 @@ fn load_existing_selection(
 }
 
 fn run_wizard(mut selection: WizardSelection) -> Result<WizardSelection> {
-    println!("Welcome to ClawDen! Let's set up your project.\n");
+    println!("Welcome to ClawDen setup.");
+    println!("This wizard will create clawden.yaml and .env in the current directory.\n");
 
     // Step 1: Execution Mode
     println!("Step 1/5 - Execution Mode");
+    println!("Pick how runtimes should run on this machine.");
     let mode_default = match selection.mode.as_deref() {
         Some("direct") => 1,
         _ => 0,
@@ -165,66 +181,184 @@ fn run_wizard(mut selection: WizardSelection) -> Result<WizardSelection> {
 
     // Step 2: Runtime Selection
     println!("\nStep 2/5 - Runtime Selection");
-    let runtime: String = Input::new()
-        .with_prompt("Runtime")
-        .default(selection.runtime.clone())
-        .interact_text()?;
-    let _ = parse_runtime(&runtime)?;
-    selection.runtime = runtime;
+    println!("Pick the primary runtime for generated config.");
+    let runtime_options = [
+        RuntimeOption {
+            id: "zeroclaw",
+            label: "zeroclaw",
+            hint: "Rust, general-purpose AI agent",
+        },
+        RuntimeOption {
+            id: "openclaw",
+            label: "openclaw",
+            hint: "TypeScript, open interpreter variant",
+        },
+        RuntimeOption {
+            id: "picoclaw",
+            label: "picoclaw",
+            hint: "Go, lightweight/edge agent",
+        },
+        RuntimeOption {
+            id: "nanoclaw",
+            label: "nanoclaw",
+            hint: "TypeScript, minimal footprint",
+        },
+        RuntimeOption {
+            id: "ironclaw",
+            label: "ironclaw",
+            hint: "Rust, WASM channels + PostgreSQL",
+        },
+        RuntimeOption {
+            id: "nullclaw",
+            label: "nullclaw",
+            hint: "Zig, HTTP gateway",
+        },
+        RuntimeOption {
+            id: "microclaw",
+            label: "microclaw",
+            hint: "Rust, multi-channel + web UI",
+        },
+        RuntimeOption {
+            id: "mimiclaw",
+            label: "mimiclaw",
+            hint: "C, ESP32-S3 embedded firmware",
+        },
+        RuntimeOption {
+            id: "openfang",
+            label: "openfang",
+            hint: "Rust, Agent OS with TOML config",
+        },
+    ];
+    let runtime_labels: Vec<String> = runtime_options
+        .iter()
+        .map(|opt| format!("{}  - {}", opt.label, opt.hint))
+        .collect();
+    let runtime_default = parse_runtime(&selection.runtime)
+        .ok()
+        .map(|rt| rt.as_slug())
+        .and_then(|slug| runtime_options.iter().position(|opt| opt.id == slug))
+        .unwrap_or(0);
+    let runtime_idx = Select::new()
+        .with_prompt("Select runtime")
+        .items(&runtime_labels)
+        .default(runtime_default)
+        .interact()?;
+    selection.runtime = runtime_options[runtime_idx].id.to_string();
     selection.multi = Confirm::new()
-        .with_prompt("Use multi-runtime config?")
+        .with_prompt("Generate multi-runtime config?")
         .default(selection.multi)
         .interact()?;
 
     // Step 3: Channel Configuration
     println!("\nStep 3/5 - Channel Configuration");
-    let channel_options = ["telegram", "discord", "slack"];
+    println!("Select channels to enable now. Detected tokens are preselected.");
+    let channel_options = [
+        ("telegram", "TELEGRAM_BOT_TOKEN"),
+        ("discord", "DISCORD_BOT_TOKEN"),
+        ("slack", "SLACK_BOT_TOKEN"),
+    ];
     let detected_channels = detect_channel_envs();
-    let channel_defaults: Vec<bool> = channel_options
+    let channel_labels: Vec<String> = channel_options
         .iter()
-        .map(|ch| {
-            selection.channels.iter().any(|c| c == ch) || detected_channels.iter().any(|c| c == ch)
+        .map(|(name, env_name)| {
+            if detected_channels.iter().any(|ch| ch == name) {
+                format!("{name} (detected: {env_name})")
+            } else {
+                (*name).to_string()
+            }
         })
         .collect();
-    if !detected_channels.is_empty() {
-        println!("Detected channel tokens in environment:");
-        for ch in &detected_channels {
-            println!("  [x] {ch}");
-        }
-    }
+    let channel_defaults: Vec<bool> = channel_options
+        .iter()
+        .map(|(name, _)| {
+            selection.channels.iter().any(|c| c == name)
+                || detected_channels.iter().any(|c| c == name)
+        })
+        .collect();
     let channel_indices = MultiSelect::new()
-        .with_prompt("Select channels (↑↓ navigate, space toggle, enter confirm)")
-        .items(&channel_options)
+        .with_prompt("Channels")
+        .items(&channel_labels)
         .defaults(&channel_defaults)
         .interact()?;
     selection.channels = channel_indices
         .into_iter()
-        .map(|i| channel_options[i].to_string())
+        .map(|i| channel_options[i].0.to_string())
         .collect();
 
     // Step 4: LLM Provider
     println!("\nStep 4/5 - LLM Provider");
+    println!("Choose provider. Detected API keys are highlighted.");
     let provider_options = [
-        "openai",
-        "anthropic",
-        "google",
-        "openrouter",
-        "local (openai-compatible)",
-        "skip",
+        ProviderOption {
+            id: "openai",
+            label: "openai",
+            detected_env_names: &["OPENAI_API_KEY"],
+        },
+        ProviderOption {
+            id: "anthropic",
+            label: "anthropic",
+            detected_env_names: &["ANTHROPIC_API_KEY"],
+        },
+        ProviderOption {
+            id: "google",
+            label: "google",
+            detected_env_names: &["GEMINI_API_KEY", "GOOGLE_API_KEY"],
+        },
+        ProviderOption {
+            id: "openrouter",
+            label: "openrouter",
+            detected_env_names: &["OPENROUTER_API_KEY"],
+        },
+        ProviderOption {
+            id: "local-llm",
+            label: "local (openai-compatible)",
+            detected_env_names: &[],
+        },
+        ProviderOption {
+            id: "skip",
+            label: "skip",
+            detected_env_names: &[],
+        },
     ];
-    let detected_default = print_detected_provider_envs();
+    let provider_labels: Vec<String> = provider_options
+        .iter()
+        .map(|opt| {
+            let detected: Vec<&str> = opt
+                .detected_env_names
+                .iter()
+                .copied()
+                .filter(|env| std::env::var(env).is_ok())
+                .collect();
+            if detected.is_empty() {
+                opt.label.to_string()
+            } else {
+                format!("{} (detected: {})", opt.label, detected.join(" / "))
+            }
+        })
+        .collect();
+    let selected_provider_idx = selection
+        .provider
+        .as_deref()
+        .and_then(|provider| provider_options.iter().position(|opt| opt.id == provider));
+    let detected_default = selected_provider_idx
+        .or_else(|| {
+            provider_options.iter().position(|opt| {
+                !opt.detected_env_names.is_empty()
+                    && opt
+                        .detected_env_names
+                        .iter()
+                        .any(|env| std::env::var(env).is_ok())
+            })
+        })
+        .unwrap_or(0);
     let provider_idx = Select::new()
-        .with_prompt("Choose provider")
-        .items(&provider_options)
+        .with_prompt("Provider")
+        .items(&provider_labels)
         .default(detected_default)
         .interact()?;
-    selection.provider = match provider_idx {
-        0 => Some("openai".to_string()),
-        1 => Some("anthropic".to_string()),
-        2 => Some("google".to_string()),
-        3 => Some("openrouter".to_string()),
-        4 => Some("local-llm".to_string()),
-        _ => None,
+    selection.provider = match provider_options[provider_idx].id {
+        "skip" => None,
+        id => Some(id.to_string()),
     };
     if selection.provider.is_some()
         && Confirm::new()
@@ -243,31 +377,52 @@ fn run_wizard(mut selection: WizardSelection) -> Result<WizardSelection> {
 
     // Step 5: Tools
     println!("\nStep 5/5 - Tools");
+    println!("Pick built-in tools to include in this project config.");
     let tool_options = [
-        "git",
-        "http",
-        "core-utils",
-        "python",
-        "code-tools",
-        "database",
+        ("git", "version control operations"),
+        ("http", "HTTP requests and APIs"),
+        ("core-utils", "shell and file utilities"),
+        ("python", "Python execution"),
+        ("code-tools", "code analysis helpers"),
+        ("database", "database connectivity"),
     ];
+    let tool_labels: Vec<String> = tool_options
+        .iter()
+        .map(|(name, hint)| format!("{name}  - {hint}"))
+        .collect();
     let tool_defaults: Vec<bool> = tool_options
         .iter()
-        .map(|t| selection.tools.iter().any(|s| s == t))
+        .map(|(name, _)| selection.tools.iter().any(|s| s == name))
         .collect();
     let tool_indices = MultiSelect::new()
-        .with_prompt("Select built-in tools (↑↓ navigate, space toggle, enter confirm)")
-        .items(&tool_options)
+        .with_prompt("Tools")
+        .items(&tool_labels)
         .defaults(&tool_defaults)
         .interact()?;
     selection.tools = tool_indices
         .into_iter()
-        .map(|i| tool_options[i].to_string())
+        .map(|i| tool_options[i].0.to_string())
         .collect();
     if selection.tools.is_empty() {
         selection.tools = vec!["git".to_string(), "http".to_string()];
     }
 
+    println!("\nSelection summary:");
+    println!("  mode: {}", selection.mode.as_deref().unwrap_or("docker"));
+    println!("  runtime: {}", selection.runtime);
+    println!(
+        "  channels: {}",
+        if selection.channels.is_empty() {
+            "none".to_string()
+        } else {
+            selection.channels.join(", ")
+        }
+    );
+    println!(
+        "  provider: {}",
+        selection.provider.as_deref().unwrap_or("skip")
+    );
+    println!("  tools: {}", selection.tools.join(", "));
     println!("\nSetup complete. Generating files...");
     Ok(selection)
 }
@@ -483,50 +638,6 @@ fn env_var_for_provider(provider: &str) -> Option<&'static str> {
         "google" => Some("GEMINI_API_KEY"),
         "openrouter" => Some("OPENROUTER_API_KEY"),
         _ => None,
-    }
-}
-
-/// Print detected provider API keys and return the index of the first detected
-/// provider to use as the default selection (falls back to 0 / openai).
-fn print_detected_provider_envs() -> usize {
-    // Order matches the provider prompt options:
-    // 0=openai, 1=anthropic, 2=google, 3=openrouter
-    let checks = [
-        (
-            "OPENAI_API_KEY",
-            std::env::var("OPENAI_API_KEY").is_ok(),
-            0usize,
-        ),
-        (
-            "ANTHROPIC_API_KEY",
-            std::env::var("ANTHROPIC_API_KEY").is_ok(),
-            1,
-        ),
-        (
-            "OPENROUTER_API_KEY",
-            std::env::var("OPENROUTER_API_KEY").is_ok(),
-            3,
-        ),
-        (
-            "GEMINI_API_KEY / GOOGLE_API_KEY",
-            std::env::var("GEMINI_API_KEY").is_ok() || std::env::var("GOOGLE_API_KEY").is_ok(),
-            2,
-        ),
-    ];
-    println!("Detected API keys in environment:");
-    let mut first_detected: Option<usize> = None;
-    for (name, present, idx) in &checks {
-        let marker = if *present { "x" } else { " " };
-        println!("  [{marker}] {name}");
-        if *present && first_detected.is_none() {
-            first_detected = Some(*idx);
-        }
-    }
-    if let Some(idx) = first_detected {
-        println!("  (auto-selected based on detected key)");
-        idx
-    } else {
-        0
     }
 }
 

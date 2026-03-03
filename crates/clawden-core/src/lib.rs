@@ -41,6 +41,7 @@ pub enum ClawRuntime {
     NullClaw,
     MicroClaw,
     MimiClaw,
+    OpenFang,
 }
 
 impl std::fmt::Display for ClawRuntime {
@@ -54,6 +55,7 @@ impl std::fmt::Display for ClawRuntime {
             ClawRuntime::NullClaw => write!(f, "NullClaw"),
             ClawRuntime::MicroClaw => write!(f, "MicroClaw"),
             ClawRuntime::MimiClaw => write!(f, "MimiClaw"),
+            ClawRuntime::OpenFang => write!(f, "OpenFang"),
         }
     }
 }
@@ -69,6 +71,7 @@ impl ClawRuntime {
             "nullclaw" | "null-claw" | "null" => Some(Self::NullClaw),
             "microclaw" | "micro-claw" | "micro" => Some(Self::MicroClaw),
             "mimiclaw" | "mimi-claw" | "mimi" => Some(Self::MimiClaw),
+            "openfang" | "open-fang" | "fang" => Some(Self::OpenFang),
             _ => None,
         }
     }
@@ -83,6 +86,7 @@ impl ClawRuntime {
             ClawRuntime::NullClaw => "nullclaw",
             ClawRuntime::MicroClaw => "microclaw",
             ClawRuntime::MimiClaw => "mimiclaw",
+            ClawRuntime::OpenFang => "openfang",
         }
     }
 }

@@ -16,6 +16,12 @@ This project uses the Agent Skills framework for domain-specific guidance.
 
 Read the skill file for complete SDD workflow guidance.
 
+### runtime-sync - Runtime Integration Consistency
+
+- **Location**: `.github/skills/runtime-sync/runtime-sync/SKILL.md`
+- **Use when**: Adding new runtime adapters, modifying existing adapters, auditing adapter consistency
+- **Key principle**: All adapters follow identical structure — only metadata values differ
+
 ## Architecture
 
 ClawDen uses a **Rust backend + React frontend** architecture:
