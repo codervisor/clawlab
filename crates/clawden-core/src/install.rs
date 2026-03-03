@@ -358,7 +358,7 @@ impl RuntimeInstaller {
             format!("openclaw@{}", normalize_version(version))
         };
 
-        self.report_progress(&format!("Installing openclaw via npm…"));
+        self.report_progress("Installing openclaw via npm…");
         run_command(
             Command::new("npm")
                 .arg("install")
