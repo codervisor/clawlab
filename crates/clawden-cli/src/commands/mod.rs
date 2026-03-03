@@ -15,6 +15,9 @@ mod stop;
 mod tools;
 mod up;
 
+#[cfg(test)]
+use std::sync::{Mutex, OnceLock};
+
 pub use channels::exec_channels;
 pub use dashboard::exec_dashboard;
 pub use doctor::exec_doctor;
@@ -30,3 +33,9 @@ pub use start::exec_start;
 pub use stop::exec_stop;
 pub use tools::exec_tools;
 pub use up::{exec_up, UpOptions};
+
+#[cfg(test)]
+pub(crate) fn test_env_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}

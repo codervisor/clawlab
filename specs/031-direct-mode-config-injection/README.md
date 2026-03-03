@@ -18,7 +18,6 @@ transitions:
 - status: in-progress
   at: 2026-03-03T06:59:43.779696Z
 ---
-
 # Direct Mode Config Injection — Config-Dir Translation
 
 ## Overview
@@ -225,38 +224,38 @@ Error: channel 'telegram' is enabled but TELEGRAM_BOT_TOKEN is empty.
 
 ## Plan
 
-- [ ] Add `toml = "0.8"` to workspace deps and `clawden-cli` Cargo.toml
-- [ ] Create `config_gen.rs` module with `generate_config_dir()` dispatcher
-- [ ] Implement `generate_zeroclaw_config()` — TOML generation
-- [ ] Implement `generate_picoclaw_config()` — JSON generation (stretch)
-- [ ] Create config dir at `~/.clawden/configs/<project_hash>/<runtime>/`
-- [ ] Inject `--config-dir` into start args in `exec_up()` direct-mode branch
-- [ ] Apply the same pattern for `exec_run()` direct-mode branch
-- [ ] Clean up config dirs on `clawden down`
-- [ ] Add default health URLs to `runtime_health_url()` for zeroclaw, openclaw, picoclaw, nullclaw, openfang
-- [ ] Add post-start readiness check in `exec_up()`: process-alive check after 500ms grace
-- [ ] Add health probe polling (up to 5× at 1s intervals) for runtimes with known health endpoints
-- [ ] Add early crash detection — capture log tail if process exits within 2s
-- [ ] Add pre-start config validation: non-empty channel tokens, provider API key presence
-- [ ] Print actionable error messages for missing credentials before start
-- [ ] Add test: generated TOML matches expected zeroclaw config.toml format
-- [ ] Add test: `--config-dir` arg is injected for supported runtimes only
-- [ ] Add test: post-start readiness check detects crashed runtime
-- [ ] Add test: pre-start validation catches empty channel token
+- [x] Add `toml = "0.8"` to workspace deps and `clawden-cli` Cargo.toml
+- [x] Create `config_gen.rs` module with `generate_config_dir()` dispatcher
+- [x] Implement `generate_zeroclaw_config()` — TOML generation
+- [x] Implement `generate_picoclaw_config()` — JSON generation (stretch)
+- [x] Create config dir at `~/.clawden/configs/<project_hash>/<runtime>/`
+- [x] Inject `--config-dir` into start args in `exec_up()` direct-mode branch
+- [x] Apply the same pattern for `exec_run()` direct-mode branch
+- [x] Clean up config dirs on `clawden down`
+- [x] Add default health URLs to `runtime_health_url()` for zeroclaw, openclaw, picoclaw, nullclaw, openfang
+- [x] Add post-start readiness check in `exec_up()`: process-alive check after 500ms grace
+- [x] Add health probe polling (up to 5× at 1s intervals) for runtimes with known health endpoints
+- [x] Add early crash detection — capture log tail if process exits within 2s
+- [x] Add pre-start config validation: non-empty channel tokens, provider API key presence
+- [x] Print actionable error messages for missing credentials before start
+- [x] Add test: generated TOML matches expected zeroclaw config.toml format
+- [x] Add test: `--config-dir` arg is injected for supported runtimes only
+- [x] Add test: post-start readiness check detects crashed runtime
+- [x] Add test: pre-start validation catches empty channel token
 
 ## Test
 
-- [ ] `clawden up` with telegram channel in clawden.yaml → generated config.toml contains correct `[channels_config.telegram].bot_token`
-- [ ] `clawden up` with openrouter provider → generated config.toml has `default_provider = "openrouter"` and API key
-- [ ] Stale `~/.zeroclaw/config.toml` does NOT interfere when `--config-dir` is used
-- [ ] `clawden down` removes the generated config directory
-- [ ] Runtimes without `--config-dir` (openclaw, nanoclaw) still work via env vars only
-- [ ] `config` overrides from clawden.yaml are merged into the generated config file
+- [x] `clawden up` with telegram channel in clawden.yaml → generated config.toml contains correct `[channels_config.telegram].bot_token`
+- [x] `clawden up` with openrouter provider → generated config.toml has `default_provider = "openrouter"` and API key
+- [x] Stale `~/.zeroclaw/config.toml` does NOT interfere when `--config-dir` is used
+- [x] `clawden down` removes the generated config directory
+- [x] Runtimes without `--config-dir` (openclaw, nanoclaw) still work via env vars only
+- [x] `config` overrides from clawden.yaml are merged into the generated config file
 - [ ] `clawden up` with openfang runtime → config.toml is generated with correct TOML structure and provider/channel fields
-- [ ] `clawden up` detects a runtime that crashes immediately and prints the log tail with a clear error
-- [ ] `clawden up` reports `✓ <runtime> ready` when the health endpoint responds within the polling window
-- [ ] `clawden up` warns (non-fatal) when health endpoint is not responding but process is alive
-- [ ] `clawden up` with an empty `TELEGRAM_BOT_TOKEN=` in .env → prints actionable error before starting the runtime
-- [ ] `clawden up` with a provider configured but no API key → prints actionable error before starting the runtime
+- [x] `clawden up` detects a runtime that crashes immediately and prints the log tail with a clear error
+- [x] `clawden up` reports `✓ <runtime> ready` when the health endpoint responds within the polling window
+- [x] `clawden up` warns (non-fatal) when health endpoint is not responding but process is alive
+- [x] `clawden up` with an empty `TELEGRAM_BOT_TOKEN=` in .env → prints actionable error before starting the runtime
+- [x] `clawden up` with a provider configured but no API key → prints actionable error before starting the runtime
 - [ ] `clawden up` with openfang in multi-runtime config alongside zeroclaw → both start and receive independent health checks
-- [ ] Works alongside env var passthrough (no regression for Docker mode)
+- [x] Works alongside env var passthrough (no regression for Docker mode)

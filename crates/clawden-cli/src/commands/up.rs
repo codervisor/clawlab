@@ -744,17 +744,12 @@ mod tests {
         build_runtime_env_vars, channels_for_runtime, validate_direct_runtime_config,
         verify_runtime_startup, ClawDenYaml,
     };
+    use crate::commands::test_env_lock;
     use clawden_core::{ExecutionMode, ProcessManager};
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
     use std::path::Path;
-    use std::sync::{Mutex, OnceLock};
     use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn env_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
-    }
 
     #[test]
     fn runtime_env_vars_include_provider_key_and_model() {
@@ -785,6 +780,37 @@ providers:
     }
 
     #[test]
+    fn runtime_env_vars_support_env_only_runtime_openclaw() {
+        let yaml = r#"
+runtime: openclaw
+provider: openai
+model: gpt-4o-mini
+providers:
+  openai:
+    api_key: sk-test
+channels:
+  bot:
+    type: telegram
+    token: tg-test
+"#;
+        let mut config = ClawDenYaml::parse_yaml(yaml).expect("yaml should parse");
+        config
+            .resolve_env_vars()
+            .expect("env vars should resolve without references");
+
+        let env = build_runtime_env_vars(&config, "openclaw").expect("env vars should build");
+        assert!(env
+            .iter()
+            .any(|(k, v)| k == "OPENAI_API_KEY" && v == "sk-test"));
+        assert!(env
+            .iter()
+            .any(|(k, v)| k == "TELEGRAM_BOT_TOKEN" && v == "tg-test"));
+        assert!(env
+            .iter()
+            .any(|(k, v)| k == "OPENCLAW_LLM_PROVIDER" && v == "openai"));
+    }
+
+    #[test]
     fn direct_validation_rejects_empty_channel_token() {
         let yaml = r#"
 runtime: zeroclaw
@@ -807,8 +833,30 @@ channels:
     }
 
     #[test]
+    fn direct_validation_rejects_missing_provider_api_key() {
+        let yaml = r#"
+runtime: zeroclaw
+provider: openrouter
+providers:
+  openrouter:
+    base_url: https://openrouter.ai/api/v1
+channels:
+  support-tg:
+    type: telegram
+    token: tg-token
+"#;
+        let mut config = ClawDenYaml::parse_yaml(yaml).expect("yaml should parse");
+        config.resolve_env_vars().expect("env vars should resolve");
+        let channels = channels_for_runtime(&config, "zeroclaw");
+        let err = validate_direct_runtime_config(&config, "zeroclaw", &[], &channels)
+            .expect_err("missing provider key must fail");
+        assert!(err.to_string().contains("provider 'openrouter'"));
+        assert!(err.to_string().contains("API key is missing"));
+    }
+
+    #[test]
     fn startup_check_detects_immediate_crash() {
-        let _guard = env_lock().lock().expect("env lock poisoned");
+        let _guard = test_env_lock().lock().expect("env lock poisoned");
         let original_home = std::env::var("HOME").ok();
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -829,6 +877,43 @@ channels:
         let msg = err.to_string();
         assert!(msg.contains("crashed on startup") || msg.contains("exited immediately"));
 
+        if let Some(home) = original_home {
+            std::env::set_var("HOME", home);
+        } else {
+            std::env::remove_var("HOME");
+        }
+        let _ = fs::remove_dir_all(tmp_home);
+    }
+
+    #[test]
+    fn startup_check_warns_when_health_not_responding_but_process_alive() {
+        let _guard = test_env_lock().lock().expect("env lock poisoned");
+        let original_home = std::env::var("HOME").ok();
+        let original_health = std::env::var("CLAWDEN_HEALTH_URL_ZEROCLAW").ok();
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time")
+            .as_nanos();
+        let tmp_home = std::env::temp_dir().join(format!("clawden-up-test-warn-{unique}"));
+        fs::create_dir_all(&tmp_home).expect("tmp home");
+        std::env::set_var("HOME", &tmp_home);
+        std::env::set_var("CLAWDEN_HEALTH_URL_ZEROCLAW", "http://127.0.0.1:9/health");
+
+        let manager = ProcessManager::new(ExecutionMode::Direct).expect("process manager");
+        let script = tmp_home.join("slow-runtime.sh");
+        write_executable(&script, "#!/usr/bin/env sh\nsleep 8\n");
+        let info = manager
+            .start_direct_with_env_and_project("zeroclaw", &script, &[], &[], Some("ph".into()))
+            .expect("runtime should start");
+        verify_runtime_startup(&manager, "zeroclaw", &info)
+            .expect("startup check should warn and continue");
+
+        let _ = manager.stop_with_timeout("zeroclaw", 1);
+        if let Some(url) = original_health {
+            std::env::set_var("CLAWDEN_HEALTH_URL_ZEROCLAW", url);
+        } else {
+            std::env::remove_var("CLAWDEN_HEALTH_URL_ZEROCLAW");
+        }
         if let Some(home) = original_home {
             std::env::set_var("HOME", home);
         } else {

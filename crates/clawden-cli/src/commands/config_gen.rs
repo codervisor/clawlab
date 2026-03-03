@@ -276,21 +276,16 @@ fn runtime_config_dir(project_hash: &str, runtime: &str) -> Result<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::{generate_config_dir, inject_config_dir_arg};
+    use super::{cleanup_project_config_dir, generate_config_dir, inject_config_dir_arg};
+    use crate::commands::test_env_lock;
     use clawden_config::ClawDenYaml;
     use std::fs;
     use std::path::Path;
-    use std::sync::{Mutex, OnceLock};
     use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn env_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
-    }
 
     #[test]
     fn generates_zeroclaw_toml_with_channels_provider_and_overrides() {
-        let _guard = env_lock().lock().expect("env lock");
+        let _guard = test_env_lock().lock().expect("env lock");
         let original_home = std::env::var("HOME").ok();
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -330,6 +325,26 @@ config:
         assert_eq!(
             parsed.get("default_model").and_then(toml::Value::as_str),
             Some("anthropic/claude-sonnet-4-6")
+        );
+        assert_eq!(
+            parsed
+                .get("reliability")
+                .and_then(|v| v.get("api_keys"))
+                .and_then(toml::Value::as_array)
+                .and_then(|rows| rows.first())
+                .and_then(|row| row.get("provider"))
+                .and_then(toml::Value::as_str),
+            Some("openrouter")
+        );
+        assert_eq!(
+            parsed
+                .get("reliability")
+                .and_then(|v| v.get("api_keys"))
+                .and_then(toml::Value::as_array)
+                .and_then(|rows| rows.first())
+                .and_then(|row| row.get("key"))
+                .and_then(toml::Value::as_str),
+            Some("sk-or-test")
         );
         assert_eq!(
             parsed
@@ -377,5 +392,97 @@ config:
         let mut openclaw_args = vec!["serve".to_string()];
         inject_config_dir_arg("openclaw", &mut openclaw_args, Path::new("/tmp/cfg"));
         assert_eq!(openclaw_args, vec!["serve".to_string()]);
+    }
+
+    #[test]
+    fn cleanup_project_config_dir_removes_generated_tree() {
+        let _guard = test_env_lock().lock().expect("env lock");
+        let original_home = std::env::var("HOME").ok();
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let tmp_home = std::env::temp_dir().join(format!("clawden-config-cleanup-{unique}"));
+        fs::create_dir_all(&tmp_home).expect("tmp home");
+        std::env::set_var("HOME", &tmp_home);
+
+        let yaml = r#"
+runtime: zeroclaw
+provider: openrouter
+providers:
+  openrouter:
+    api_key: sk-or-test
+"#;
+        let mut config = ClawDenYaml::parse_yaml(yaml).expect("yaml parse");
+        config.resolve_env_vars().expect("resolve env");
+        let dir = generate_config_dir(&config, "zeroclaw", "cleanup-ph")
+            .expect("config dir")
+            .expect("supported runtime");
+        assert!(dir.exists());
+
+        cleanup_project_config_dir("cleanup-ph").expect("cleanup should succeed");
+        assert!(!dir.exists());
+
+        if let Some(home) = original_home {
+            std::env::set_var("HOME", home);
+        } else {
+            std::env::remove_var("HOME");
+        }
+        let _ = fs::remove_dir_all(tmp_home);
+    }
+
+    #[test]
+    fn project_config_dir_is_isolated_from_stale_home_config() {
+        let _guard = test_env_lock().lock().expect("env lock");
+        let original_home = std::env::var("HOME").ok();
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let tmp_home = std::env::temp_dir().join(format!("clawden-config-isolation-{unique}"));
+        fs::create_dir_all(&tmp_home).expect("tmp home");
+        std::env::set_var("HOME", &tmp_home);
+
+        let stale_dir = tmp_home.join(".zeroclaw");
+        fs::create_dir_all(&stale_dir).expect("stale dir");
+        fs::write(
+            stale_dir.join("config.toml"),
+            "[channels_config.telegram]\nbot_token = \"stale-token\"\n",
+        )
+        .expect("stale config");
+
+        let yaml = r#"
+runtime: zeroclaw
+channels:
+  support-tg:
+    type: telegram
+    token: fresh-token
+"#;
+        let mut config = ClawDenYaml::parse_yaml(yaml).expect("yaml parse");
+        config.resolve_env_vars().expect("resolve env");
+
+        let generated_dir = generate_config_dir(&config, "zeroclaw", "iso-ph")
+            .expect("config dir")
+            .expect("supported runtime");
+        let generated_body =
+            fs::read_to_string(generated_dir.join("config.toml")).expect("generated config");
+        let stale_body = fs::read_to_string(stale_dir.join("config.toml")).expect("stale config");
+
+        let mut args = vec!["daemon".to_string()];
+        inject_config_dir_arg("zeroclaw", &mut args, &generated_dir);
+
+        assert!(args
+            .windows(2)
+            .any(|w| { w[0] == "--config-dir" && w[1] == generated_dir.to_string_lossy() }));
+        assert!(generated_body.contains("fresh-token"));
+        assert!(!generated_body.contains("stale-token"));
+        assert!(stale_body.contains("stale-token"));
+
+        if let Some(home) = original_home {
+            std::env::set_var("HOME", home);
+        } else {
+            std::env::remove_var("HOME");
+        }
+        let _ = fs::remove_dir_all(tmp_home);
     }
 }
