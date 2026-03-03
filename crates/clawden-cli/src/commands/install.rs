@@ -1,13 +1,36 @@
 use anyhow::Result;
 use clawden_core::{version_satisfies, RuntimeInstaller};
+use indicatif::{ProgressBar, ProgressStyle};
 use std::collections::HashMap;
+use std::time::Duration;
 
 use super::up::{load_config, pinned_version_for_runtime};
 use crate::util::append_audit_file;
 use crate::util::parse_runtime_version;
 
+fn install_spinner() -> ProgressBar {
+    let spinner = ProgressBar::new_spinner();
+    spinner.set_style(
+        ProgressStyle::default_spinner()
+            .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
+            .template("{spinner:.cyan} {msg}")
+            .expect("invalid spinner template"),
+    );
+    spinner.enable_steady_tick(Duration::from_millis(80));
+    spinner
+}
+
+fn with_progress(installer: &mut RuntimeInstaller) -> ProgressBar {
+    let spinner = install_spinner();
+    let sp = spinner.clone();
+    installer.set_progress_callback(move |msg| {
+        sp.set_message(msg.to_string());
+    });
+    spinner
+}
+
 pub fn exec_install(
-    installer: &RuntimeInstaller,
+    installer: &mut RuntimeInstaller,
     runtime: Option<String>,
     all: bool,
     list: bool,
@@ -98,7 +121,9 @@ pub fn exec_install(
                 continue;
             }
 
+            let spinner = with_progress(installer);
             let installed = installer.install_runtime(&runtime_name, Some(&target))?;
+            spinner.finish_and_clear();
             let _ = append_audit_file("runtime.upgrade", &runtime_name, "ok");
             if let Some(prev) = current {
                 println!(
@@ -118,7 +143,9 @@ pub fn exec_install(
     }
 
     if all {
+        let spinner = with_progress(installer);
         let installed = installer.install_all()?;
+        spinner.finish_and_clear();
         for row in installed {
             println!(
                 "Installed {}@{} at {}",
@@ -135,7 +162,9 @@ pub fn exec_install(
     };
 
     let (runtime_name, version) = parse_runtime_version(&runtime_spec);
+    let spinner = with_progress(installer);
     let installed = installer.install_runtime(&runtime_name, version.as_deref())?;
+    spinner.finish_and_clear();
     println!(
         "Installed {}@{} at {}",
         installed.runtime,

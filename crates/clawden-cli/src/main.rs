@@ -10,7 +10,7 @@ use cli::{Cli, Commands};
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
-    let installer = RuntimeInstaller::new()?;
+    let mut installer = RuntimeInstaller::new()?;
     let process_manager = ProcessManager::new(ExecutionMode::Auto)?;
     let registry = clawden_adapters::builtin_registry();
     let mut manager = LifecycleManager::new(registry.adapters_map());
@@ -37,7 +37,7 @@ async fn main() -> Result<()> {
             list,
             upgrade,
             outdated,
-        } => commands::exec_install(&installer, runtime, all, list, upgrade, outdated)?,
+        } => commands::exec_install(&mut installer, runtime, all, list, upgrade, outdated)?,
         Commands::Uninstall { runtime } => commands::exec_uninstall(&installer, runtime)?,
         Commands::Up {
             runtimes,

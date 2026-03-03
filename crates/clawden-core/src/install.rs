@@ -28,12 +28,15 @@ pub struct VersionCheck {
     pub update_available: bool,
 }
 
+type ProgressCallback = Box<dyn Fn(&str) + Send + Sync>;
+
 pub struct RuntimeInstaller {
     root_dir: PathBuf,
     runtimes_dir: PathBuf,
     cache_dir: PathBuf,
     logs_dir: PathBuf,
     lock_path: PathBuf,
+    progress: Option<ProgressCallback>,
 }
 
 impl RuntimeInstaller {
@@ -52,7 +55,18 @@ impl RuntimeInstaller {
             cache_dir,
             logs_dir,
             lock_path: root_dir.join(".install.lock"),
+            progress: None,
         })
+    }
+
+    pub fn set_progress_callback(&mut self, cb: impl Fn(&str) + Send + Sync + 'static) {
+        self.progress = Some(Box::new(cb));
+    }
+
+    fn report_progress(&self, message: &str) {
+        if let Some(cb) = &self.progress {
+            cb(message);
+        }
     }
 
     pub fn install_runtime(
@@ -63,6 +77,7 @@ impl RuntimeInstaller {
         ensure_runtime_supported(runtime)?;
         let _lock = InstallLock::acquire(&self.lock_path)?;
 
+        self.report_progress(&format!("Resolving {runtime} version…"));
         let version = self.resolve_requested_version(runtime, requested_version)?;
         let runtime_dir = self.runtimes_dir.join(runtime);
         let tmp_dir = runtime_dir.join(format!(".{version}.tmp"));
@@ -73,6 +88,7 @@ impl RuntimeInstaller {
         }
 
         fs::create_dir_all(&tmp_dir)?;
+        self.report_progress(&format!("Installing {runtime}@{version}…"));
         let executable = match runtime {
             "zeroclaw" => self.install_zeroclaw(&version, &tmp_dir)?,
             "picoclaw" => self.install_picoclaw(&version, &tmp_dir)?,
@@ -83,6 +99,7 @@ impl RuntimeInstaller {
         };
         validate_runtime_artifact(runtime, &executable)?;
 
+        self.report_progress(&format!("Finalizing {runtime}@{version}…"));
         fs::create_dir_all(&runtime_dir)?;
         if final_dir.exists() {
             fs::remove_dir_all(&final_dir)?;
@@ -284,6 +301,7 @@ impl RuntimeInstaller {
             &asset.name,
             &asset.url,
         )?;
+        self.report_progress("Extracting zeroclaw archive…");
         self.extract_tar_gz(&archive_path, tmp_dir)?;
 
         let candidate = find_executable_by_name(tmp_dir, "zeroclaw")?.ok_or_else(|| {
@@ -305,6 +323,7 @@ impl RuntimeInstaller {
             "https://github.com/picoclaw-labs/picoclaw/releases/download/picoclaw/picoclaw_x64.7z";
         let archive_path = self.download_to_cache("picoclaw", "latest", archive_name, url)?;
 
+        self.report_progress("Extracting picoclaw archive…");
         ensure_command_available("7z", "p7zip")?;
         run_command(
             Command::new("7z")
@@ -339,6 +358,7 @@ impl RuntimeInstaller {
             format!("openclaw@{}", normalize_version(version))
         };
 
+        self.report_progress(&format!("Installing openclaw via npm…"));
         run_command(
             Command::new("npm")
                 .arg("install")
@@ -373,6 +393,7 @@ impl RuntimeInstaller {
             normalize_version(version)
         };
 
+        self.report_progress("Cloning nanoclaw repository…");
         let repo_dir = tmp_dir.join("nanoclaw-src");
         run_command(
             Command::new("git")
@@ -386,6 +407,7 @@ impl RuntimeInstaller {
             "clone nanoclaw repository",
         )?;
 
+        self.report_progress("Installing nanoclaw dependencies…");
         run_command(
             command_in_dir("pnpm", &repo_dir)
                 .arg("install")
@@ -449,6 +471,7 @@ impl RuntimeInstaller {
             &asset.name,
             &asset.url,
         )?;
+        self.report_progress("Extracting openfang archive…");
         self.extract_tar_gz(&archive_path, tmp_dir)?;
 
         let candidate = find_executable_by_name(tmp_dir, "openfang")?.ok_or_else(|| {
@@ -488,6 +511,7 @@ impl RuntimeInstaller {
         }
 
         ensure_command_available("curl", "curl")?;
+        self.report_progress(&format!("Downloading {runtime} {version}…"));
         run_command(
             Command::new("curl")
                 .arg("-fsSL")
@@ -883,11 +907,19 @@ fn ensure_command_available(command: &str, install_hint: &str) -> Result<()> {
 }
 
 fn run_command(command: &mut Command, action: &str) -> Result<()> {
-    let status = command
-        .status()
+    let output = command
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .output()
         .with_context(|| format!("failed to {action}"))?;
-    if !status.success() {
-        bail!("command failed while trying to {action}: status {status}");
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let detail = if stderr.trim().is_empty() {
+            format!("exit status {}", output.status)
+        } else {
+            stderr.trim().to_string()
+        };
+        bail!("command failed while trying to {action}: {detail}");
     }
     Ok(())
 }
