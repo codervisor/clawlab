@@ -54,25 +54,21 @@ Each tool is a `setup.sh` script sourced by the entrypoint. Users opt in via `to
 
 ### Tool Tiers
 
-Tools are organized into tiers based on size, install cost, and universality:
+The built-in tool catalog is **fixed at two tiers**. Extended capabilities are handled by image variants + agent skills (see below).
 
-| Tier          | Install Strategy                                                     | Image Impact            | Description                                 |
-| ------------- | -------------------------------------------------------------------- | ----------------------- | ------------------------------------------- |
-| **Core**      | Baked into base image, always present                                | Minimal (~50MB total)   | Fundamental utilities every agent needs     |
-| **Standard**  | Pre-installed in default image, activated on request                 | Moderate (~200MB total) | Common capabilities most agents use         |
-| **Extended**  | Available in use-case image variants or installed at container start | Heavy (200–450MB each)  | Specialized capabilities, split by use case |
-| **Community** | User-provided, mounted or installed at start                         | Varies                  | Custom tools via `~/.clawden/tools/`        |
+| Tier         | Install Strategy                                     | Image Impact            | Description                             |
+| ------------ | ---------------------------------------------------- | ----------------------- | --------------------------------------- |
+| **Core**     | Baked into base image, always present                | Minimal (~50MB total)   | Fundamental utilities every agent needs |
+| **Standard** | Pre-installed in default image, activated on request | Moderate (~200MB total) | Common capabilities most agents use     |
 
-Extended tools ship as **use-case image variants**:
+Extended capabilities ship as **use-case image variants** (no tool manifests — just pre-installed OS binaries):
 
 | Image Tag   | Includes                                 | ~Size  | Use Case                                                                  |
 | ----------- | ---------------------------------------- | ------ | ------------------------------------------------------------------------- |
-| `:latest`   | Core + Standard                          | ~650MB | General-purpose agent runtime                                             |
+| `:latest`   | Core + Standard tools                    | ~650MB | General-purpose agent runtime                                             |
 | `:browser`  | `:latest` + headless Chromium/Playwright | ~1.1GB | LLM web browsing — search, scrape, fill forms                             |
 | `:computer` | `:browser` + Xvfb/VNC/noVNC/fluxbox      | ~1.3GB | Full computer agent — GUI interaction, visual browser, desktop automation |
 | `:full`     | `:computer` + compiler toolchain         | ~1.6GB | Advanced users — native compilation, build from source                    |
-
-Any extended tool can also be **lazy-installed** into `:latest` at first start (volume-cached), so users are not forced to pick a variant upfront.
 
 ### Tool Catalog
 
@@ -94,13 +90,15 @@ Any extended tool can also be **lazy-installed** into `:latest` at first start (
 | `network`    | netcat, socat, dnsutils, traceroute | 15MB  | Network diagnostics, TCP/UDP testing, DNS queries             |
 | `sandbox`    | bubblewrap (bwrap)                  | 5MB   | Isolated code execution with resource limits                  |
 
-#### Extended Tools (use-case image variants or on-demand)
+#### Extended Capabilities (image variants only — no tool manifests)
 
-| Tool       | Components                        | ~Size | Image Variant | What It Gives the Agent                                       |
-| ---------- | --------------------------------- | ----- | ------------- | ------------------------------------------------------------- |
-| `browser`  | Chromium 130+, Playwright 1.49+   | 450MB | `:browser`    | Headless web browsing — LLM-driven search, scrape, form fill  |
-| `gui`      | Xvfb, x11vnc, noVNC, fluxbox      | 200MB | `:computer`   | Full virtual desktop for computer agents (requires `browser`) |
-| `compiler` | gcc, g++, make, cmake, pkg-config | 250MB | `:full`       | Compile C/C++ code, build native extensions (advanced users)  |
+Extended capabilities are provided by **image variants** at the OS level and by **agent skills** at the UX level. They do not have `manifest.toml` / `setup.sh` — the Dockerfile multi-stage build installs the binaries directly.
+
+| Capability | Components                        | ~Size | Image Variant | Agent-Facing UX                 |
+| ---------- | --------------------------------- | ----- | ------------- | ------------------------------- |
+| Browser    | Chromium 130+, Playwright 1.49+   | 450MB | `:browser`    | `agent-browser` skill           |
+| GUI        | Xvfb, x11vnc, noVNC, fluxbox      | 200MB | `:computer`   | Computer-use skills             |
+| Compiler   | gcc, g++, make, cmake, pkg-config | 250MB | `:full`       | Direct CLI use (advanced users) |
 
 ### Tool Manifest Format
 
@@ -112,7 +110,7 @@ Every tool has a `manifest.toml` alongside its `setup.sh`:
 name = "python"
 description = "Python 3.12 runtime with pip and venv"
 version = "3.12"
-tier = "standard"             # core | standard | extended
+tier = "standard"             # core | standard
 phase = 2
 
 [size]
@@ -215,58 +213,15 @@ In multi-tenant mode, `clawden-sandbox` is **fail-closed**: if required kernel/c
 
 The wrapper script (`/usr/local/bin/clawden-sandbox`) is installed by the sandbox tool's `setup.sh`. Runtimes call it instead of executing code directly when untrusted input is involved.
 
-### Browser Tool Design
+### Extended Capabilities via Image Variants + Skills
 
-`browser` is a **substrate-only tool** — it ensures Chromium and Playwright binaries are present and starts a persistent browser server. The agent-facing UX (navigation, snapshots, form filling) is provided by **agent skills** like `agent-browser`, not by this tool directly.
+Extended capabilities (browser, GUI, compiler) are **not built-in tools** — they have no `manifest.toml` or `setup.sh`. Instead:
 
-**Separation of concerns:**
-- **`browser` tool (this spec):** OS-level substrate — install Chromium, start Playwright server, export `CLAWDEN_BROWSER_WS`
-- **`agent-browser` skill (external):** Agent-facing CLI — `agent-browser open`, `snapshot`, `click`, `fill`, etc.
-- **Runtime plugins:** LLM-callable actions that delegate to one of the above
+- **Image variants** (`:browser`, `:computer`, `:full`) pre-install OS-level binaries at Docker build time
+- **Agent skills** (e.g., `agent-browser`) provide the agent-facing UX on top of those binaries
+- **Runtime plugins** bridge skills to the LLM
 
-This avoids duplicating browser automation logic inside the tool layer. The tool's `setup.sh` is scoped to:
-
-```bash
-# setup.sh starts browser server in background
-# install step is skipped when binaries are already present
-# for variant images, Chromium is pre-baked at image build time
-# for lazy-install mode, install occurs once and is volume-cached
-npx playwright run-server --port 3100 &
-
-# Capabilities
-export CLAWDEN_BROWSER_WS="ws://localhost:3100"
-```
-
-Runtimes and skills connect via WebSocket endpoint. Multiple runtime instances share one browser server. `setup.sh` must be idempotent: if the server is already healthy on port 3100, it reuses the existing process and does not spawn duplicates.
-
-**Size mitigation**: Chromium is ~400MB. For the `:latest` image, it's not included. Users who need it either:
-1. Use `clawden-runtime:browser` (or `:computer` / `:full` which include it)
-2. Or use a volume-cached lazy install on `:latest` (first start downloads, subsequent starts skip)
-
-### GUI Tool Design
-
-`gui` provides a virtual desktop accessible via VNC/noVNC for full computer agents. It always requires `browser` — `computer` is a superset that includes visual browser interaction (point-and-click, screenshots) plus arbitrary GUI app control.
-
-Because this may run in remote multi-tenant deployments, GUI access is secure-by-default:
-- No unauthenticated VNC (`-nopw`) is allowed.
-- VNC/noVNC bind to localhost by default; external access is only via an authenticated gateway.
-- noVNC sessions require short-lived, per-session tokens tied to runtime identity.
-- TLS termination is required at the gateway boundary for remote access.
-
-```bash
-# setup.sh (runs after browser setup.sh)
-Xvfb :99 -screen 0 1280x1024x24 &
-export DISPLAY=:99
-x11vnc -display :99 -forever -rfbauth /run/clawden/x11vnc.pass -localhost -rfbport 5900 &
-# noVNC web client
-/opt/noVNC/utils/novnc_proxy --vnc localhost:5900 --listen 127.0.0.1:6080 &
-
-export CLAWDEN_DISPLAY=":99"
-export CLAWDEN_VNC_PORT="5900"
-export CLAWDEN_NOVNC_PORT="6080"
-```
-
-The `:computer` image variant includes both `browser` and `gui`. Agents get headless browsing *and* a full desktop — the LLM can choose between Playwright API calls (fast, structured) or visual mouse/keyboard interaction (when DOM access isn't enough).
+This means the tool catalog is **fixed at Core + Standard tiers**. The entrypoint's activation pipeline, capabilities file, and `CLAWDEN_TOOLS` env var only cover those tiers. Extended binaries are always available in the matching image variant — no activation step needed.
 
 ### The `core-utils` Tool
 
@@ -282,21 +237,10 @@ These are baked into the base image. `setup.sh` is a validation-only no-op.
 
 ### Tool Management CLI
 
-As the tool catalog grows, users need tooling to manage tools:
-
 ```bash
-# Discovery
-clawden tools list                     # all available tools (with tier, size, status)
-clawden tools list --installed         # only installed tools
+clawden tools list                     # all Core + Standard tools with tier, size, status
+clawden tools list --installed         # only activated tools
 clawden tools info python              # detailed info for one tool
-
-# Management (mainly for direct-install mode)
-clawden tools install browser          # install an extended tool
-clawden tools remove browser           # remove a tool
-clawden tools update                   # update all installed tools
-
-# Authoring
-clawden tools create my-tool           # scaffold a custom tool in ~/.clawden/tools/
 ```
 
 Example output:
@@ -311,9 +255,6 @@ code-tools   standard   25MB    installed   ripgrep, fd, bat
 database     standard    5MB    installed   SQLite 3
 network      standard   15MB    installed   netcat, dnsutils, traceroute
 sandbox      standard    5MB    installed   bubblewrap execution sandbox
-browser      extended  450MB    available   Headless Chromium + Playwright
-gui          extended  200MB    available   Xvfb + VNC/noVNC desktop
-compiler     extended  250MB    available   gcc, g++, make, cmake
 ```
 
 ### Skill Integration
@@ -322,30 +263,24 @@ Built-in tools and agent skills are complementary layers:
 
 | Layer              | Responsibility                                 | Example                                                              |
 | ------------------ | ---------------------------------------------- | -------------------------------------------------------------------- |
-| **Built-in tool**  | OS substrate — binaries, servers, env vars     | `browser` installs Chromium, starts Playwright server                |
+| **Built-in tool**  | OS substrate — binaries, servers, env vars     | `python` tool activates Python 3.12 + pip                            |
+| **Image variant**  | Pre-installed extended binaries                | `:browser` image ships Chromium + Playwright                         |
 | **Agent skill**    | Agent-facing UX — CLI commands the LLM invokes | `agent-browser` provides `open`, `snapshot`, `click`                 |
 | **Runtime plugin** | LLM-callable action within a specific runtime  | OpenClaw "web_search" plugin calls `agent-browser` or Playwright API |
 
 **How they connect:**
 
-1. **`SkillDefinition.tools`**: The SDK's `SkillDefinition` (in `@clawden/sdk`) declares which built-in tools a skill needs via its `tools: string[]` field. A skill declaring `tools: ["browser"]` communicates that the `browser` built-in tool must be activated.
+1. **`SkillDefinition.tools`**: The SDK's `SkillDefinition` (in `@clawden/sdk`) declares which built-in tools a skill needs via its `tools: string[]` field. A skill declaring `tools: ["python"]` communicates that the `python` built-in tool must be activated.
 
-2. **`tools.json` validation**: At `install_skill()` time, the adapter checks `/run/clawden/tools.json` (the capabilities file written by the entrypoint) to verify all declared tool dependencies are activated. If a skill requires `browser` but the container was started without it, installation fails with a clear message:
+2. **`tools.json` validation**: At `install_skill()` time, the adapter checks `/run/clawden/tools.json` (the capabilities file written by the entrypoint) to verify all declared tool dependencies are activated. If a skill requires `python` but the container was started without it, installation fails with a clear message:
    ```
-   Skill "web-search" requires tool "browser" which is not activated.
-   Restart with: clawden up --with browser
+   Skill "data-analysis" requires tool "python" which is not activated.
+   Restart with: clawden up --with python
    ```
 
 3. **Marketplace filtering**: `MarketplaceSearchQuery.tool` already supports filtering skills by required tool, letting users discover skills compatible with their activated tool set.
 
-4. **Lazy install trigger**: When a skill declares a tool dependency and lazy install is enabled, `install_skill()` can automatically trigger tool activation (for extended tools on `:latest` with volume caching) instead of failing.
-
-### Scaling Strategy
-
-- Flat directory under `/opt/clawden/tools/`, each with `manifest.toml` + `setup.sh`.
-- Resolve dependencies with a topological sort before activation.
-- Add `/opt/clawden/tools/registry.toml` for fast discovery.
-- Future: support namespaced community tools via remote registry.
+4. **Lazy install trigger**: When a skill declares a tool dependency and lazy install is enabled, `install_skill()` can automatically trigger tool activation instead of failing.
 
 ### Image Layering
 
@@ -381,52 +316,37 @@ Each variant is an additive layer on the previous. Layers 2–3 change infrequen
 - [x] Add standard tools to Dockerfile as separate layer
 - [x] Implement `clawden tools list` and `clawden tools info` CLI commands
 
-### Phase 3: Extended Tools & Use-Case Variants
-- [ ] Create `browser` tool — substrate only (Chromium + Playwright install + server startup); agent-facing UX delegated to `agent-browser` skill
-- [x] Build `:browser` image variant (`:latest` + browser layer)
-- [ ] Create `gui` tool (Xvfb + x11vnc + noVNC + fluxbox, depends on `browser`)
-- [x] Build `:computer` image variant (`:browser` + gui layer)
-- [x] Build `:full` image variant (`:computer` + compiler layer)
-- [ ] Implement lazy install for extended tools in `:latest` image (volume-cached)
+### Phase 3: Use-Case Image Variants
+- [x] Build `:browser` image variant (`:latest` + Chromium/Playwright layer)
+- [x] Build `:computer` image variant (`:browser` + Xvfb/VNC/noVNC layer)
+- [x] Build `:full` image variant (`:computer` + compiler toolchain layer)
 - [ ] Add skill→tool dependency validation: check `tools.json` against `SkillDefinition.tools` at `install_skill()` time
-- ~~Create `compiler` tool (gcc, g++, make, cmake)~~ — **deferred**, no skill or runtime currently requires it; image variant ships pre-installed binaries which is sufficient
 
-### Phase 4: Ecosystem
-- [ ] Implement `clawden tools install/remove/update` for direct-install mode
-- [ ] Implement `clawden tools create` scaffolding for custom tools
-- [ ] Add `registry.toml` for tool discovery
-- [ ] Document custom tool authoring guide
+Extended capabilities (browser automation, GUI interaction, compilation) are provided by the image variants at the OS level and by **agent skills** at the UX level. No additional built-in tool manifests or `setup.sh` scripts are needed beyond Core and Standard tiers — skills like `agent-browser` handle the agent-facing interface directly.
 
 ## Test
 
 - [ ] `clawden run zeroclaw --with git,python` — Python 3 available inside runtime
-- [ ] `clawden run openclaw --with browser` — Playwright connects to headless Chromium
-- [ ] Skill with `tools: ["browser"]` fails `install_skill()` when browser tool is not activated
-- [ ] Skill with `tools: ["browser"]` succeeds when browser tool is activated
+- [ ] Skill with `tools: ["python"]` fails `install_skill()` when python tool is not activated
+- [ ] Skill with `tools: ["python"]` succeeds when python tool is activated
 - [ ] `tools.json` capabilities file written with correct versions after activation
-- [ ] Tool with unmet dependency fails fast at entrypoint: `gui` without `browser` errors clearly
 - [ ] `sandbox` isolates execution — sandboxed process cannot access network, cannot read files outside workspace
 - [ ] `sandbox` enforces memory/CPU/time limits; attempts to exceed limits are terminated and audited
 - [ ] Multi-tenant fail-closed behavior: if sandbox primitives are unavailable, untrusted execution is denied
 - [ ] `clawden tools list` shows all tools with tier, size, and status
-- [ ] Extended tool lazy install works — first start installs to volume, second start skips
-- [ ] Custom tool in `~/.clawden/tools/my-tool/` with valid `manifest.toml` is discovered and activatable
 - [ ] Image sizes: `:latest` < 700MB, `:browser` < 1.2GB, `:computer` < 1.4GB, `:full` < 1.7GB
-- [ ] GUI security defaults: VNC/noVNC are localhost-only by default, require auth token flow, and are reachable remotely only through authenticated TLS gateway
 
 ## Notes
 
 - `core-utils` replaces ad-hoc installs scattered across runtime configs — single source for common CLI tools
 - `sandbox` is the highest-priority standard tool — without it, agents running arbitrary code are a security liability
-- `browser` is substrate-only (install + server); agent-browser skill provides the agent-facing CLI
-- `compiler` tool deferred — `:full` image variant already ships gcc/g++/make/cmake pre-installed; a formal tool manifest can be added later if a skill or runtime needs it
+- Extended capabilities (browser, GUI, compiler) are handled by image variants + agent skills — no extended-tier tool manifests needed
 - `SkillDefinition.tools` in `@clawden/sdk` is the contract between skills and built-in tools — skills declare, tools.json validates
 - Node.js is already in the base image for OpenClaw/NanoClaw
-- `gui` always requires `browser` — `computer` is a superset of browser use. The `:computer` image includes both.
-- `compiler` targets advanced users only (custom native extensions, research). Most agents never need it.
 - Image variants form a strict chain: `:latest` ⊂ `:browser` ⊂ `:computer` ⊂ `:full` — each adds one layer
-- Direct-install mode (spec 022) uses the same manifests and `setup.sh` scripts — the only difference is install method (apt in container vs. host package manager)
+- Direct-install mode (spec 022) uses the same manifests and `setup.sh` scripts for Core/Standard tools
 - `yq` refers to the Go-based `yq` (mikefarah/yq), not the Python wrapper
 
 - Progress update (2026-03-03): Docker multi-target stages for `browser`, `computer`, and `full` are implemented in `docker/Dockerfile`, so the image-variant build milestones are complete even though the corresponding tool manifests/setup scripts remain pending.
 - Decision (2026-03-03): `browser` tool scoped to substrate-only after confirming `agent-browser` skill covers agent-facing UX. `compiler` tool deferred — no skill or runtime currently requires it beyond what the `:full` image variant already provides. Added skill→tool dependency validation to Phase 3.
+- Decision (2026-03-03): Removed Phase 4 (ecosystem/scaling) and all extended-tier tool manifests from Phase 3. Agent skills provide the extensibility layer — the built-in tool catalog is fixed at Core + Standard tiers. Image variants supply OS-level binaries for extended use cases; skills handle the agent-facing interface.
