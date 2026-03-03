@@ -18,11 +18,32 @@ follow an identical structure — only metadata values (language, channels, port
 
 ## Decision Tree
 
-- **Adding a new runtime?** → Read [full-stack-checklist.md](references/full-stack-checklist.md),
-  then [adapter-template.md](references/adapter-template.md) for the canonical Rust pattern
-- **Modifying an existing adapter?** → Read [consistency-rules.md](references/consistency-rules.md)
+- **Adding a new runtime?** → First run the [upstream research workflow](references/upstream-sources.md#research-workflow)
+  to gather accurate metadata, then follow [full-stack-checklist.md](references/full-stack-checklist.md)
+  using [adapter-template.md](references/adapter-template.md) for the canonical Rust pattern
+- **Updating an existing adapter?** → Check [upstream-sources.md](references/upstream-sources.md)
+  for the runtime's repo/npm, review recent releases for changes, then update metadata
+- **Modifying adapter behavior?** → Read [consistency-rules.md](references/consistency-rules.md)
   first, fix any known violations you encounter
 - **Auditing all adapters?** → Follow the audit procedure in [consistency-rules.md](references/consistency-rules.md)
+
+## Upstream Research (Do This First)
+
+Before writing any adapter code, research the runtime's upstream repo/registry to get
+accurate metadata. The [upstream-sources.md](references/upstream-sources.md) reference documents:
+
+- **Source registry** — GitHub repo URLs, npm packages, and git repos for all 9 runtimes
+- **5-step research workflow** — README → CHANGELOG → channel details → install method → document
+- **Quick commands** — curl/npm/git one-liners to check latest versions and READMEs
+- **Install logic cross-reference** — how each runtime maps to `install.rs` functions
+
+Key repos:
+| Runtime | Upstream |
+|---------|----------|
+| ZeroClaw | `zeroclaw-labs/zeroclaw` (GitHub releases) |
+| PicoClaw | `picoclaw-labs/picoclaw` (GitHub releases) |
+| OpenClaw | `openclaw` npm package |
+| NanoClaw | `qwibitai/nanoclaw` (git clone) |
 
 ## Architecture Quick Reference
 
@@ -58,6 +79,7 @@ See [consistency-rules.md](references/consistency-rules.md) for the complete rul
 
 ## References
 
+- **[upstream-sources.md](references/upstream-sources.md)** — Upstream repo URLs for all runtimes, 5-step research workflow, quick CLI commands, and install logic cross-reference. **Read this first** before any adapter work.
 - **[adapter-template.md](references/adapter-template.md)** — Canonical Rust adapter with every method annotated. Use as copy-paste source for new adapters.
 - **[full-stack-checklist.md](references/full-stack-checklist.md)** — Step-by-step checklist covering core enum → adapter → Cargo features → registry → Docker → dashboard → verification.
 - **[consistency-rules.md](references/consistency-rules.md)** — Hard rules, known violations in existing adapters, and audit procedure.

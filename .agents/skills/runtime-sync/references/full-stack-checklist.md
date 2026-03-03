@@ -4,6 +4,7 @@ Follow every step in order. Do not skip steps.
 
 ## Table of Contents
 
+- [Step 0: Upstream research](#step-0-upstream-research)
 - [Step 1: Core enum](#step-1-core-enum)
 - [Step 2: Adapter module](#step-2-adapter-module)
 - [Step 3: Feature flag](#step-3-feature-flag)
@@ -11,6 +12,18 @@ Follow every step in order. Do not skip steps.
 - [Step 5: Docker integration](#step-5-docker-integration)
 - [Step 6: Dashboard](#step-6-dashboard)
 - [Step 7: Verify](#step-7-verify)
+
+## Step 0: Upstream research
+
+**Reference:** [upstream-sources.md](upstream-sources.md)
+
+Before writing any code, research the runtime's upstream repo/registry:
+
+1. Find the runtime's source (GitHub repo, npm package, etc.)
+2. Read the README for: channels, config format, default port, capabilities, language
+3. Check recent CHANGELOG/releases for new features or breaking changes
+4. Determine the install method (binary release, npm, git clone, cargo)
+5. Document channel support levels (Native, Via("mechanism"), Unsupported)
 
 ## Step 1: Core enum
 
