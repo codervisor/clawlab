@@ -266,10 +266,29 @@ pub(crate) fn generate_toml_config(
         }
     }
     if !channels_cfg.is_empty() {
-        root.insert(
-            "channels_config".to_string(),
-            TomlValue::Table(channels_cfg),
-        );
+        // Merge channel entries into existing channels_config from the base
+        // template, preserving non-channel keys like `cli = true` that the
+        // runtime requires.
+        if let Some(TomlValue::Table(existing)) = root.get_mut("channels_config") {
+            existing.extend(channels_cfg);
+        } else {
+            root.insert(
+                "channels_config".to_string(),
+                TomlValue::Table(channels_cfg),
+            );
+        }
+    }
+
+    // zeroclaw requires `cli = true` in channels_config — ensure it's
+    // always present even when no base template was seeded via onboard.
+    if runtime == "zeroclaw" {
+        let channels = root
+            .entry("channels_config".to_string())
+            .or_insert_with(|| TomlValue::Table(toml::Table::new()));
+        if let TomlValue::Table(t) = channels {
+            t.entry("cli".to_string())
+                .or_insert(TomlValue::Boolean(true));
+        }
     }
 
     merge_json_into_toml(&mut root, runtime_config_overrides(config, runtime));
@@ -480,6 +499,14 @@ config:
                 .and_then(toml::Value::as_str),
             Some("tg-test-token")
         );
+        // zeroclaw requires `cli = true` in channels_config
+        assert_eq!(
+            parsed
+                .get("channels_config")
+                .and_then(|v| v.get("cli"))
+                .and_then(toml::Value::as_bool),
+            Some(true)
+        );
         assert_eq!(
             parsed
                 .get("channels_config")
@@ -596,6 +623,15 @@ config:
                 .and_then(|v| v.get("bot_token"))
                 .and_then(toml::Value::as_str),
             Some("tg-merged-token")
+        );
+
+        // zeroclaw requires `cli = true` in channels_config
+        assert_eq!(
+            merged
+                .get("channels_config")
+                .and_then(|v| v.get("cli"))
+                .and_then(toml::Value::as_bool),
+            Some(true)
         );
 
         // Custom config override from clawden should be present.
