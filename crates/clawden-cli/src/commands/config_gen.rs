@@ -201,7 +201,13 @@ fn generate_picoclaw_config(
     }
 
     for (k, v) in runtime_config_overrides(config, runtime) {
-        root.insert(k.clone(), v.clone());
+        let key = if k == "system_prompt" {
+            // picoclaw expects camelCase for this field.
+            "systemPrompt".to_string()
+        } else {
+            k.clone()
+        };
+        root.insert(key, v.clone());
     }
     root
 }
@@ -549,6 +555,52 @@ config:
         assert!(args
             .windows(2)
             .any(|w| { w[0] == "--config-dir" && w[1] == dir.to_string_lossy() }));
+
+        if let Some(home) = original_home {
+            std::env::set_var("HOME", home);
+        } else {
+            std::env::remove_var("HOME");
+        }
+        let _ = fs::remove_dir_all(tmp_home);
+    }
+
+    #[test]
+    fn generates_picoclaw_json_with_system_prompt_override() {
+        let _guard = test_env_lock().lock().expect("env lock");
+        let original_home = std::env::var("HOME").ok();
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let tmp_home = std::env::temp_dir().join(format!("clawden-picoclaw-config-{unique}"));
+        fs::create_dir_all(&tmp_home).expect("tmp home");
+        std::env::set_var("HOME", &tmp_home);
+
+        let yaml = r#"
+runtime: picoclaw
+provider: openai
+providers:
+  openai:
+    api_key: sk-pico-test
+config:
+  system_prompt: You are concise
+"#;
+        let mut config = ClawDenYaml::parse_yaml(yaml).expect("yaml parse");
+        config.resolve_env_vars().expect("resolve env");
+
+        let dir = generate_config_dir(&config, "picoclaw", "picoclaw-ph")
+            .expect("config dir")
+            .expect("supported runtime");
+        let body = fs::read_to_string(dir.join("config.json")).expect("read config");
+        let parsed: serde_json::Value = serde_json::from_str(&body).expect("valid json");
+
+        assert_eq!(
+            parsed
+                .get("systemPrompt")
+                .and_then(serde_json::Value::as_str),
+            Some("You are concise")
+        );
+        assert!(parsed.get("system_prompt").is_none());
 
         if let Some(home) = original_home {
             std::env::set_var("HOME", home);

@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 created: 2026-03-04
 priority: high
 tags:
@@ -14,11 +14,15 @@ depends_on:
 - 031-direct-mode-config-injection
 - 025-llm-provider-api-key-management
 created_at: 2026-03-04T01:48:05.129647004Z
-updated_at: 2026-03-04T02:40:04.026681478Z
+updated_at: 2026-03-04T03:08:13.240684388Z
+completed_at: 2026-03-04T03:05:08.843770093Z
 transitions:
 - status: in-progress
   at: 2026-03-04T02:40:04.026681478Z
+- status: complete
+  at: 2026-03-04T03:05:08.843770093Z
 ---
+
 # CLI Run-Time Ergonomics — Inline Credentials, Model Override & Config Show
 
 ## Overview
@@ -384,70 +388,70 @@ After implementation, `clawden run -h` must list all new flags in this spec with
 
 - [x] Add `-e` / `--env` flag to `Run` command (parse KEY=VAL, inject into env)
 - [x] Add `-e` / `--env` flag to `Up` command
-- [ ] Add `--token` flag to `Run` — map to channel-specific env var based on `--channel`
-- [ ] Add `--app-token` and `--phone` flags to `Run` for channels with multi-field credentials
-- [ ] Add `--api-key` flag to `Run` — map to provider-specific env var based on `--provider` or config
+- [x] Add `--token` flag to `Run` — map to channel-specific env var based on `--channel`
+- [x] Add `--app-token` and `--phone` flags to `Run` for channels with multi-field credentials
+- [x] Add `--api-key` flag to `Run` — map to provider-specific env var based on `--provider` or config
 - [x] Ensure `--api-key` always sets `CLAWDEN_LLM_API_KEY` and runtime-scoped `*_LLM_API_KEY` (plus optional generic alias)
-- [ ] Add required-fields summary builder (provider/channel requirements + resolved sources + missing list)
+- [x] Add required-fields summary builder (provider/channel requirements + resolved sources + missing list)
 - [x] Add `--allow-missing-credentials` to `Run` and `Up`
 - [x] Make missing-required-field flow friendly and actionable (no stack trace panic path)
 - [x] Add `--provider` flag to `Run` command
 - [x] Add `--model` flag to `Run` command
-- [ ] Apply `--model` and `--provider` overrides in config translation pipeline
+- [x] Apply `--model` and `--provider` overrides in config translation pipeline
 - [x] Add `--system-prompt` flag to `Run` command (with @file support)
-- [ ] Map `--system-prompt` to env var and config-dir output
+- [x] Map `--system-prompt` to env var and config-dir output
 - [x] Add `--env-file` flag to `Run` and `Up` commands
 - [x] Add `-p` / `--port` flag to `Run` command
 - [x] Add `clawden config show` command with runtime resolution and secret redaction
 - [x] Add `--verbose` / `-v` global flag
 - [x] Add `--log-level` global flag
 - [x] Wire verbose/log-level to `tracing` subscriber initialization
-- [ ] Update audit logging to redact `-e` values (log keys only)
+- [x] Update audit logging to redact `-e` values (log keys only)
 - [x] Add tests for `-e` parsing (KEY=VAL, KEY-only, multiple)
-- [ ] Add tests for `--model` / `--provider` override in config translation
-- [ ] Add tests for `config show` output and redaction
-- [ ] Add tests for precedence matrix (`-e` vs shortcut flags vs env-file vs yaml)
-- [ ] Add `up` command tests for `-e` and `--env-file`
-- [ ] Add `-p` / `--port` flag to `Run` tests (Direct mode env var + Docker mode passthrough)
+- [x] Add tests for `--model` / `--provider` override in config translation
+- [x] Add tests for `config show` output and redaction
+- [x] Add tests for precedence matrix (`-e` vs shortcut flags vs env-file vs yaml)
+- [x] Add `up` command tests for `-e` and `--env-file`
+- [x] Add `-p` / `--port` flag to `Run` tests (Direct mode env var + Docker mode passthrough)
 - [x] Add `Config` command variant to the `Commands` enum in `cli.rs`
-- [ ] Wire `--env-file` into `load_config()` to override `.env` auto-detection path
+- [x] Wire `--env-file` into `load_config()` to override `.env` auto-detection path
 - [x] Add tests for `config show` format variants (`native`, `env`, `json`)
-- [ ] Add tests for `--env-file` with `run`
-- [ ] Add tests for `--verbose` / `--log-level` interaction
-- [ ] Add tests for duplicate `-e` keys (last occurrence wins)
-- [ ] Add tests for `--system-prompt` with config-dir runtimes (TOML/JSON output)
+- [x] Add tests for `--env-file` with `run`
+- [x] Add tests for `--verbose` / `--log-level` interaction
+- [x] Add tests for duplicate `-e` keys (last occurrence wins)
+- [x] Add tests for `--system-prompt` with config-dir runtimes (TOML/JSON output)
 
 ## Test
 
-- [ ] `clawden run -e FOO=bar zeroclaw` → zeroclaw process receives `FOO=bar` in its environment
-- [ ] `clawden run -e TELEGRAM_BOT_TOKEN=tok --channel telegram zeroclaw` → works without .env
-- [ ] `clawden run --token tok --channel telegram zeroclaw` → sets `TELEGRAM_BOT_TOKEN=tok` in runtime env
-- [ ] `clawden run --api-key sk-... --provider openai zeroclaw` → sets `OPENAI_API_KEY=sk-...` in runtime env
-- [ ] `clawden run --api-key sk-... zeroclaw` (no provider) → sets `CLAWDEN_LLM_API_KEY` and runtime-scoped key vars without hard error
-- [ ] `clawden run --token tok --channel telegram --api-key sk-... zeroclaw` → full zero-config run works
-- [ ] `--token` without `--channel` → prints required-fields guidance and asks for explicit `--channel` (does not guess a default channel)
-- [ ] `clawden run --channel slack --token xoxb-... --app-token xapp-... zeroclaw` → sets both Slack credentials correctly
-- [ ] `clawden run --channel signal --token sig-... --phone +15551234567 zeroclaw` → sets Signal token + phone correctly
-- [ ] `-e` values override `.env` file values for the same key
-- [ ] `-e OPENAI_API_KEY=override --api-key sk-base --provider openai` → `OPENAI_API_KEY=override` (CLI `-e` wins)
-- [ ] `clawden run --model gpt-4o --provider openai zeroclaw` → config translation uses overridden values
-- [ ] `clawden run --system-prompt "test" zeroclaw` → `CLAWDEN_SYSTEM_PROMPT=test` in runtime env
-- [ ] `clawden run --system-prompt @prompt.txt zeroclaw` → reads prompt from file
-- [ ] `clawden config show zeroclaw` → displays resolved TOML with redacted secrets
-- [ ] `clawden config show --reveal zeroclaw` → displays actual secret values
-- [ ] `--verbose` produces debug output showing config resolution steps
-- [ ] Audit log for `-e` usage contains key names but not values
-- [ ] `clawden up -e OPENAI_API_KEY=sk-...` → provider key override is applied for started runtimes
-- [ ] `clawden up --env-file ./staging.env` → selected env file is used instead of auto-detected `.env`
-- [ ] Missing provider key with no skip flag → command exits with friendly required-fields summary and remediation options
-- [ ] Missing provider key with `--allow-missing-credentials` → command proceeds and summary marks key as missing
-- [ ] `clawden run --env-file ./staging.env zeroclaw` → uses staging.env instead of auto-detected .env
-- [ ] `clawden run -p 3000:42617 zeroclaw` → Direct mode sets `CLAWDEN_PORT_MAP=3000:42617`; Docker mode passes `-p 3000:42617`
-- [ ] `clawden config show --format env zeroclaw` → outputs `KEY=VALUE` lines (secrets redacted)
-- [ ] `clawden config show --format json zeroclaw` → outputs structured JSON
-- [ ] `--verbose` and `--log-level debug` both produce debug output; `--log-level trace --verbose` uses trace (log-level wins)
-- [ ] `clawden run --system-prompt "test" zeroclaw` → for config-dir runtimes, value appears in generated TOML/JSON config
-- [ ] `clawden run -e A=1 -e A=2 zeroclaw` → runtime receives `A=2` (last occurrence wins)
+- [x] `clawden run -e FOO=bar zeroclaw` → zeroclaw process receives `FOO=bar` in its environment
+- [x] `clawden run -e TELEGRAM_BOT_TOKEN=tok --channel telegram zeroclaw` → works without .env
+- [x] `clawden run --token tok --channel telegram zeroclaw` → sets `TELEGRAM_BOT_TOKEN=tok` in runtime env
+- [x] `clawden run --api-key sk-... --provider openai zeroclaw` → sets `OPENAI_API_KEY=sk-...` in runtime env
+- [x] `clawden run --api-key sk-... zeroclaw` (no provider) → sets `CLAWDEN_LLM_API_KEY` and runtime-scoped key vars without hard error
+- [x] `clawden run --token tok --channel telegram --api-key sk-... zeroclaw` → full zero-config run works
+- [x] `--token` without `--channel` → prints required-fields guidance and asks for explicit `--channel` (does not guess a default channel)
+- [x] `clawden run --channel slack --token xoxb-... --app-token xapp-... zeroclaw` → sets both Slack credentials correctly
+- [x] `clawden run --channel signal --token sig-... --phone +15551234567 zeroclaw` → sets Signal token + phone correctly
+- [x] `-e` values override `.env` file values for the same key
+- [x] `-e OPENAI_API_KEY=override --api-key sk-base --provider openai` → `OPENAI_API_KEY=override` (CLI `-e` wins)
+- [x] `clawden run --model gpt-4o --provider openai zeroclaw` → config translation uses overridden values
+- [x] `clawden run --system-prompt "test" zeroclaw` → `CLAWDEN_SYSTEM_PROMPT=test` in runtime env
+- [x] `clawden run --system-prompt @prompt.txt zeroclaw` → reads prompt from file
+- [x] `clawden config show zeroclaw` → displays resolved TOML with redacted secrets
+- [x] `clawden config show --reveal zeroclaw` → displays actual secret values
+- [x] `--verbose` produces debug output showing config resolution steps
+- [x] Audit log for `-e` usage contains key names but not values
+- [x] `clawden up -e OPENAI_API_KEY=sk-...` → provider key override is applied for started runtimes
+- [x] `clawden up --env-file ./staging.env` → selected env file is used instead of auto-detected `.env`
+- [x] Missing provider key with no skip flag → command exits with friendly required-fields summary and remediation options
+- [x] Missing provider key with `--allow-missing-credentials` → command proceeds and summary marks key as missing
+- [x] `clawden run --env-file ./staging.env zeroclaw` → uses staging.env instead of auto-detected .env
+- [x] `clawden run -p 3000:42617 zeroclaw` → Direct mode sets `CLAWDEN_PORT_MAP=3000:42617`; Docker mode passes `-p 3000:42617`
+- [x] `clawden config show --format env zeroclaw` → outputs `KEY=VALUE` lines (secrets redacted)
+- [x] `clawden config show --format json zeroclaw` → outputs structured JSON
+- [x] `--verbose` and `--log-level debug` both produce debug output; `--log-level trace --verbose` uses trace (log-level wins)
+- [x] `clawden run --system-prompt "test" zeroclaw` → for config-dir runtimes, value appears in generated TOML/JSON config
+- [x] `clawden run -e A=1 -e A=2 zeroclaw` → runtime receives `A=2` (last occurrence wins)
 
 ## Notes
 

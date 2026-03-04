@@ -91,6 +91,18 @@ fn build_run_args(
         args.push(format!("TOOLS={}", config.tools.join(",")));
     }
 
+    for mapping in config
+        .env_vars
+        .iter()
+        .filter(|(key, _)| key == "CLAWDEN_PORT_MAP")
+        .flat_map(|(_, value)| value.split(','))
+        .map(str::trim)
+        .filter(|mapping| !mapping.is_empty())
+    {
+        args.push("-p".to_string());
+        args.push(mapping.to_string());
+    }
+
     for (key, value) in &config.env_vars {
         args.push("-e".to_string());
         args.push(format!("{}={}", key, value));

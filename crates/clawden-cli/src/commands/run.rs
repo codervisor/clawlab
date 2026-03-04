@@ -127,6 +127,10 @@ pub async fn exec_run(
                     opts.extra_args.join(" "),
                 );
             }
+            let mut docker_env = env_vars.clone();
+            if !opts.ports.is_empty() {
+                docker_env.push(("CLAWDEN_PORT_MAP".to_string(), opts.ports.join(",")));
+            }
             let runtime = parse_runtime(&opts.runtime)?;
             let record = manager.register_agent_with_config(
                 format!("{}-default", runtime.as_slug()),
@@ -136,7 +140,7 @@ pub async fn exec_run(
                     name: format!("{}-default", runtime.as_slug()),
                     runtime,
                     model: None,
-                    env_vars: merge_env_overrides(env_vars.clone(), &env_overrides),
+                    env_vars: merge_env_overrides(docker_env, &env_overrides),
                     channels: resolved_channels.clone(),
                     tools: effective_tools,
                 },

@@ -78,6 +78,14 @@ pub async fn exec_up(
             Vec::new()
         };
         let env_overrides = parse_env_overrides(&opts.env_vars)?;
+        if !env_overrides.is_empty() {
+            let keys = env_overrides
+                .iter()
+                .map(|(k, _)| k.as_str())
+                .collect::<Vec<_>>()
+                .join(",");
+            let _ = append_audit_file("runtime.env_override", &runtime, &keys);
+        }
 
         let channels = if let Some(cfg) = config.as_ref() {
             channels_for_runtime(cfg, &runtime)
@@ -98,6 +106,11 @@ pub async fn exec_up(
         match mode {
             ExecutionMode::Docker => {
                 let rt = parse_runtime(&runtime)?;
+                let mut docker_env = env_vars.clone();
+                for (key, value) in &env_overrides {
+                    docker_env.retain(|(k, _)| k != key);
+                    docker_env.push((key.clone(), value.clone()));
+                }
                 let record = manager.register_agent_with_config(
                     format!("{}-default", rt.as_slug()),
                     rt.clone(),
@@ -106,7 +119,7 @@ pub async fn exec_up(
                         name: format!("{}-default", rt.as_slug()),
                         runtime: rt,
                         model: None,
-                        env_vars: env_vars.clone(),
+                        env_vars: docker_env,
                         channels: channels.clone(),
                         tools: tools.clone(),
                     },
