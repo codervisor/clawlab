@@ -86,23 +86,27 @@ async fn main() -> Result<()> {
             .await?
         }
         Commands::Run {
-            runtime,
             channel,
             tools,
             rm,
             detach,
             restart,
-            args,
+            runtime_and_args,
         } => {
+            let (runtime, args) = runtime_and_args.split_first().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "missing runtime name: usage `clawden run <runtime> [runtime-args...]`"
+                )
+            })?;
             commands::exec_run(
                 commands::RunOptions {
-                    runtime,
+                    runtime: runtime.clone(),
                     channel,
                     tools,
                     restart,
                     rm,
                     detach,
-                    extra_args: args,
+                    extra_args: args.to_vec(),
                     no_docker: cli.no_docker,
                 },
                 &installer,

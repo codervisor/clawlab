@@ -1,5 +1,5 @@
 ---
-status: planned
+status: in-progress
 created: 2026-03-03
 priority: high
 tags:
@@ -8,7 +8,10 @@ tags:
 - ux
 - strategy
 created_at: 2026-03-03T08:49:22.936640Z
-updated_at: 2026-03-03T08:49:22.936640Z
+updated_at: 2026-03-04T01:12:13.164677517Z
+transitions:
+- status: in-progress
+  at: 2026-03-04T01:12:13.164677517Z
 ---
 
 # ClawDen Product Positioning — UX Shell, Runtime Manager, SDK Platform
@@ -305,25 +308,25 @@ The first positional value in `runtime_and_args` is the runtime name; the rest a
 
 ## Plan
 
-- [ ] Update README.md to reflect UX Shell-first positioning
-- [ ] Audit CLI `--help` text for plain-language clarity
-- [ ] Add `clawden doctor` diagnostic command
-- [ ] Implement runtime version pinning (`@version` syntax)
-- [ ] Write persona-aligned documentation sections
-- [ ] Review AGENTS.md description to align with new positioning
-- [ ] Implement `uv run`-style transparent arg passing in `Run` command (remove `--` separator requirement)
-- [ ] Ensure `clawden run <runtime> --help` passes through to runtime's own help
-- [ ] Document config translation pipeline (clawden.yaml → runtime-native format) for each supported runtime
-- [ ] Add config translation coverage for openfang `--config-dir` (Phase 2)
+- [x] Update README.md to reflect UX Shell-first positioning
+- [x] Audit CLI `--help` text for plain-language clarity
+- [x] Add `clawden doctor` diagnostic command
+- [x] Implement runtime version pinning (`@version` syntax)
+- [x] Write persona-aligned documentation sections
+- [x] Review AGENTS.md description to align with new positioning
+- [x] Implement `uv run`-style transparent arg passing in `Run` command (remove `--` separator requirement)
+- [x] Ensure `clawden run <runtime> --help` passes through to runtime's own help
+- [x] Document config translation pipeline (clawden.yaml → runtime-native format) for each supported runtime
+- [x] Add config translation coverage for openfang `--config-dir` (Phase 2)
 
 ## Test
 
-- [ ] README communicates value proposition in first 3 lines
+- [x] README communicates value proposition in first 3 lines
 - [ ] `clawden --help` output is understandable by someone who has never seen ClawDen
 - [ ] Each persona can complete their entry-point workflow in under 60 seconds
 - [ ] Positioning language is consistent across CLI, dashboard, docs, and package descriptions
-- [ ] `clawden run zeroclaw --verbose` works without `--` separator (trailing args forwarded)
-- [ ] `clawden run zeroclaw --help` shows zeroclaw's help output, not clawden's
-- [ ] Config translation produces valid native config for each runtime (zeroclaw TOML, picoclaw JSON)
-- [ ] Pre-exec validation catches missing credentials with actionable error messages
-- [ ] Project isolation: two projects with different clawden.yaml get independent config dirs
+- [x] `clawden run zeroclaw --verbose` works without `--` separator (trailing args forwarded)
+- [x] `clawden run zeroclaw --help` shows zeroclaw's help output, not clawden's
+- [x] Config translation produces valid native config for each runtime (zeroclaw TOML, picoclaw JSON)
+- [x] Pre-exec validation catches missing credentials with actionable error messages
+- [x] Project isolation: two projects with different clawden.yaml get independent config dirs

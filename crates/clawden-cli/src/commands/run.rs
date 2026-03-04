@@ -41,8 +41,21 @@ pub async fn exec_run(
         })
         .unwrap_or_default();
 
-    let mode = process_manager.resolve_mode(opts.no_docker || env_no_docker_enabled());
     let config = load_config()?;
+
+    // `clawden run` defaults to Direct mode (uv-run style transparent exec).
+    // Only use Docker when clawden.yaml explicitly sets `mode: docker`.
+    let config_mode_is_docker = config
+        .as_ref()
+        .and_then(|c| c.mode.as_deref())
+        .is_some_and(|m| m.eq_ignore_ascii_case("docker"));
+    let mode = if opts.no_docker || env_no_docker_enabled() {
+        ExecutionMode::Direct
+    } else if config_mode_is_docker {
+        process_manager.resolve_mode(false)
+    } else {
+        ExecutionMode::Direct
+    };
     let env_vars = if let Some(cfg) = config.as_ref() {
         build_runtime_env_vars(cfg, &opts.runtime)?
     } else {
@@ -78,6 +91,13 @@ pub async fn exec_run(
 
     match mode {
         ExecutionMode::Docker => {
+            if !opts.extra_args.is_empty() {
+                eprintln!(
+                    "Warning: extra runtime args ({}) are ignored in Docker mode. \
+                     Use --no-docker or set mode: direct in clawden.yaml to pass args through.",
+                    opts.extra_args.join(" "),
+                );
+            }
             let runtime = parse_runtime(&opts.runtime)?;
             let record = manager.register_agent_with_config(
                 format!("{}-default", runtime.as_slug()),
@@ -96,10 +116,7 @@ pub async fn exec_run(
                 .start_agent(&record.id)
                 .await
                 .map_err(anyhow::Error::msg)?;
-            println!(
-                "Started {} via core adapter path (docker available, server not required)",
-                opts.runtime
-            );
+            println!("Started {} via Docker", opts.runtime);
             return Ok(());
         }
         ExecutionMode::Direct | ExecutionMode::Auto => {}

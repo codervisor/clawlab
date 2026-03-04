@@ -1,7 +1,11 @@
 use clap::{Parser, Subcommand};
 
 #[derive(Debug, Parser)]
-#[command(name = "clawden", version, about = "ClawDen orchestration CLI")]
+#[command(
+    name = "clawden",
+    version,
+    about = "Run and manage claw runtimes from one CLI"
+)]
 pub struct Cli {
     #[arg(long, global = true, default_value_t = false)]
     pub no_docker: bool,
@@ -85,13 +89,13 @@ pub enum Commands {
         #[arg(long, default_value_t = 10)]
         timeout: u64,
     },
-    /// Run a single runtime
+    /// Run a claw runtime directly
+    #[command(trailing_var_arg = true)]
     Run {
-        runtime: String,
-        /// Channels to connect
+        /// Channels to connect (must appear before runtime name)
         #[arg(long)]
         channel: Vec<String>,
-        /// Tools to enable
+        /// Tools to enable (must appear before runtime name)
         #[arg(long = "with")]
         tools: Option<String>,
         /// Remove one-off state after exit
@@ -100,12 +104,12 @@ pub enum Commands {
         /// Run in background and return immediately
         #[arg(short = 'd', long, default_value_t = false)]
         detach: bool,
-        /// Restart on failure policy.
+        /// Restart on failure policy
         #[arg(long)]
         restart: Option<String>,
-        /// Extra args forwarded to the runtime process
-        #[arg(last = true)]
-        args: Vec<String>,
+        /// Runtime name followed by runtime args
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        runtime_and_args: Vec<String>,
     },
     /// Show running runtimes
     Ps,
@@ -153,6 +157,79 @@ pub enum Commands {
         #[command(subcommand)]
         command: ToolCommand,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Cli, Commands};
+    use clap::Parser;
+
+    #[test]
+    fn run_parses_runtime_without_separator() {
+        let cli = Cli::try_parse_from([
+            "clawden",
+            "run",
+            "zeroclaw",
+            "--verbose",
+            "--model",
+            "gpt-4",
+        ])
+        .expect("parse run command");
+
+        match cli.command {
+            Commands::Run {
+                runtime_and_args,
+                channel,
+                tools,
+                ..
+            } => {
+                assert!(channel.is_empty());
+                assert!(tools.is_none());
+                assert_eq!(
+                    runtime_and_args,
+                    vec![
+                        "zeroclaw".to_string(),
+                        "--verbose".to_string(),
+                        "--model".to_string(),
+                        "gpt-4".to_string(),
+                    ]
+                );
+            }
+            _ => panic!("expected run command"),
+        }
+    }
+
+    #[test]
+    fn run_parses_clawden_flags_before_runtime() {
+        let cli = Cli::try_parse_from([
+            "clawden",
+            "run",
+            "--channel",
+            "telegram",
+            "--with",
+            "web-search",
+            "zeroclaw",
+            "--help",
+        ])
+        .expect("parse run command");
+
+        match cli.command {
+            Commands::Run {
+                runtime_and_args,
+                channel,
+                tools,
+                ..
+            } => {
+                assert_eq!(channel, vec!["telegram".to_string()]);
+                assert_eq!(tools, Some("web-search".to_string()));
+                assert_eq!(
+                    runtime_and_args,
+                    vec!["zeroclaw".to_string(), "--help".to_string()]
+                );
+            }
+            _ => panic!("expected run command"),
+        }
+    }
 }
 
 #[derive(Debug, Subcommand)]
