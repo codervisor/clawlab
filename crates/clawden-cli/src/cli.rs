@@ -19,6 +19,7 @@ pub struct Cli {
 }
 
 #[derive(Debug, Subcommand)]
+#[allow(clippy::large_enum_variant)]
 pub enum Commands {
     /// Scaffold a new clawden.yaml project config
     Init {

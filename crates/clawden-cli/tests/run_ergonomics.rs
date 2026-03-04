@@ -1,6 +1,6 @@
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -19,7 +19,7 @@ fn binary_path() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_clawden-cli"))
 }
 
-fn setup_direct_runtime(home: &PathBuf) {
+fn setup_direct_runtime(home: &Path) {
     let runtime_dir = home
         .join(".clawden")
         .join("runtimes")
@@ -48,7 +48,7 @@ fn setup_direct_runtime(home: &PathBuf) {
     std::os::unix::fs::symlink("latest", current_link).expect("current symlink should be created");
 }
 
-fn wait_for_dump(dump_path: &PathBuf) -> String {
+fn wait_for_dump(dump_path: &Path) -> String {
     for _ in 0..80 {
         if dump_path.exists() {
             let content = fs::read_to_string(dump_path).expect("env dump should be readable");

@@ -183,7 +183,7 @@ fn init_logging(verbose: bool, log_level: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-fn resolved_log_level<'a>(verbose: bool, log_level: Option<&'a str>) -> &'a str {
+fn resolved_log_level(verbose: bool, log_level: Option<&str>) -> &str {
     log_level.unwrap_or(if verbose { "debug" } else { "info" })
 }
 
