@@ -344,6 +344,7 @@ pub enum ConfigCommand {
 }
 
 #[derive(Debug, Subcommand)]
+#[allow(clippy::large_enum_variant)]
 pub enum DockerCommand {
     /// Run a claw runtime in Docker mode (one-off)
     #[command(trailing_var_arg = true)]
