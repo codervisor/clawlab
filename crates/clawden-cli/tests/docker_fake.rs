@@ -114,6 +114,58 @@ channels:
 }
 
 #[test]
+fn up_docker_supports_env_override_and_env_file() {
+    let dir = temp_dir("docker-fake-up-env");
+    let home = dir.join("home");
+    let project = dir.join("project");
+    let bin_dir = dir.join("bin");
+    let docker_log = dir.join("docker.log");
+
+    fs::create_dir_all(&home).expect("home should be created");
+    fs::create_dir_all(&project).expect("project should be created");
+    fs::create_dir_all(&bin_dir).expect("bin dir should be created");
+    setup_fake_docker(&bin_dir, &docker_log);
+
+    let yaml = r#"
+mode: docker
+runtime: zeroclaw
+provider: openai
+providers:
+  openai:
+    api_key: $OPENAI_API_KEY
+"#;
+    fs::write(project.join("clawden.yaml"), yaml).expect("yaml should be written");
+    fs::write(
+        project.join("staging.env"),
+        "OPENAI_API_KEY=sk-from-env-file\n",
+    )
+    .expect("env file should be written");
+
+    let base_path = std::env::var("PATH").unwrap_or_default();
+    let path = format!("{}:{}", bin_dir.display(), base_path);
+
+    let status = Command::new(binary_path())
+        .current_dir(&project)
+        .env("HOME", &home)
+        .env("PATH", path)
+        .env_remove("OPENAI_API_KEY")
+        .args([
+            "up",
+            "--env-file",
+            "staging.env",
+            "-e",
+            "OPENAI_API_KEY=sk-from-cli",
+            "--detach",
+        ])
+        .status()
+        .expect("up should run");
+    assert!(status.success());
+
+    let log = fs::read_to_string(&docker_log).expect("docker log should exist");
+    assert!(log.contains("OPENAI_API_KEY=sk-from-cli"));
+}
+
+#[test]
 fn run_docker_includes_cli_channel_and_tool_overrides() {
     let dir = temp_dir("docker-fake-run");
     let home = dir.join("home");
@@ -126,7 +178,10 @@ fn run_docker_includes_cli_channel_and_tool_overrides() {
     fs::create_dir_all(&bin_dir).expect("bin dir should be created");
     setup_fake_docker(&bin_dir, &docker_log);
 
+    // `clawden run` defaults to Direct mode per spec 33 (uv-run model).
+    // Explicitly set `mode: docker` so this test exercises the Docker path.
     let yaml = r#"
+mode: docker
 runtime: zeroclaw
 provider: openai
 model: gpt-4o-mini
@@ -147,12 +202,14 @@ channels:
         .env("TELEGRAM_BOT_TOKEN", "tg-run-token")
         .args([
             "run",
-            "zeroclaw",
             "--channel",
             "discord",
             "--with",
             "git,http",
+            "-p",
+            "3000:42617",
             "--detach",
+            "zeroclaw",
         ])
         .status()
         .expect("run should execute");
@@ -166,6 +223,7 @@ channels:
     assert!(log.contains("CLAWDEN_LLM_MODEL=gpt-4o-mini"));
     assert!(log.contains("ZEROCLAW_LLM_MODEL=gpt-4o-mini"));
     assert!(log.contains("--channels=discord"));
+    assert!(log.contains("-p 3000:42617"));
 }
 
 #[test]

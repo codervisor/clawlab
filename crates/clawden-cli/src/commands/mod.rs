@@ -1,4 +1,5 @@
 mod channels;
+mod config;
 mod config_gen;
 mod dashboard;
 mod doctor;
@@ -19,6 +20,8 @@ mod up;
 use std::sync::{Mutex, OnceLock};
 
 pub use channels::exec_channels;
+pub use config::exec_config_env;
+pub use config::exec_config_show;
 pub use dashboard::exec_dashboard;
 pub use doctor::exec_doctor;
 pub use down::exec_down;

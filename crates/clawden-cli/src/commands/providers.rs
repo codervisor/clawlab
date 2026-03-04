@@ -19,8 +19,7 @@ pub async fn exec_providers(command: Option<ProviderCommand>) -> Result<()> {
 fn list_providers() -> Result<()> {
     let yaml_path = std::env::current_dir()?.join("clawden.yaml");
     if !yaml_path.exists() {
-        println!("No clawden.yaml found in current directory");
-        return Ok(());
+        return list_detected_providers();
     }
 
     let mut config = ClawDenYaml::from_file(&yaml_path).map_err(anyhow::Error::msg)?;
@@ -48,11 +47,41 @@ fn list_providers() -> Result<()> {
     Ok(())
 }
 
+fn list_detected_providers() -> Result<()> {
+    eprintln!("No clawden.yaml found — showing providers detected from environment\n");
+
+    let known_providers: &[(&str, &str)] = &[
+        ("openrouter", "OPENROUTER_API_KEY"),
+        ("openai", "OPENAI_API_KEY"),
+        ("anthropic", "ANTHROPIC_API_KEY"),
+        ("google", "GEMINI_API_KEY"),
+        ("mistral", "MISTRAL_API_KEY"),
+        ("groq", "GROQ_API_KEY"),
+    ];
+
+    let mut found = false;
+    for (name, env_var) in known_providers {
+        let from_env = std::env::var(env_var).ok().filter(|v| !v.trim().is_empty());
+        let from_vault = get_provider_key_from_vault(name)?.filter(|v| !v.trim().is_empty());
+
+        if from_env.is_some() || from_vault.is_some() {
+            let source = if from_env.is_some() { "env" } else { "vault" };
+            println!("provider={name}\tstatus=detected\tsource={source}");
+            found = true;
+        }
+    }
+
+    if !found {
+        println!("No provider API keys detected in environment or vault");
+        eprintln!("\nTip: set a provider key (e.g. OPENROUTER_API_KEY) or run `clawden init`");
+    }
+    Ok(())
+}
+
 async fn test_providers(only: Option<String>) -> Result<()> {
     let yaml_path = std::env::current_dir()?.join("clawden.yaml");
     if !yaml_path.exists() {
-        println!("No clawden.yaml found in current directory");
-        return Ok(());
+        return test_detected_providers(only).await;
     }
 
     let mut config = ClawDenYaml::from_file(&yaml_path).map_err(anyhow::Error::msg)?;
@@ -92,6 +121,68 @@ async fn test_providers(only: Option<String>) -> Result<()> {
             println!("No matching provider '{target}' found in clawden.yaml");
         } else {
             println!("No providers configured in clawden.yaml");
+        }
+    }
+
+    Ok(())
+}
+
+async fn test_detected_providers(only: Option<String>) -> Result<()> {
+    eprintln!("No clawden.yaml found — testing providers detected from environment\n");
+
+    let known_providers: &[(&str, &str, &str)] = &[
+        (
+            "openrouter",
+            "OPENROUTER_API_KEY",
+            "https://openrouter.ai/api/v1",
+        ),
+        ("openai", "OPENAI_API_KEY", "https://api.openai.com/v1"),
+        (
+            "anthropic",
+            "ANTHROPIC_API_KEY",
+            "https://api.anthropic.com",
+        ),
+        (
+            "google",
+            "GEMINI_API_KEY",
+            "https://generativelanguage.googleapis.com/v1beta",
+        ),
+        ("mistral", "MISTRAL_API_KEY", "https://api.mistral.ai/v1"),
+        ("groq", "GROQ_API_KEY", "https://api.groq.com/openai/v1"),
+    ];
+
+    let mut any = false;
+    for (name, env_var, base_url) in known_providers {
+        if let Some(target) = &only {
+            if target != name {
+                continue;
+            }
+        }
+        let api_key = std::env::var(env_var)
+            .ok()
+            .filter(|v| !v.trim().is_empty())
+            .or_else(|| get_provider_key_from_vault(name).ok().flatten());
+
+        let Some(api_key) = api_key else {
+            continue;
+        };
+
+        any = true;
+        match test_provider_endpoint(name, base_url, &api_key).await {
+            Ok(()) => println!("provider={name}\ttest=ok\tsource=env"),
+            Err(err) => println!("provider={name}\ttest=fail\terror={err}"),
+        }
+    }
+
+    if !any {
+        if let Some(target) = only {
+            println!("No API key detected for provider '{target}'");
+            if let Some(env_var) = provider_env_var(&target) {
+                eprintln!("\nTip: set {env_var} or run `clawden providers set-key {target}`");
+            }
+        } else {
+            println!("No provider API keys detected in environment or vault");
+            eprintln!("\nTip: set a provider key (e.g. OPENROUTER_API_KEY) or run `clawden init`");
         }
     }
 

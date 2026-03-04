@@ -1,6 +1,12 @@
 # ClawDen
 
-Unified orchestration platform for heterogeneous claw runtimes.
+Developer experience layer for the xxxclaw ecosystem.
+Install any claw runtime in one command, run it through one CLI, and manage updates without hand-rolling runtime-specific setup.
+
+ClawDen combines three roles:
+- `UX Shell`: one CLI and dashboard experience across runtimes
+- `Runtime Manager`: install, pin, and update runtime versions
+- `SDK Platform`: build cross-runtime skills with `@clawden/sdk`
 
 ## Quick start
 
@@ -17,10 +23,38 @@ Unified orchestration platform for heterogeneous claw runtimes.
 5. Start runtimes:
 	- `cargo run -p clawden-cli -- up`
 
+### Transparent run model (`uv run` style)
+
+`clawden run` forwards everything after the runtime name directly to that runtime:
+
+- `cargo run -p clawden-cli -- run zeroclaw --verbose --model gpt-4`
+- `cargo run -p clawden-cli -- run --channel telegram zeroclaw --verbose`
+
+Rules:
+- ClawDen flags go before runtime name: `--channel`, `--with`, `-d`, `--rm`, `--restart`
+- Runtime flags go after runtime name and are passed through verbatim
+- `clawden run zeroclaw --help` shows runtime help output (passthrough)
+
+### Config translation pipeline
+
+Use one `clawden.yaml`; ClawDen translates it to runtime-native config automatically at run/start time.
+
+- Config-dir runtimes (`zeroclaw`, `picoclaw`, `nullclaw`, `openfang`): generated under `~/.clawden/configs/<project_hash>/<runtime>/`
+- Env-only runtimes (`openclaw`, `nanoclaw`): injected via `CLAWDEN_*` and runtime-specific environment variables
+
+Validation happens before execution so missing provider keys or channel credentials fail with actionable errors.
+
 Provider key management:
 	- List configured providers: `cargo run -p clawden-cli -- providers`
 	- Test provider credentials: `cargo run -p clawden-cli -- providers test`
 	- Store a key in local encrypted vault: `cargo run -p clawden-cli -- providers set-key openai`
+
+### Choose your path
+
+- Hobbyist or student: `cargo run -p clawden-cli -- run zeroclaw`
+- Solo developer: `cargo run -p clawden-cli -- install openclaw` then `cargo run -p clawden-cli -- run --channel telegram openclaw`
+- Skill author: use `sdk/` and build with `pnpm --filter @clawden/sdk build`
+- Team workflow: `cargo run -p clawden-cli -- up` and `cargo run -p clawden-cli -- dashboard`
 
 ### Rust backend and CLI
 

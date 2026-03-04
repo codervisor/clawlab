@@ -253,12 +253,15 @@ dependencies = [
  "clawden-config",
  "clawden-core",
  "dialoguer",
+ "dotenvy",
  "indicatif",
  "reqwest",
  "rpassword",
  "serde_json",
  "tokio",
  "toml",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

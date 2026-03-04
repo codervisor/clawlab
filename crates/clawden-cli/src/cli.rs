@@ -1,16 +1,25 @@
 use clap::{Parser, Subcommand};
 
 #[derive(Debug, Parser)]
-#[command(name = "clawden", version, about = "ClawDen orchestration CLI")]
+#[command(
+    name = "clawden",
+    version,
+    about = "Run and manage claw runtimes from one CLI"
+)]
 pub struct Cli {
     #[arg(long, global = true, default_value_t = false)]
     pub no_docker: bool,
+    #[arg(short = 'v', long, global = true, default_value_t = false)]
+    pub verbose: bool,
+    #[arg(long, global = true)]
+    pub log_level: Option<String>,
 
     #[command(subcommand)]
     pub command: Commands,
 }
 
 #[derive(Debug, Subcommand)]
+#[allow(clippy::large_enum_variant)]
 pub enum Commands {
     /// Scaffold a new clawden.yaml project config
     Init {
@@ -51,6 +60,15 @@ pub enum Commands {
     Up {
         /// Specific runtimes to start (starts all if empty)
         runtimes: Vec<String>,
+        /// Set environment variables (KEY=VAL). Overrides .env and clawden.yaml values.
+        #[arg(short = 'e', long = "env")]
+        env_vars: Vec<String>,
+        /// Override auto-detected .env file.
+        #[arg(long = "env-file")]
+        env_file: Option<String>,
+        /// Proceed even when required provider/channel credentials are missing.
+        #[arg(long, default_value_t = false)]
+        allow_missing_credentials: bool,
         /// Run in background and return immediately
         #[arg(short = 'd', long, default_value_t = false)]
         detach: bool,
@@ -85,13 +103,46 @@ pub enum Commands {
         #[arg(long, default_value_t = 10)]
         timeout: u64,
     },
-    /// Run a single runtime
+    /// Run a claw runtime directly
+    #[command(trailing_var_arg = true)]
     Run {
-        runtime: String,
-        /// Channels to connect
+        /// Channels to connect (must appear before runtime name)
         #[arg(long)]
         channel: Vec<String>,
-        /// Tools to enable
+        /// Set environment variables (KEY=VAL). Overrides .env and clawden.yaml values.
+        #[arg(short = 'e', long = "env")]
+        env_vars: Vec<String>,
+        /// Override auto-detected .env file.
+        #[arg(long = "env-file")]
+        env_file: Option<String>,
+        /// Override provider to use.
+        #[arg(long)]
+        provider: Option<String>,
+        /// Override model to use.
+        #[arg(long)]
+        model: Option<String>,
+        /// Channel token shortcut for the selected --channel values.
+        #[arg(long)]
+        token: Option<String>,
+        /// LLM API key shortcut.
+        #[arg(long = "api-key")]
+        api_key: Option<String>,
+        /// Channel app token shortcut (e.g. Slack).
+        #[arg(long = "app-token")]
+        app_token: Option<String>,
+        /// Channel phone shortcut (e.g. Signal).
+        #[arg(long)]
+        phone: Option<String>,
+        /// Override system prompt value. Prefix with @ to load from file.
+        #[arg(long = "system-prompt")]
+        system_prompt: Option<String>,
+        /// Port mapping (HOST:CONTAINER). Multiple allowed.
+        #[arg(short = 'p', long = "port")]
+        ports: Vec<String>,
+        /// Proceed even when required provider/channel credentials are missing.
+        #[arg(long, default_value_t = false)]
+        allow_missing_credentials: bool,
+        /// Tools to enable (must appear before runtime name)
         #[arg(long = "with")]
         tools: Option<String>,
         /// Remove one-off state after exit
@@ -100,12 +151,12 @@ pub enum Commands {
         /// Run in background and return immediately
         #[arg(short = 'd', long, default_value_t = false)]
         detach: bool,
-        /// Restart on failure policy.
+        /// Restart on failure policy
         #[arg(long)]
         restart: Option<String>,
-        /// Extra args forwarded to the runtime process
-        #[arg(last = true)]
-        args: Vec<String>,
+        /// Runtime name followed by runtime args
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        runtime_and_args: Vec<String>,
     },
     /// Show running runtimes
     Ps,
@@ -153,6 +204,84 @@ pub enum Commands {
         #[command(subcommand)]
         command: ToolCommand,
     },
+    /// Show resolved runtime config and environment.
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommand,
+    },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Cli, Commands};
+    use clap::Parser;
+
+    #[test]
+    fn run_parses_runtime_without_separator() {
+        let cli = Cli::try_parse_from([
+            "clawden",
+            "run",
+            "zeroclaw",
+            "--verbose",
+            "--model",
+            "gpt-4",
+        ])
+        .expect("parse run command");
+
+        match cli.command {
+            Commands::Run {
+                runtime_and_args,
+                channel,
+                tools,
+                ..
+            } => {
+                assert!(channel.is_empty());
+                assert!(tools.is_none());
+                assert_eq!(
+                    runtime_and_args,
+                    vec![
+                        "zeroclaw".to_string(),
+                        "--verbose".to_string(),
+                        "--model".to_string(),
+                        "gpt-4".to_string(),
+                    ]
+                );
+            }
+            _ => panic!("expected run command"),
+        }
+    }
+
+    #[test]
+    fn run_parses_clawden_flags_before_runtime() {
+        let cli = Cli::try_parse_from([
+            "clawden",
+            "run",
+            "--channel",
+            "telegram",
+            "--with",
+            "web-search",
+            "zeroclaw",
+            "--help",
+        ])
+        .expect("parse run command");
+
+        match cli.command {
+            Commands::Run {
+                runtime_and_args,
+                channel,
+                tools,
+                ..
+            } => {
+                assert_eq!(channel, vec!["telegram".to_string()]);
+                assert_eq!(tools, Some("web-search".to_string()));
+                assert_eq!(
+                    runtime_and_args,
+                    vec!["zeroclaw".to_string(), "--help".to_string()]
+                );
+            }
+            _ => panic!("expected run command"),
+        }
+    }
 }
 
 #[derive(Debug, Subcommand)]
@@ -190,5 +319,29 @@ pub enum ToolCommand {
     Info {
         /// Tool name
         tool: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ConfigCommand {
+    /// Show resolved runtime configuration.
+    Show {
+        /// Runtime name.
+        runtime: String,
+        /// Output format: native | env | json | config
+        #[arg(long, default_value = "native")]
+        format: String,
+        /// Reveal secret values instead of redacting.
+        #[arg(long, default_value_t = false)]
+        reveal: bool,
+        /// Override auto-detected .env file.
+        #[arg(long = "env-file")]
+        env_file: Option<String>,
+    },
+    /// Show detected environment variables relevant to ClawDen.
+    Env {
+        /// Show full values instead of redacting.
+        #[arg(long, default_value_t = false)]
+        reveal: bool,
     },
 }

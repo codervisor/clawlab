@@ -2,7 +2,7 @@
 
 ## Overview
 
-ClawDen is the **unified orchestration platform for the xxxclaw ecosystem**. It provides a single control plane to deploy, manage, monitor, and coordinate heterogeneous AI agent runtimes — OpenClaw, ZeroClaw, PicoClaw, NanoClaw, IronClaw, NullClaw, and community variants.
+ClawDen is the **developer experience layer for the xxxclaw ecosystem**. It provides a unified CLI and dashboard to run, manage, and monitor heterogeneous runtimes (OpenClaw, ZeroClaw, PicoClaw, NanoClaw, IronClaw, NullClaw, and community variants), while also acting as a runtime manager and SDK platform.
 
 ## Skills
 
