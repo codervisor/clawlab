@@ -4,6 +4,8 @@ use clawden_core::runtime_supported_extra_args;
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 use std::fs;
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use toml::Value as TomlValue;
 
@@ -24,13 +26,16 @@ pub(crate) fn generate_config_dir(
     match runtime {
         "zeroclaw" | "nullclaw" | "openfang" => {
             let body = generate_toml_config(config, runtime);
-            fs::write(dir.join("config.toml"), toml::to_string_pretty(&body)?)?;
+            write_secret_file(
+                &dir.join("config.toml"),
+                toml::to_string_pretty(&body)?.as_bytes(),
+            )?;
         }
         "picoclaw" => {
             let body = generate_picoclaw_config(config, runtime);
-            fs::write(
-                dir.join("config.json"),
-                serde_json::to_string_pretty(&body)?,
+            write_secret_file(
+                &dir.join("config.json"),
+                serde_json::to_string_pretty(&body)?.as_bytes(),
             )?;
         }
         _ => {}
@@ -67,13 +72,10 @@ fn generate_toml_config(config: &ClawDenYaml, runtime: &str) -> toml::Table {
             root.insert("default_model".to_string(), TomlValue::String(model_name));
         }
         if let Some(api_key) = provider.api_key.filter(|v| !v.trim().is_empty()) {
-            let mut api_key_row = toml::Table::new();
-            api_key_row.insert("provider".to_string(), TomlValue::String(provider_name));
-            api_key_row.insert("key".to_string(), TomlValue::String(api_key));
             let mut reliability = toml::Table::new();
             reliability.insert(
                 "api_keys".to_string(),
-                TomlValue::Array(vec![TomlValue::Table(api_key_row)]),
+                TomlValue::Array(vec![TomlValue::String(api_key)]),
             );
             root.insert("reliability".to_string(), TomlValue::Table(reliability));
         }
@@ -262,6 +264,28 @@ fn json_to_toml(value: &JsonValue) -> Option<TomlValue> {
     }
 }
 
+/// Write a file with 0o600 permissions so secrets (API keys, tokens) are not
+/// world-readable.  On non-Unix platforms falls back to a normal write.
+fn write_secret_file(path: &Path, data: &[u8]) -> Result<()> {
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        let mut f = fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(path)?;
+        f.write_all(data)?;
+        return Ok(());
+    }
+    #[cfg(not(unix))]
+    {
+        fs::write(path, data)?;
+        Ok(())
+    }
+}
+
 fn supports_config_dir(runtime: &str) -> bool {
     runtime_supported_extra_args(runtime).contains(&"--config-dir")
 }
@@ -336,17 +360,6 @@ config:
                 .and_then(|v| v.get("api_keys"))
                 .and_then(toml::Value::as_array)
                 .and_then(|rows| rows.first())
-                .and_then(|row| row.get("provider"))
-                .and_then(toml::Value::as_str),
-            Some("openrouter")
-        );
-        assert_eq!(
-            parsed
-                .get("reliability")
-                .and_then(|v| v.get("api_keys"))
-                .and_then(toml::Value::as_array)
-                .and_then(|rows| rows.first())
-                .and_then(|row| row.get("key"))
                 .and_then(toml::Value::as_str),
             Some("sk-or-test")
         );
