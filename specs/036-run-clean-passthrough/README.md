@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 created: 2026-03-04
 priority: high
 tags:
@@ -9,10 +9,13 @@ tags:
 - passthrough
 - product-positioning
 created_at: 2026-03-04T12:50:52.266558Z
-updated_at: 2026-03-04T12:50:52.266558Z
+updated_at: 2026-03-04T12:58:56.644416Z
+completed_at: 2026-03-04T12:58:56.644416Z
 transitions:
 - status: in-progress
   at: 2026-03-04T12:50:52.266558Z
+- status: complete
+  at: 2026-03-04T12:58:56.644416Z
 ---
 
 # Run Clean Passthrough — Remove Implicit Subcommands from `clawden run`
@@ -173,25 +176,25 @@ Alternatively, if the user base is small enough (pre-1.0), skip Phase 1 and go s
 
 ## Implementation Checklist
 
-### Phase 1 (Deprecation Warning)
+### Phase 1 (Deprecation Warning - Skipped by Decision)
 
-- [ ] Add deprecation warning in `run.rs` when `start_args` is non-empty
-- [ ] Log the full command being executed (with `debug!`) so users can see what's happening
-- [ ] Add `runtime_subcommand_hints()` function to `clawden-core/src/install.rs`
-- [ ] Update `clawden run --help` to document passthrough semantics
+- [x] Add deprecation warning in `run.rs` when `start_args` is non-empty (skipped intentionally; Phase 2 implemented directly pre-1.0)
+- [x] Log the full command being executed (with `debug!`) so users can see what's happening
+- [x] Add `runtime_subcommand_hints()` function to `clawden-core/src/install.rs`
+- [x] Update `clawden run --help` to document passthrough semantics
 
 ### Phase 2 (Clean Passthrough)
 
-- [ ] Remove `runtime_start_args()` from `clawden-core/src/install.rs`
-- [ ] Remove `start_args` field from `InstalledRuntime` struct (or keep as always-empty)
-- [ ] Remove `runtime_supported_extra_args()` and `validate_runtime_args()`
-- [ ] Update `run.rs` to not prepend `start_args` to the command
-- [ ] Move default subcommand logic into `up.rs` only (for orchestrated starts)
-- [ ] Add non-zero exit hint system using `runtime_subcommand_hints()`
-- [ ] Ensure `--config-dir` is injected after the first positional arg (subcommand)
-- [ ] Update integration tests to pass explicit subcommands
-- [ ] Update `clawden run` documentation / help text
-- [ ] Audit `docker/entrypoint.sh` — confirm it handles bare invocation correctly (no ClawDen-side injection needed)
+- [x] Remove `runtime_start_args()` from `clawden-core/src/install.rs`
+- [x] Remove `start_args` field from `InstalledRuntime` struct (or keep as always-empty)
+- [x] Remove `runtime_supported_extra_args()` and `validate_runtime_args()`
+- [x] Update `run.rs` to not prepend `start_args` to the command
+- [x] Move default subcommand logic into `up.rs` only (for orchestrated starts)
+- [x] Add non-zero exit hint system using `runtime_subcommand_hints()`
+- [x] Ensure `--config-dir` is injected after the first positional arg (subcommand)
+- [x] Update integration tests to pass explicit subcommands
+- [x] Update `clawden run` documentation / help text
+- [x] Audit `docker/entrypoint.sh` — confirm it handles bare invocation correctly (no ClawDen-side injection needed)
 
 ## Alternatives Considered
 
