@@ -203,19 +203,19 @@ pub(crate) fn generate_toml_config(
                 {
                     row.insert("bot_token".to_string(), TomlValue::String(token.clone()));
                 }
-                if !channel.allowed_users.is_empty() {
-                    row.insert(
-                        "allowed_users".to_string(),
-                        TomlValue::Array(
-                            channel
-                                .allowed_users
-                                .iter()
-                                .cloned()
-                                .map(TomlValue::String)
-                                .collect(),
-                        ),
-                    );
-                }
+                // zeroclaw requires `allowed_users` to always be present
+                // (empty = deny all, which is the safe default).
+                row.insert(
+                    "allowed_users".to_string(),
+                    TomlValue::Array(
+                        channel
+                            .allowed_users
+                            .iter()
+                            .cloned()
+                            .map(TomlValue::String)
+                            .collect(),
+                    ),
+                );
             }
             "discord" => {
                 if let Some(token) = channel

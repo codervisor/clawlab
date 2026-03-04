@@ -14,7 +14,18 @@ pub fn exec_config_show(
     env_file: Option<&str>,
     installer: &RuntimeInstaller,
 ) -> Result<()> {
-    if format == "config" {
+    // Default to the runtime-native config format for runtimes that use
+    // --config-dir (zeroclaw, picoclaw, …).  The env-var view is still
+    // available via --format native|env|json.
+    let effective_format = if format == "native"
+        && clawden_core::runtime_supported_extra_args(runtime).contains(&"--config-dir")
+    {
+        "config"
+    } else {
+        format
+    };
+
+    if effective_format == "config" {
         return show_runtime_config(runtime, env_file, reveal, installer);
     }
 
@@ -27,7 +38,7 @@ pub fn exec_config_show(
         }
     };
 
-    match format {
+    match effective_format {
         "native" => {
             println!("[runtime]");
             println!("name = \"{runtime}\"");

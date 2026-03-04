@@ -179,6 +179,29 @@ pub async fn exec_run(
                 }
             }
         }
+        // Populate channel tokens from host environment when the channel
+        // instance has no token set (e.g. --channel telegram without a
+        // clawden.yaml).  Without this, config.toml ends up with an empty
+        // channels_config and the runtime reports "no channels configured".
+        for ch in &resolved_channels {
+            if let Some(instance) = cfg.channels.get_mut(ch) {
+                if instance.token.is_none() && instance.bot_token.is_none() {
+                    let env_name = channel_token_env_name(ch);
+                    if let Ok(val) = std::env::var(&env_name) {
+                        if !val.trim().is_empty() {
+                            instance.bot_token = Some(val);
+                        }
+                    }
+                }
+                if ch == "slack" && instance.app_token.is_none() {
+                    if let Ok(val) = std::env::var("SLACK_APP_TOKEN") {
+                        if !val.trim().is_empty() {
+                            instance.app_token = Some(val);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     let pinned_version = config
