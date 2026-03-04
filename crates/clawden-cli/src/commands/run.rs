@@ -579,32 +579,6 @@ fn inject_host_env_channel_tokens(env_vars: &mut Vec<(String, String)>) {
     }
 }
 
-/// Scan and report well-known env vars. Returns (env_var, provider_name, value) tuples.
-pub(crate) fn detect_host_provider_keys() -> Vec<(&'static str, &'static str, String)> {
-    PROVIDER_ENV_CANDIDATES
-        .iter()
-        .filter_map(|(env_var, provider)| {
-            std::env::var(env_var)
-                .ok()
-                .filter(|v| !v.trim().is_empty())
-                .map(|v| (*env_var, *provider, v))
-        })
-        .collect()
-}
-
-/// Scan host env for channel token values. Returns (env_var, value) tuples.
-pub(crate) fn detect_host_channel_tokens() -> Vec<(&'static str, String)> {
-    CHANNEL_ENV_VARS
-        .iter()
-        .filter_map(|var| {
-            std::env::var(var)
-                .ok()
-                .filter(|v| !v.trim().is_empty())
-                .map(|v| (*var, v))
-        })
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
