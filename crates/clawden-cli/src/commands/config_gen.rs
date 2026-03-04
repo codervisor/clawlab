@@ -277,7 +277,7 @@ fn write_secret_file(path: &Path, data: &[u8]) -> Result<()> {
             .mode(0o600)
             .open(path)?;
         f.write_all(data)?;
-        return Ok(());
+        Ok(())
     }
     #[cfg(not(unix))]
     {
