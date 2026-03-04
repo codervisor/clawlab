@@ -571,6 +571,29 @@ pub fn runtime_start_args(runtime: &str) -> Vec<String> {
     }
 }
 
+/// Common subcommands for known runtimes, used for hint messages only.
+/// Never injected into the command line.
+pub fn runtime_subcommand_hints(runtime: &str) -> &'static [(&'static str, &'static str)] {
+    match runtime {
+        "zeroclaw" => &[
+            ("daemon", "run as background daemon"),
+            ("repl", "interactive REPL"),
+            ("chat", "single-turn chat"),
+            ("serve", "HTTP API server"),
+        ],
+        "picoclaw" => &[
+            ("gateway", "HTTP gateway mode"),
+            ("proxy", "reverse proxy mode"),
+        ],
+        "openfang" => &[
+            ("daemon", "run as background daemon"),
+            ("serve", "HTTP API server"),
+        ],
+        "nullclaw" => &[("daemon", "run as background daemon")],
+        _ => &[],
+    }
+}
+
 /// Returns the set of extra CLI flags (long-form names) that a runtime's start
 /// command is known to accept.  Any flag **not** in this list must be passed via
 /// environment variables instead — blindly appending flags will break runtimes

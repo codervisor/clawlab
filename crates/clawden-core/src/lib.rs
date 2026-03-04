@@ -19,8 +19,9 @@ pub use channels::{
 };
 pub use discovery::{DiscoveredEndpoint, DiscoveryMethod, DiscoveryService};
 pub use install::{
-    runtime_start_args, runtime_supported_extra_args, validate_runtime_args, version_satisfies,
-    InstallOutcome, InstalledRuntime, RuntimeInstaller, VersionCheck,
+    runtime_start_args, runtime_subcommand_hints, runtime_supported_extra_args,
+    validate_runtime_args, version_satisfies, InstallOutcome, InstalledRuntime, RuntimeInstaller,
+    VersionCheck,
 };
 pub use lifecycle::AgentState;
 pub use manager::{AgentRecord, LifecycleManager};

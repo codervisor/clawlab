@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clawden_config::{ChannelInstanceYaml, ClawDenYaml, ProviderEntryYaml, ProviderRefYaml};
 use clawden_core::{
-    validate_runtime_args, ExecutionMode, LifecycleManager, ProcessManager, RuntimeInstaller,
+    runtime_subcommand_hints, ExecutionMode, LifecycleManager, ProcessManager, RuntimeInstaller,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -248,7 +248,7 @@ pub async fn exec_run(
     let current_project_hash = project_hash()?;
     let installed = ensure_installed_runtime(installer, &opts.runtime, pinned_version)?;
 
-    let mut args = installed.start_args.clone();
+    let mut args = opts.extra_args.clone();
     if let Some(policy) = &opts.restart {
         args.push(format!("--restart={policy}"));
     }
@@ -262,17 +262,6 @@ pub async fn exec_run(
             inject_config_dir_arg(&opts.runtime, &mut args, &config_dir);
         }
     }
-    args.extend(opts.extra_args.clone());
-
-    let unsupported = validate_runtime_args(&opts.runtime, &args);
-    if !unsupported.is_empty() {
-        eprintln!(
-            "Warning: {} does not accept these flags: {}. They will be passed anyway since they were explicitly requested.",
-            opts.runtime,
-            unsupported.join(", "),
-        );
-    }
-
     // Channel and tool lists are passed via env vars — runtimes
     // do NOT accept --channels / --tools CLI flags.
     let mut combined_env = env_vars;
@@ -306,7 +295,10 @@ pub async fn exec_run(
     // stream_logs would begin from the current file size — after
     // verify_runtime_startup has already consumed ~2 s of output.
     let stream = process_manager.stream_logs(std::slice::from_ref(&opts.runtime))?;
-    verify_runtime_startup(process_manager, &opts.runtime, &info)?;
+    if let Err(err) = verify_runtime_startup(process_manager, &opts.runtime, &info) {
+        maybe_print_subcommand_hint(&opts.runtime, &opts.extra_args);
+        return Err(err);
+    }
     append_audit_file("runtime.start", &opts.runtime, "ok")?;
 
     if opts.detach {
@@ -355,6 +347,21 @@ pub async fn exec_run(
     }
 
     Ok(())
+}
+
+fn maybe_print_subcommand_hint(runtime: &str, extra_args: &[String]) {
+    if extra_args.iter().any(|arg| !arg.starts_with('-')) {
+        return;
+    }
+    let hints = runtime_subcommand_hints(runtime);
+    if hints.is_empty() {
+        return;
+    }
+    eprintln!("Hint: {runtime} expects a subcommand. Common options:");
+    for (subcommand, description) in hints {
+        eprintln!("  clawden run {runtime} {subcommand}     — {description}");
+    }
+    eprintln!("Run `clawden run {runtime} --help` to see all subcommands.");
 }
 
 fn merge_env_overrides(

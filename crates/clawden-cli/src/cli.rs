@@ -154,7 +154,7 @@ pub enum Commands {
         /// Restart on failure policy
         #[arg(long)]
         restart: Option<String>,
-        /// Runtime name followed by runtime args
+        /// Runtime name followed by passthrough runtime args (including explicit subcommands)
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         runtime_and_args: Vec<String>,
     },

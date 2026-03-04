@@ -146,8 +146,15 @@ pub(crate) fn inject_config_dir_arg(runtime: &str, args: &mut Vec<String>, confi
     if !supports_config_dir(runtime) {
         return;
     }
-    args.push("--config-dir".to_string());
-    args.push(config_dir.to_string_lossy().to_string());
+    let config_flag = "--config-dir".to_string();
+    let config_value = config_dir.to_string_lossy().to_string();
+    if let Some(index) = args.iter().position(|arg| !arg.starts_with('-')) {
+        args.insert(index + 1, config_flag);
+        args.insert(index + 2, config_value);
+    } else {
+        args.push(config_flag);
+        args.push(config_value);
+    }
 }
 
 pub(crate) fn cleanup_project_config_dir(project_hash: &str) -> Result<()> {
@@ -616,6 +623,17 @@ config:
         let mut openclaw_args = vec!["serve".to_string()];
         inject_config_dir_arg("openclaw", &mut openclaw_args, Path::new("/tmp/cfg"));
         assert_eq!(openclaw_args, vec!["serve".to_string()]);
+
+        let mut no_subcommand_args = vec!["--verbose".to_string()];
+        inject_config_dir_arg("zeroclaw", &mut no_subcommand_args, Path::new("/tmp/cfg"));
+        assert_eq!(
+            no_subcommand_args,
+            vec![
+                "--verbose".to_string(),
+                "--config-dir".to_string(),
+                "/tmp/cfg".to_string()
+            ]
+        );
     }
 
     #[test]
