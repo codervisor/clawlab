@@ -54,7 +54,7 @@ pub(crate) fn generate_config_dir(
 
 /// Returns true for runtimes that support `<runtime> onboard --config-dir`
 /// to generate a template config with all required default fields.
-fn has_onboard_command(runtime: &str) -> bool {
+pub(crate) fn has_onboard_command(runtime: &str) -> bool {
     matches!(runtime, "zeroclaw")
 }
 
@@ -62,7 +62,7 @@ fn has_onboard_command(runtime: &str) -> bool {
 /// config.toml that contains all required fields with sensible defaults.
 /// Returns the parsed TOML table on success, or None if the executable is
 /// unavailable or onboard fails (we fall back to the old behaviour).
-fn seed_template_config(
+pub(crate) fn seed_template_config(
     executable: Option<&Path>,
     runtime: &str,
     config: &ClawDenYaml,
@@ -158,7 +158,7 @@ pub(crate) fn cleanup_project_config_dir(project_hash: &str) -> Result<()> {
     Ok(())
 }
 
-fn generate_toml_config(
+pub(crate) fn generate_toml_config(
     config: &ClawDenYaml,
     runtime: &str,
     base: Option<&toml::Table>,
@@ -271,7 +271,7 @@ fn generate_toml_config(
     root
 }
 
-fn generate_picoclaw_config(
+pub(crate) fn generate_picoclaw_config(
     config: &ClawDenYaml,
     runtime: &str,
 ) -> serde_json::Map<String, JsonValue> {

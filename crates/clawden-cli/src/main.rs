@@ -166,7 +166,13 @@ async fn main() -> Result<()> {
                 format,
                 reveal,
                 env_file,
-            } => commands::exec_config_show(&runtime, &format, reveal, env_file.as_deref())?,
+            } => commands::exec_config_show(
+                &runtime,
+                &format,
+                reveal,
+                env_file.as_deref(),
+                &installer,
+            )?,
             ConfigCommand::Env { reveal } => commands::exec_config_env(reveal)?,
         },
     }

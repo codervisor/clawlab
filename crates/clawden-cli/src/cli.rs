@@ -328,7 +328,7 @@ pub enum ConfigCommand {
     Show {
         /// Runtime name.
         runtime: String,
-        /// Output format: native | env | json
+        /// Output format: native | env | json | config
         #[arg(long, default_value = "native")]
         format: String,
         /// Reveal secret values instead of redacting.

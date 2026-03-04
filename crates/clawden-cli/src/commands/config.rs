@@ -1,6 +1,10 @@
 use anyhow::Result;
+use clawden_core::RuntimeInstaller;
 use serde_json::json;
 
+use crate::commands::config_gen::{
+    generate_picoclaw_config, generate_toml_config, has_onboard_command, seed_template_config,
+};
 use crate::commands::up::load_config_with_env_file;
 
 pub fn exec_config_show(
@@ -8,7 +12,12 @@ pub fn exec_config_show(
     format: &str,
     reveal: bool,
     env_file: Option<&str>,
+    installer: &RuntimeInstaller,
 ) -> Result<()> {
+    if format == "config" {
+        return show_runtime_config(runtime, env_file, reveal, installer);
+    }
+
     let env_vars = match load_config_with_env_file(env_file)? {
         Some(config) => super::up::build_runtime_env_vars(&config, runtime)?,
         None => {
@@ -42,10 +51,136 @@ pub fn exec_config_show(
                 serde_json::to_string_pretty(&json!({"runtime": runtime, "env": env}))?
             );
         }
-        _ => anyhow::bail!("unsupported format '{format}'. Use: native, env, json"),
+        _ => anyhow::bail!("unsupported format '{format}'. Use: native, env, json, config"),
     }
 
     Ok(())
+}
+
+/// Render the runtime-native config file (TOML or JSON) that would be written
+/// to `--config-dir` during `clawden run`.  When the runtime supports
+/// `onboard`, the template is seeded first so all required fields are present.
+fn show_runtime_config(
+    runtime: &str,
+    env_file: Option<&str>,
+    reveal: bool,
+    installer: &RuntimeInstaller,
+) -> Result<()> {
+    use clawden_core::runtime_supported_extra_args;
+
+    if !runtime_supported_extra_args(runtime).contains(&"--config-dir") {
+        anyhow::bail!(
+            "'{runtime}' does not use a config file (env-only runtime). \
+             Use --format native|env|json instead."
+        );
+    }
+
+    let config = load_config_with_env_file(env_file)?;
+    let config = config.as_ref();
+
+    let exe = installer.runtime_executable(runtime);
+
+    match runtime {
+        "zeroclaw" | "nullclaw" | "openfang" => {
+            let base = if has_onboard_command(runtime) {
+                // Seed into a temp dir so we don't pollute the real config dir.
+                let unique = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_nanos())
+                    .unwrap_or(0);
+                let tmp = std::env::temp_dir().join(format!("clawden-config-show-{unique}"));
+                std::fs::create_dir_all(&tmp).ok();
+                let empty_cfg = empty_config(runtime);
+                let cfg_ref = config.unwrap_or(&empty_cfg);
+                let result = seed_template_config(exe.as_deref(), runtime, cfg_ref, &tmp);
+                let _ = std::fs::remove_dir_all(&tmp);
+                result
+            } else {
+                None
+            };
+            let body = if let Some(cfg) = config {
+                generate_toml_config(cfg, runtime, base.as_ref())
+            } else {
+                base.unwrap_or_default()
+            };
+            let rendered = toml::to_string_pretty(&body)?;
+            if reveal {
+                println!("{rendered}");
+            } else {
+                println!("{}", redact_toml_secrets(&rendered));
+            }
+        }
+        "picoclaw" => {
+            if let Some(cfg) = config {
+                let body = generate_picoclaw_config(cfg, runtime);
+                let rendered = serde_json::to_string_pretty(&body)?;
+                if reveal {
+                    println!("{rendered}");
+                } else {
+                    println!("{}", redact_json_secrets(&rendered));
+                }
+            } else {
+                println!("{{}}");
+            }
+        }
+        _ => {
+            anyhow::bail!("'{runtime}' config preview is not supported");
+        }
+    }
+    Ok(())
+}
+
+fn empty_config(runtime: &str) -> clawden_config::ClawDenYaml {
+    let yaml = format!("runtime: {runtime}\n");
+    clawden_config::ClawDenYaml::parse_yaml(&yaml).expect("minimal yaml should parse")
+}
+
+/// Simple line-level redaction for TOML secrets — replaces values of keys that
+/// look like they contain secrets (api_key, token, etc.) with `<redacted>`.
+fn redact_toml_secrets(toml_str: &str) -> String {
+    toml_str
+        .lines()
+        .map(|line| {
+            if let Some((key, _val)) = line.split_once('=') {
+                let key_lower = key.trim().to_ascii_lowercase();
+                if key_lower.contains("key")
+                    || key_lower.contains("token")
+                    || key_lower.contains("secret")
+                {
+                    return format!("{} = \"<redacted>\"", key.trim_end());
+                }
+            }
+            line.to_string()
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Simple line-level redaction for JSON secrets.
+fn redact_json_secrets(json_str: &str) -> String {
+    json_str
+        .lines()
+        .map(|line| {
+            if let Some((key_part, _)) = line.split_once(':') {
+                let key_lower = key_part.trim().to_ascii_lowercase();
+                if key_lower.contains("key")
+                    || key_lower.contains("token")
+                    || key_lower.contains("secret")
+                {
+                    let indent = &line[..line.len() - line.trim_start().len()];
+                    let key_trimmed = key_part.trim();
+                    let comma = if line.trim_end().ends_with(',') {
+                        ","
+                    } else {
+                        ""
+                    };
+                    return format!("{indent}{key_trimmed}: \"<redacted>\"{comma}");
+                }
+            }
+            line.to_string()
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 pub fn exec_config_env(reveal: bool) -> Result<()> {
