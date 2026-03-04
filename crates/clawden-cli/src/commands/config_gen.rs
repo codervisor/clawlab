@@ -7,7 +7,9 @@ use std::fs;
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 use toml::Value as TomlValue;
+use tracing::debug;
 
 use super::up::{channels_for_runtime, runtime_provider_and_model};
 
@@ -15,6 +17,7 @@ pub(crate) fn generate_config_dir(
     config: &ClawDenYaml,
     runtime: &str,
     project_hash: &str,
+    executable: Option<&Path>,
 ) -> Result<Option<PathBuf>> {
     if !supports_config_dir(runtime) {
         return Ok(None);
@@ -25,7 +28,12 @@ pub(crate) fn generate_config_dir(
 
     match runtime {
         "zeroclaw" | "nullclaw" | "openfang" => {
-            let body = generate_toml_config(config, runtime);
+            let base = if has_onboard_command(runtime) {
+                seed_template_config(executable, runtime, config, &dir)
+            } else {
+                None
+            };
+            let body = generate_toml_config(config, runtime, base.as_ref());
             write_secret_file(
                 &dir.join("config.toml"),
                 toml::to_string_pretty(&body)?.as_bytes(),
@@ -44,6 +52,96 @@ pub(crate) fn generate_config_dir(
     Ok(Some(dir))
 }
 
+/// Returns true for runtimes that support `<runtime> onboard --config-dir`
+/// to generate a template config with all required default fields.
+fn has_onboard_command(runtime: &str) -> bool {
+    matches!(runtime, "zeroclaw")
+}
+
+/// Run `<runtime> onboard --config-dir <dir> --force` to seed a template
+/// config.toml that contains all required fields with sensible defaults.
+/// Returns the parsed TOML table on success, or None if the executable is
+/// unavailable or onboard fails (we fall back to the old behaviour).
+fn seed_template_config(
+    executable: Option<&Path>,
+    runtime: &str,
+    config: &ClawDenYaml,
+    config_dir: &Path,
+) -> Option<toml::Table> {
+    let exe = executable?;
+    if !exe.exists() {
+        return None;
+    }
+
+    let mut cmd = Command::new(exe);
+    cmd.arg("onboard")
+        .arg("--config-dir")
+        .arg(config_dir)
+        .arg("--force")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+
+    // Pass provider hint so onboard writes a matching default_provider.
+    if let Some((provider_name, _, _)) = runtime_provider_and_model(config, runtime) {
+        cmd.arg("--provider").arg(&provider_name);
+    }
+
+    debug!(
+        "seeding template config via {} onboard --config-dir {}",
+        exe.display(),
+        config_dir.display()
+    );
+
+    match cmd.status() {
+        Ok(status) if status.success() => {
+            let toml_path = config_dir.join("config.toml");
+            let content = fs::read_to_string(&toml_path).ok()?;
+            let table: toml::Table = content.parse().ok()?;
+
+            // onboard creates workspace scaffolding (sessions/, memory/,
+            // IDENTITY.md, …) that we don't need — remove everything except
+            // config.toml itself.
+            cleanup_onboard_artifacts(config_dir);
+
+            Some(table)
+        }
+        Ok(status) => {
+            debug!(
+                "{} onboard exited with status {} — falling back to generated config",
+                runtime, status
+            );
+            None
+        }
+        Err(e) => {
+            debug!(
+                "failed to run {} onboard: {} — falling back to generated config",
+                runtime, e
+            );
+            None
+        }
+    }
+}
+
+/// Remove workspace artefacts that `onboard` creates alongside config.toml.
+fn cleanup_onboard_artifacts(config_dir: &Path) {
+    // Keep only config.toml (and config.json for picoclaw).
+    let keep: &[&str] = &["config.toml", "config.json"];
+    if let Ok(entries) = fs::read_dir(config_dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name_str = name.to_string_lossy();
+            if !keep.contains(&name_str.as_ref()) {
+                let path = entry.path();
+                if path.is_dir() {
+                    let _ = fs::remove_dir_all(&path);
+                } else {
+                    let _ = fs::remove_file(&path);
+                }
+            }
+        }
+    }
+}
+
 pub(crate) fn inject_config_dir_arg(runtime: &str, args: &mut Vec<String>, config_dir: &Path) {
     if !supports_config_dir(runtime) {
         return;
@@ -60,8 +158,14 @@ pub(crate) fn cleanup_project_config_dir(project_hash: &str) -> Result<()> {
     Ok(())
 }
 
-fn generate_toml_config(config: &ClawDenYaml, runtime: &str) -> toml::Table {
-    let mut root = toml::Table::new();
+fn generate_toml_config(
+    config: &ClawDenYaml,
+    runtime: &str,
+    base: Option<&toml::Table>,
+) -> toml::Table {
+    // Start from the template if available — this preserves all required
+    // default fields that the runtime expects (e.g. default_temperature).
+    let mut root = base.cloned().unwrap_or_default();
 
     if let Some((provider_name, provider, model)) = runtime_provider_and_model(config, runtime) {
         root.insert(
@@ -341,7 +445,7 @@ config:
         let mut config = ClawDenYaml::parse_yaml(yaml).expect("yaml parse");
         config.resolve_env_vars().expect("resolve env");
 
-        let dir = generate_config_dir(&config, "zeroclaw", "abc123")
+        let dir = generate_config_dir(&config, "zeroclaw", "abc123", None)
             .expect("config dir")
             .expect("supported runtime");
         let body = fs::read_to_string(dir.join("config.toml")).expect("read config");
@@ -394,6 +498,109 @@ config:
     }
 
     #[test]
+    fn template_seeded_config_preserves_defaults_and_overlays_clawden_values() {
+        use super::generate_toml_config;
+
+        // Simulate a template config that `onboard` would generate — it
+        // contains required fields like default_temperature that clawden
+        // doesn't know about.
+        let mut template = toml::Table::new();
+        template.insert(
+            "default_provider".to_string(),
+            toml::Value::String("openrouter".to_string()),
+        );
+        template.insert(
+            "default_model".to_string(),
+            toml::Value::String("anthropic/claude-sonnet-4.6".to_string()),
+        );
+        template.insert("default_temperature".to_string(), toml::Value::Float(0.7));
+        let mut reliability = toml::Table::new();
+        reliability.insert("provider_retries".to_string(), toml::Value::Integer(2));
+        reliability.insert("api_keys".to_string(), toml::Value::Array(vec![]));
+        template.insert("reliability".to_string(), toml::Value::Table(reliability));
+        let mut memory = toml::Table::new();
+        memory.insert(
+            "backend".to_string(),
+            toml::Value::String("sqlite".to_string()),
+        );
+        template.insert("memory".to_string(), toml::Value::Table(memory));
+
+        // Now build clawden config that should overlay on top.
+        let yaml = r#"
+runtime: zeroclaw
+provider: openrouter
+model: anthropic/claude-sonnet-4-6
+providers:
+  openrouter:
+    api_key: sk-or-merged
+channels:
+  tg:
+    type: telegram
+    token: tg-merged-token
+config:
+  debug: true
+"#;
+        let mut config = ClawDenYaml::parse_yaml(yaml).expect("yaml parse");
+        config.resolve_env_vars().expect("resolve env");
+
+        let merged = generate_toml_config(&config, "zeroclaw", Some(&template));
+
+        // Clawden values should override template values.
+        assert_eq!(
+            merged.get("default_provider").and_then(toml::Value::as_str),
+            Some("openrouter")
+        );
+        assert_eq!(
+            merged.get("default_model").and_then(toml::Value::as_str),
+            Some("anthropic/claude-sonnet-4-6")
+        );
+
+        // Template-only fields like default_temperature MUST survive.
+        assert_eq!(
+            merged
+                .get("default_temperature")
+                .and_then(toml::Value::as_float),
+            Some(0.7)
+        );
+
+        // Template-only nested fields like memory.backend MUST survive.
+        assert_eq!(
+            merged
+                .get("memory")
+                .and_then(|v| v.get("backend"))
+                .and_then(toml::Value::as_str),
+            Some("sqlite")
+        );
+
+        // API keys from clawden should be present.
+        assert_eq!(
+            merged
+                .get("reliability")
+                .and_then(|v| v.get("api_keys"))
+                .and_then(toml::Value::as_array)
+                .and_then(|a| a.first())
+                .and_then(toml::Value::as_str),
+            Some("sk-or-merged")
+        );
+
+        // Channel config from clawden should be present.
+        assert_eq!(
+            merged
+                .get("channels_config")
+                .and_then(|v| v.get("telegram"))
+                .and_then(|v| v.get("bot_token"))
+                .and_then(toml::Value::as_str),
+            Some("tg-merged-token")
+        );
+
+        // Custom config override from clawden should be present.
+        assert_eq!(
+            merged.get("debug").and_then(toml::Value::as_bool),
+            Some(true)
+        );
+    }
+
+    #[test]
     fn injects_config_dir_only_for_supported_runtimes() {
         let mut zeroclaw_args = vec!["daemon".to_string()];
         inject_config_dir_arg("zeroclaw", &mut zeroclaw_args, Path::new("/tmp/cfg"));
@@ -432,7 +639,7 @@ providers:
 "#;
         let mut config = ClawDenYaml::parse_yaml(yaml).expect("yaml parse");
         config.resolve_env_vars().expect("resolve env");
-        let dir = generate_config_dir(&config, "zeroclaw", "cleanup-ph")
+        let dir = generate_config_dir(&config, "zeroclaw", "cleanup-ph", None)
             .expect("config dir")
             .expect("supported runtime");
         assert!(dir.exists());
@@ -478,7 +685,7 @@ channels:
         let mut config = ClawDenYaml::parse_yaml(yaml).expect("yaml parse");
         config.resolve_env_vars().expect("resolve env");
 
-        let generated_dir = generate_config_dir(&config, "zeroclaw", "iso-ph")
+        let generated_dir = generate_config_dir(&config, "zeroclaw", "iso-ph", None)
             .expect("config dir")
             .expect("supported runtime");
         let generated_body =
@@ -533,7 +740,7 @@ config:
         let mut config = ClawDenYaml::parse_yaml(yaml).expect("yaml parse");
         config.resolve_env_vars().expect("resolve env");
 
-        let dir = generate_config_dir(&config, "openfang", "openfang-ph")
+        let dir = generate_config_dir(&config, "openfang", "openfang-ph", None)
             .expect("config dir")
             .expect("supported runtime");
         let body = fs::read_to_string(dir.join("config.toml")).expect("read config");
@@ -601,7 +808,7 @@ config:
         let mut config = ClawDenYaml::parse_yaml(yaml).expect("yaml parse");
         config.resolve_env_vars().expect("resolve env");
 
-        let dir = generate_config_dir(&config, "picoclaw", "picoclaw-ph")
+        let dir = generate_config_dir(&config, "picoclaw", "picoclaw-ph", None)
             .expect("config dir")
             .expect("supported runtime");
         let body = fs::read_to_string(dir.join("config.json")).expect("read config");

@@ -146,9 +146,12 @@ pub async fn exec_up(
 
                 let mut args = installed.start_args.clone();
                 if let Some(cfg) = config.as_ref() {
-                    if let Some(config_dir) =
-                        generate_config_dir(cfg, &runtime, &current_project_hash)?
-                    {
+                    if let Some(config_dir) = generate_config_dir(
+                        cfg,
+                        &runtime,
+                        &current_project_hash,
+                        Some(&installed.executable),
+                    )? {
                         inject_config_dir_arg(&runtime, &mut args, &config_dir);
                     }
                 }

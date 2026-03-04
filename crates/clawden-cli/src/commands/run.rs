@@ -230,7 +230,12 @@ pub async fn exec_run(
         args.push(format!("--restart={policy}"));
     }
     if let Some(cfg) = config.as_ref() {
-        if let Some(config_dir) = generate_config_dir(cfg, &opts.runtime, &current_project_hash)? {
+        if let Some(config_dir) = generate_config_dir(
+            cfg,
+            &opts.runtime,
+            &current_project_hash,
+            Some(&installed.executable),
+        )? {
             inject_config_dir_arg(&opts.runtime, &mut args, &config_dir);
         }
     }
