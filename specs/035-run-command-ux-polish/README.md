@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 created: 2026-03-04
 priority: high
 tags:
@@ -10,8 +10,13 @@ tags:
 - developer-experience
 - run
 created_at: 2026-03-04T06:38:25.829298791Z
-updated_at: 2026-03-04T07:30:00.000000000Z
+updated_at: 2026-03-04T07:20:20.792058269Z
+completed_at: 2026-03-04T07:20:20.792058269Z
+transitions:
+- status: complete
+  at: 2026-03-04T07:20:20.792058269Z
 ---
+
 # Run Command UX Polish — Credential Resolution, Smart Defaults & Actionable Errors
 
 ## Overview
@@ -222,7 +227,7 @@ Detected environment variables:
 - [x] Add tests: host env `OPENROUTER_API_KEY` auto-detected and injected
 - [x] Add tests: default provider inferred from host env
 - [x] Add tests: error message includes ✓/✗ status and source labels
-- [ ] Add tests: `clawden config env` output format
+- [x] Add tests: `clawden config env` output format
 - [x] Add tests: precedence — explicit `--provider` overrides auto-inferred provider
 
 ## Test
@@ -234,8 +239,8 @@ Detected environment variables:
 - [x] `OPENROUTER_API_KEY=sk-... clawden run --provider openai zeroclaw` → explicit `--provider` wins over auto-inference
 - [x] `clawden run --channel telegram zeroclaw` (no token anywhere) → error shows `TELEGRAM_BOT_TOKEN ..... ✗ missing` with suggested command
 - [x] `clawden run --token tok --channel telegram zeroclaw` (no provider) → error shows detected env vars if any, suggests `--provider`
-- [ ] `clawden config env` → lists all known env vars with ✓/✗ status
-- [ ] `clawden config env --reveal` → shows full env var values
+- [x] `clawden config env` → lists all known env vars with ✓/✗ status
+- [x] `clawden config env --reveal` → shows full env var values
 - [x] Error message includes copy-paste-ready `Suggested command:` line
 - [x] Error message shows source of resolved values (`--token`, `clawden.yaml`, `.env`, environment)
 - [x] `--allow-missing-credentials` still works and skips all validation
