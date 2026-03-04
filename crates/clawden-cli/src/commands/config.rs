@@ -9,10 +9,14 @@ pub fn exec_config_show(
     reveal: bool,
     env_file: Option<&str>,
 ) -> Result<()> {
-    let Some(config) = load_config_with_env_file(env_file)? else {
-        anyhow::bail!("clawden.yaml not found in current directory");
+    let env_vars = match load_config_with_env_file(env_file)? {
+        Some(config) => super::up::build_runtime_env_vars(&config, runtime)?,
+        None => {
+            eprintln!("No clawden.yaml found — showing detected host environment for '{runtime}'");
+            eprintln!("Tip: run `clawden init` to create a configuration file\n");
+            detect_host_env_vars()
+        }
     };
-    let env_vars = super::up::build_runtime_env_vars(&config, runtime)?;
 
     match format {
         "native" => {
@@ -120,4 +124,37 @@ fn maybe_redact(key: &str, value: &str, reveal: bool) -> String {
         return "<redacted>".to_string();
     }
     value.to_string()
+}
+
+/// Scan the host environment for known ClawDen-relevant variables.
+fn detect_host_env_vars() -> Vec<(String, String)> {
+    let known_vars: &[&str] = &[
+        "CLAWDEN_LLM_API_KEY",
+        "CLAWDEN_LLM_PROVIDER",
+        "CLAWDEN_LLM_MODEL",
+        "CLAWDEN_LLM_BASE_URL",
+        "OPENROUTER_API_KEY",
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "GEMINI_API_KEY",
+        "GOOGLE_API_KEY",
+        "MISTRAL_API_KEY",
+        "GROQ_API_KEY",
+        "TELEGRAM_BOT_TOKEN",
+        "DISCORD_BOT_TOKEN",
+        "SLACK_BOT_TOKEN",
+        "SLACK_APP_TOKEN",
+    ];
+
+    let mut pairs: Vec<(String, String)> = known_vars
+        .iter()
+        .filter_map(|&name| {
+            std::env::var(name)
+                .ok()
+                .filter(|v| !v.trim().is_empty())
+                .map(|v| (name.to_string(), v))
+        })
+        .collect();
+    pairs.sort_by(|a, b| a.0.cmp(&b.0));
+    pairs
 }
