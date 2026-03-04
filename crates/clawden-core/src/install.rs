@@ -559,10 +559,7 @@ impl RuntimeInstaller {
 
 /// Whether this runtime supports `--config-dir` based config injection.
 pub fn runtime_supports_config_dir(runtime: &str) -> bool {
-    match runtime {
-        "zeroclaw" | "picoclaw" | "openfang" | "nullclaw" => true,
-        _ => false,
-    }
+    matches!(runtime, "zeroclaw" | "picoclaw" | "openfang" | "nullclaw")
 }
 
 /// Default start args used by the orchestrated `clawden up` flow only.
