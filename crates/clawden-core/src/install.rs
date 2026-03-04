@@ -11,7 +11,6 @@ pub struct InstalledRuntime {
     pub runtime: String,
     pub version: String,
     pub executable: PathBuf,
-    pub start_args: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -120,7 +119,6 @@ impl RuntimeInstaller {
             runtime: runtime.to_string(),
             version: version.clone(),
             executable: final_dir.join(runtime),
-            start_args: runtime_start_args(runtime),
         })
     }
 
@@ -235,12 +233,10 @@ impl RuntimeInstaller {
             let version = version_path.to_string_lossy().to_string();
             let executable = entry.path().join(&version).join(&runtime);
             if executable.exists() {
-                let start_args = runtime_start_args(&runtime);
                 rows.push(InstalledRuntime {
                     runtime,
                     version,
                     executable,
-                    start_args,
                 });
             }
         }
@@ -561,44 +557,45 @@ impl RuntimeInstaller {
     }
 }
 
-pub fn runtime_start_args(runtime: &str) -> Vec<String> {
+/// Whether this runtime supports `--config-dir` based config injection.
+pub fn runtime_supports_config_dir(runtime: &str) -> bool {
     match runtime {
-        "zeroclaw" => vec!["daemon".to_string()],
-        "picoclaw" => vec!["gateway".to_string()],
-        "openfang" => vec!["daemon".to_string()],
-        "nullclaw" => vec!["daemon".to_string()],
-        _ => Vec::new(),
+        "zeroclaw" | "picoclaw" | "openfang" | "nullclaw" => true,
+        _ => false,
     }
 }
 
-/// Returns the set of extra CLI flags (long-form names) that a runtime's start
-/// command is known to accept.  Any flag **not** in this list must be passed via
-/// environment variables instead — blindly appending flags will break runtimes
-/// whose CLIs don't recognise them.
-pub fn runtime_supported_extra_args(runtime: &str) -> &'static [&'static str] {
+/// Default start args used by the orchestrated `clawden up` flow only.
+pub fn runtime_default_start_args_for_up(runtime: &str) -> &'static [&'static str] {
     match runtime {
-        "zeroclaw" => &["--config-dir", "--port", "--host"],
-        "picoclaw" => &["--config-dir", "--port", "--host"],
-        "openfang" => &["--config-dir", "--port", "--host"],
-        "nullclaw" => &["--config-dir", "--port", "--host"],
+        "zeroclaw" => &["daemon"],
+        "picoclaw" => &["gateway"],
+        "openfang" => &["daemon"],
+        "nullclaw" => &["daemon"],
         _ => &[],
     }
 }
 
-/// Validate that all `args` (beyond `start_args`) are accepted by the runtime.
-/// Returns the names of any unsupported flags.
-pub fn validate_runtime_args<'a>(runtime: &str, args: &'a [String]) -> Vec<&'a str> {
-    let supported = runtime_supported_extra_args(runtime);
-    args.iter()
-        .filter_map(|arg| {
-            let flag = arg.split('=').next().unwrap_or(arg);
-            if flag.starts_with("--") && !supported.contains(&flag) {
-                Some(flag)
-            } else {
-                None
-            }
-        })
-        .collect()
+/// Common runtime subcommands for hint text only. Never inject these into argv.
+pub fn runtime_subcommand_hints(runtime: &str) -> &'static [(&'static str, &'static str)] {
+    match runtime {
+        "zeroclaw" => &[
+            ("daemon", "run as background daemon"),
+            ("repl", "interactive REPL"),
+            ("chat", "single-turn chat"),
+            ("serve", "HTTP API server"),
+        ],
+        "picoclaw" => &[
+            ("gateway", "HTTP gateway mode"),
+            ("proxy", "reverse proxy mode"),
+        ],
+        "openfang" => &[
+            ("daemon", "run as background daemon"),
+            ("serve", "HTTP API server"),
+        ],
+        "nullclaw" => &[("daemon", "run as background daemon")],
+        _ => &[],
+    }
 }
 
 pub fn version_satisfies(installed: &str, constraint: &str) -> bool {
@@ -969,7 +966,7 @@ fn make_executable(path: &Path) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_runtime_args, version_satisfies};
+    use super::{runtime_subcommand_hints, runtime_supports_config_dir, version_satisfies};
 
     #[test]
     fn version_constraints_support_exact_wildcard_range_and_latest() {
@@ -982,24 +979,16 @@ mod tests {
     }
 
     #[test]
-    fn validate_runtime_args_rejects_unknown_flags() {
-        let args = vec![
-            "daemon".to_string(),
-            "--channels=telegram,discord".to_string(),
-            "--tools=git,http".to_string(),
-        ];
-        let bad = validate_runtime_args("zeroclaw", &args);
-        assert_eq!(bad, vec!["--channels", "--tools"]);
+    fn runtime_supports_config_dir_for_known_runtimes() {
+        assert!(runtime_supports_config_dir("zeroclaw"));
+        assert!(runtime_supports_config_dir("picoclaw"));
+        assert!(runtime_supports_config_dir("openfang"));
+        assert!(!runtime_supports_config_dir("openclaw"));
     }
 
     #[test]
-    fn validate_runtime_args_allows_known_flags() {
-        let args = vec![
-            "daemon".to_string(),
-            "--port=9090".to_string(),
-            "--host=127.0.0.1".to_string(),
-        ];
-        let bad = validate_runtime_args("zeroclaw", &args);
-        assert!(bad.is_empty(), "expected no bad flags, got: {:?}", bad);
+    fn runtime_subcommand_hints_include_zeroclaw_repl() {
+        let hints = runtime_subcommand_hints("zeroclaw");
+        assert!(hints.iter().any(|(name, _)| *name == "repl"));
     }
 }

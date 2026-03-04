@@ -17,13 +17,12 @@ pub fn exec_config_show(
     // Default to the runtime-native config format for runtimes that use
     // --config-dir (zeroclaw, picoclaw, …).  The env-var view is still
     // available via --format native|env|json.
-    let effective_format = if format == "native"
-        && clawden_core::runtime_supported_extra_args(runtime).contains(&"--config-dir")
-    {
-        "config"
-    } else {
-        format
-    };
+    let effective_format =
+        if format == "native" && clawden_core::runtime_supports_config_dir(runtime) {
+            "config"
+        } else {
+            format
+        };
 
     if effective_format == "config" {
         return show_runtime_config(runtime, env_file, reveal, installer);
@@ -77,9 +76,7 @@ fn show_runtime_config(
     reveal: bool,
     installer: &RuntimeInstaller,
 ) -> Result<()> {
-    use clawden_core::runtime_supported_extra_args;
-
-    if !runtime_supported_extra_args(runtime).contains(&"--config-dir") {
+    if !clawden_core::runtime_supports_config_dir(runtime) {
         anyhow::bail!(
             "'{runtime}' does not use a config file (env-only runtime). \
              Use --format native|env|json instead."

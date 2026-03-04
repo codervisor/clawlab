@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clawden_config::{ChannelCredentialMapper, ClawDenYaml};
-use clawden_core::runtime_supported_extra_args;
+use clawden_core::runtime_supports_config_dir;
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 use std::fs;
@@ -146,8 +146,13 @@ pub(crate) fn inject_config_dir_arg(runtime: &str, args: &mut Vec<String>, confi
     if !supports_config_dir(runtime) {
         return;
     }
-    args.push("--config-dir".to_string());
-    args.push(config_dir.to_string_lossy().to_string());
+    let insert_at = args
+        .iter()
+        .position(|arg| !arg.starts_with('-'))
+        .map(|idx| idx + 1)
+        .unwrap_or(0);
+    args.insert(insert_at, "--config-dir".to_string());
+    args.insert(insert_at + 1, config_dir.to_string_lossy().to_string());
 }
 
 pub(crate) fn cleanup_project_config_dir(project_hash: &str) -> Result<()> {
@@ -391,7 +396,7 @@ fn write_secret_file(path: &Path, data: &[u8]) -> Result<()> {
 }
 
 fn supports_config_dir(runtime: &str) -> bool {
-    runtime_supported_extra_args(runtime).contains(&"--config-dir")
+    runtime_supports_config_dir(runtime)
 }
 
 fn clawden_root_dir() -> Result<PathBuf> {

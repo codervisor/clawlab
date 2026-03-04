@@ -1,8 +1,6 @@
 use anyhow::Result;
 use clawden_config::SecretVault;
-use clawden_core::{
-    runtime_start_args, version_satisfies, ClawRuntime, InstalledRuntime, RuntimeInstaller,
-};
+use clawden_core::{version_satisfies, ClawRuntime, InstalledRuntime, RuntimeInstaller};
 use std::collections::hash_map::DefaultHasher;
 use std::fs::OpenOptions;
 use std::hash::{Hash, Hasher};
@@ -58,12 +56,10 @@ pub fn ensure_installed_runtime(
             }
         }
 
-        let start_args = resolve_start_args(runtime, &installer.list_installed()?);
         return Ok(InstalledRuntime {
             runtime: runtime.to_string(),
             version: "current".to_string(),
             executable: exe,
-            start_args,
         });
     }
     let requested = pinned_version.unwrap_or("latest");
@@ -141,14 +137,6 @@ fn provider_secret_name(provider: &str) -> String {
     format!("provider/{}", provider.to_ascii_lowercase())
 }
 
-fn resolve_start_args(runtime: &str, installed: &[InstalledRuntime]) -> Vec<String> {
-    installed
-        .iter()
-        .find(|row| row.runtime == runtime)
-        .map(|row| row.start_args.clone())
-        .unwrap_or_else(|| runtime_start_args(runtime))
-}
-
 fn vault_key() -> Vec<u8> {
     std::env::var("CLAWDEN_VAULT_KEY")
         .unwrap_or_else(|_| "clawden-local-vault-key".to_string())
@@ -198,26 +186,5 @@ fn save_vault(vault: &SecretVault, path: &PathBuf) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::resolve_start_args;
-    use clawden_core::InstalledRuntime;
-    use std::path::PathBuf;
-
-    #[test]
-    fn resolve_start_args_uses_fallback_when_runtime_missing() {
-        let args = resolve_start_args("zeroclaw", &[]);
-        assert_eq!(args, vec!["daemon".to_string()]);
-    }
-
-    #[test]
-    fn resolve_start_args_prefers_installed_entry_when_present() {
-        let installed = vec![InstalledRuntime {
-            runtime: "zeroclaw".to_string(),
-            version: "0.2.1".to_string(),
-            executable: PathBuf::from("/tmp/zeroclaw"),
-            start_args: vec!["custom".to_string()],
-        }];
-
-        let args = resolve_start_args("zeroclaw", &installed);
-        assert_eq!(args, vec!["custom".to_string()]);
-    }
+    // no unit tests in this module currently
 }

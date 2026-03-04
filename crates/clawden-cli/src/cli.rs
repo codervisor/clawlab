@@ -103,7 +103,7 @@ pub enum Commands {
         #[arg(long, default_value_t = 10)]
         timeout: u64,
     },
-    /// Run a claw runtime directly
+    /// Run a claw runtime with transparent arg passthrough
     #[command(trailing_var_arg = true)]
     Run {
         /// Channels to connect (must appear before runtime name)
@@ -154,7 +154,7 @@ pub enum Commands {
         /// Restart on failure policy
         #[arg(long)]
         restart: Option<String>,
-        /// Runtime name followed by runtime args
+        /// Runtime name followed by runtime args; include runtime subcommands explicitly
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         runtime_and_args: Vec<String>,
     },
