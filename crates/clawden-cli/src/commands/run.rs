@@ -1,13 +1,18 @@
 use anyhow::Result;
+use clawden_config::{ChannelInstanceYaml, ClawDenYaml, ProviderEntryYaml, ProviderRefYaml};
 use clawden_core::{
     validate_runtime_args, ExecutionMode, LifecycleManager, ProcessManager, RuntimeInstaller,
 };
+use std::collections::HashMap;
+use std::fs;
 use std::time::Duration;
+use tracing::{debug, warn};
 
 use crate::commands::config_gen::{generate_config_dir, inject_config_dir_arg};
 use crate::commands::up::{
-    build_runtime_env_vars, channels_for_runtime, load_config, pinned_version_for_runtime,
-    render_log_line, tools_for_runtime, validate_direct_runtime_config, verify_runtime_startup,
+    build_runtime_env_vars, channels_for_runtime, infer_provider_type, load_config_with_env_file,
+    parse_env_overrides, pinned_version_for_runtime, render_log_line, tools_for_runtime,
+    validate_direct_runtime_config, verify_runtime_startup,
 };
 use crate::util::{
     append_audit_file, ensure_installed_runtime, env_no_docker_enabled, parse_runtime, project_hash,
@@ -16,6 +21,17 @@ use crate::util::{
 pub struct RunOptions {
     pub runtime: String,
     pub channel: Vec<String>,
+    pub env_vars: Vec<String>,
+    pub env_file: Option<String>,
+    pub provider: Option<String>,
+    pub model: Option<String>,
+    pub token: Option<String>,
+    pub api_key: Option<String>,
+    pub app_token: Option<String>,
+    pub phone: Option<String>,
+    pub system_prompt: Option<String>,
+    pub ports: Vec<String>,
+    pub allow_missing_credentials: bool,
     pub tools: Option<String>,
     pub restart: Option<String>,
     pub detach: bool,
@@ -41,7 +57,10 @@ pub async fn exec_run(
         })
         .unwrap_or_default();
 
-    let config = load_config()?;
+    let mut config = load_config_with_env_file(opts.env_file.as_deref())?;
+    if let Some(cfg) = config.as_mut() {
+        apply_run_overrides(cfg, &opts)?;
+    }
 
     // `clawden run` defaults to Direct mode (uv-run style transparent exec).
     // Only use Docker when clawden.yaml explicitly sets `mode: docker`.
@@ -56,11 +75,21 @@ pub async fn exec_run(
     } else {
         ExecutionMode::Direct
     };
-    let env_vars = if let Some(cfg) = config.as_ref() {
+    let mut env_vars = if let Some(cfg) = config.as_ref() {
         build_runtime_env_vars(cfg, &opts.runtime)?
     } else {
         Vec::new()
     };
+    apply_shortcut_env_overrides(&mut env_vars, &opts)?;
+    let env_overrides = parse_env_overrides(&opts.env_vars)?;
+    if !env_overrides.is_empty() {
+        let keys = env_overrides
+            .iter()
+            .map(|(k, _)| k.as_str())
+            .collect::<Vec<_>>()
+            .join(",");
+        let _ = append_audit_file("runtime.env_override", &opts.runtime, &keys);
+    }
 
     let default_channels = if let Some(cfg) = config.as_ref() {
         channels_for_runtime(cfg, &opts.runtime)
@@ -107,7 +136,7 @@ pub async fn exec_run(
                     name: format!("{}-default", runtime.as_slug()),
                     runtime,
                     model: None,
-                    env_vars: env_vars.clone(),
+                    env_vars: merge_env_overrides(env_vars.clone(), &env_overrides),
                     channels: resolved_channels.clone(),
                     tools: effective_tools,
                 },
@@ -149,7 +178,11 @@ pub async fn exec_run(
     // do NOT accept --channels / --tools CLI flags.
     let mut combined_env = env_vars;
     if let Some(cfg) = config.as_ref() {
-        validate_direct_runtime_config(cfg, &opts.runtime, &combined_env, &resolved_channels)?;
+        if !opts.allow_missing_credentials {
+            validate_direct_runtime_config(cfg, &opts.runtime, &combined_env, &resolved_channels)?;
+        } else {
+            warn!("missing credential checks are skipped (--allow-missing-credentials)");
+        }
     }
     if !resolved_channels.is_empty() {
         combined_env.push(("CLAWDEN_CHANNELS".to_string(), resolved_channels.join(",")));
@@ -157,6 +190,10 @@ pub async fn exec_run(
     if !effective_tools.is_empty() {
         combined_env.push(("CLAWDEN_TOOLS".to_string(), effective_tools.join(",")));
     }
+    if !opts.ports.is_empty() {
+        combined_env.push(("CLAWDEN_PORT_MAP".to_string(), opts.ports.join(",")));
+    }
+    combined_env = merge_env_overrides(combined_env, &env_overrides);
 
     let info = process_manager.start_direct_with_env_and_project(
         &opts.runtime,
@@ -219,4 +256,187 @@ pub async fn exec_run(
     }
 
     Ok(())
+}
+
+fn merge_env_overrides(
+    mut env_vars: Vec<(String, String)>,
+    overrides: &[(String, String)],
+) -> Vec<(String, String)> {
+    for (key, value) in overrides {
+        env_vars.retain(|(k, _)| k != key);
+        env_vars.push((key.clone(), value.clone()));
+    }
+    env_vars
+}
+
+fn apply_shortcut_env_overrides(
+    env_vars: &mut Vec<(String, String)>,
+    opts: &RunOptions,
+) -> Result<()> {
+    let mut set_env = |key: String, value: String| {
+        env_vars.retain(|(k, _)| *k != key);
+        env_vars.push((key, value));
+    };
+    let runtime_key = opts.runtime.to_ascii_uppercase().replace('-', "_");
+    if let Some(model) = &opts.model {
+        set_env("CLAWDEN_LLM_MODEL".to_string(), model.clone());
+        set_env(format!("{runtime_key}_LLM_MODEL"), model.clone());
+    }
+    if let Some(provider) = &opts.provider {
+        set_env("CLAWDEN_LLM_PROVIDER".to_string(), provider.clone());
+        set_env(format!("{runtime_key}_LLM_PROVIDER"), provider.clone());
+    }
+    if let Some(api_key) = &opts.api_key {
+        set_env("CLAWDEN_LLM_API_KEY".to_string(), api_key.clone());
+        set_env(format!("{runtime_key}_LLM_API_KEY"), api_key.clone());
+        if let Some(provider) = opts.provider.as_ref() {
+            if let Some(known) = infer_provider_type(provider) {
+                for key in provider_env_key_aliases(&known) {
+                    set_env(key.to_string(), api_key.clone());
+                }
+            }
+        }
+    }
+    if let Some(system_prompt) = &opts.system_prompt {
+        set_env(
+            "CLAWDEN_SYSTEM_PROMPT".to_string(),
+            read_system_prompt(system_prompt)?,
+        );
+    }
+    if let Some(token) = &opts.token {
+        if opts.channel.is_empty() {
+            anyhow::bail!("--token requires at least one --channel value");
+        }
+        for channel in &opts.channel {
+            set_env(channel_token_env_name(channel), token.clone());
+        }
+    }
+    if let Some(app_token) = &opts.app_token {
+        for channel in &opts.channel {
+            set_env(
+                format!(
+                    "{}_APP_TOKEN",
+                    channel.to_ascii_uppercase().replace('-', "_")
+                ),
+                app_token.clone(),
+            );
+        }
+    }
+    if let Some(phone) = &opts.phone {
+        for channel in &opts.channel {
+            set_env(
+                format!("{}_PHONE", channel.to_ascii_uppercase().replace('-', "_")),
+                phone.clone(),
+            );
+        }
+    }
+    Ok(())
+}
+
+fn apply_run_overrides(config: &mut ClawDenYaml, opts: &RunOptions) -> Result<()> {
+    if let Some(provider) = &opts.provider {
+        if config.runtime.as_deref() == Some(&opts.runtime) {
+            config.provider = Some(ProviderRefYaml::Name(provider.clone()));
+        } else if let Some(entry) = config.runtimes.iter_mut().find(|r| r.name == opts.runtime) {
+            entry.provider = Some(provider.clone());
+        }
+    }
+    if let Some(model) = &opts.model {
+        if config.runtime.as_deref() == Some(&opts.runtime) {
+            config.model = Some(model.clone());
+        } else if let Some(entry) = config.runtimes.iter_mut().find(|r| r.name == opts.runtime) {
+            entry.model = Some(model.clone());
+        }
+    }
+    if let Some(api_key) = &opts.api_key {
+        let provider_name = opts.provider.clone().or_else(|| {
+            super::up::runtime_provider_and_model(config, &opts.runtime).map(|(name, _, _)| name)
+        });
+        if let Some(provider_name) = provider_name {
+            let entry =
+                config
+                    .providers
+                    .entry(provider_name.clone())
+                    .or_insert(ProviderEntryYaml {
+                        provider_type: infer_provider_type(&provider_name),
+                        api_key: None,
+                        base_url: None,
+                        org_id: None,
+                        extra: HashMap::new(),
+                    });
+            entry.api_key = Some(api_key.clone());
+        }
+    }
+    if let Some(system_prompt) = &opts.system_prompt {
+        let val = serde_json::Value::String(read_system_prompt(system_prompt)?);
+        if config.runtime.as_deref() == Some(&opts.runtime) {
+            config.config.insert("system_prompt".to_string(), val);
+        } else if let Some(entry) = config.runtimes.iter_mut().find(|r| r.name == opts.runtime) {
+            entry.config.insert("system_prompt".to_string(), val);
+        }
+    }
+    if opts.token.is_some() || opts.app_token.is_some() || opts.phone.is_some() {
+        if opts.channel.is_empty() {
+            anyhow::bail!("--token/--app-token/--phone require explicit --channel values");
+        }
+        for channel_name in &opts.channel {
+            let channel = config
+                .channels
+                .entry(channel_name.clone())
+                .or_insert_with(empty_channel_instance);
+            if let Some(token) = &opts.token {
+                channel.token = Some(token.clone());
+            }
+            if let Some(app_token) = &opts.app_token {
+                channel.app_token = Some(app_token.clone());
+            }
+            if let Some(phone) = &opts.phone {
+                channel.phone = Some(phone.clone());
+            }
+        }
+    }
+    debug!("applied run option overrides for runtime {}", opts.runtime);
+    Ok(())
+}
+
+fn empty_channel_instance() -> ChannelInstanceYaml {
+    ChannelInstanceYaml {
+        channel_type: None,
+        token: None,
+        bot_token: None,
+        app_token: None,
+        phone: None,
+        guild: None,
+        allowed_users: Vec::new(),
+        allowed_roles: Vec::new(),
+        allowed_channels: Vec::new(),
+        group_mode: None,
+        extra: HashMap::new(),
+    }
+}
+
+fn read_system_prompt(value: &str) -> Result<String> {
+    if let Some(path) = value.strip_prefix('@') {
+        return Ok(fs::read_to_string(path)?);
+    }
+    Ok(value.to_string())
+}
+
+fn channel_token_env_name(channel: &str) -> String {
+    format!(
+        "{}_BOT_TOKEN",
+        channel.to_ascii_uppercase().replace('-', "_")
+    )
+}
+
+fn provider_env_key_aliases(provider: &clawden_config::LlmProvider) -> &'static [&'static str] {
+    match provider {
+        clawden_config::LlmProvider::OpenAi => &["OPENAI_API_KEY"],
+        clawden_config::LlmProvider::Anthropic => &["ANTHROPIC_API_KEY"],
+        clawden_config::LlmProvider::Google => &["GOOGLE_API_KEY", "GEMINI_API_KEY"],
+        clawden_config::LlmProvider::Mistral => &["MISTRAL_API_KEY"],
+        clawden_config::LlmProvider::Groq => &["GROQ_API_KEY"],
+        clawden_config::LlmProvider::OpenRouter => &["OPENROUTER_API_KEY"],
+        _ => &[],
+    }
 }

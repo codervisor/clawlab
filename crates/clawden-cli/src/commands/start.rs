@@ -13,6 +13,9 @@ pub async fn exec_start(
     exec_up(
         UpOptions {
             runtimes,
+            env_vars: Vec::new(),
+            env_file: None,
+            allow_missing_credentials: false,
             detach: true,
             no_log_prefix: false,
             timeout: 10,

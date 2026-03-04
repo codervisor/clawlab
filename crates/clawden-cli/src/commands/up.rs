@@ -7,6 +7,7 @@ use clawden_core::{
 };
 use std::collections::HashMap;
 use std::time::Duration;
+use tracing::{debug, warn};
 
 use crate::commands::config_gen::{generate_config_dir, inject_config_dir_arg};
 use crate::commands::InitOptions;
@@ -17,6 +18,9 @@ use crate::util::{
 
 pub struct UpOptions {
     pub runtimes: Vec<String>,
+    pub env_vars: Vec<String>,
+    pub env_file: Option<String>,
+    pub allow_missing_credentials: bool,
     pub detach: bool,
     pub no_log_prefix: bool,
     pub timeout: u64,
@@ -49,7 +53,7 @@ pub async fn exec_up(
         }
     }
 
-    let config = load_config()?;
+    let config = load_config_with_env_file(opts.env_file.as_deref())?;
     let config_mode_is_direct = config
         .as_ref()
         .and_then(|c| c.mode.as_deref())
@@ -73,6 +77,7 @@ pub async fn exec_up(
         } else {
             Vec::new()
         };
+        let env_overrides = parse_env_overrides(&opts.env_vars)?;
 
         let channels = if let Some(cfg) = config.as_ref() {
             channels_for_runtime(cfg, &runtime)
@@ -116,7 +121,13 @@ pub async fn exec_up(
             }
             ExecutionMode::Direct | ExecutionMode::Auto => {
                 if let Some(cfg) = config.as_ref() {
-                    validate_direct_runtime_config(cfg, &runtime, &env_vars, &channels)?;
+                    if !opts.allow_missing_credentials {
+                        validate_direct_runtime_config(cfg, &runtime, &env_vars, &channels)?;
+                    } else {
+                        warn!(
+                            "missing credential checks are skipped (--allow-missing-credentials)"
+                        );
+                    }
                 }
                 let installed = ensure_installed_runtime(installer, &runtime, pinned_version)?;
 
@@ -137,6 +148,10 @@ pub async fn exec_up(
                 }
                 if !tools.is_empty() {
                     combined_env.push(("CLAWDEN_TOOLS".to_string(), tools.join(",")));
+                }
+                for (key, value) in &env_overrides {
+                    combined_env.retain(|(k, _)| k != key);
+                    combined_env.push((key.clone(), value.clone()));
                 }
 
                 let info = process_manager.start_direct_with_env_and_project(
@@ -460,9 +475,18 @@ fn color_prefix(runtime: &str) -> String {
 }
 
 pub(crate) fn load_config() -> Result<Option<ClawDenYaml>> {
+    load_config_with_env_file(None)
+}
+
+pub(crate) fn load_config_with_env_file(env_file: Option<&str>) -> Result<Option<ClawDenYaml>> {
     let yaml_path = std::env::current_dir()?.join("clawden.yaml");
     if !yaml_path.exists() {
         return Ok(None);
+    }
+    if let Some(path) = env_file {
+        debug!("loading env file override: {}", path);
+        dotenvy::from_path_override(path)
+            .map_err(|e| anyhow::anyhow!("failed to load {path}: {e}"))?;
     }
 
     let mut cfg = ClawDenYaml::from_file(&yaml_path).map_err(|e| anyhow::anyhow!("{}", e))?;
@@ -476,6 +500,27 @@ pub(crate) fn load_config() -> Result<Option<ClawDenYaml>> {
         anyhow::bail!("clawden.yaml validation failed:\n{}", errs.join("\n"));
     }
     Ok(Some(cfg))
+}
+
+pub(crate) fn parse_env_overrides(entries: &[String]) -> Result<Vec<(String, String)>> {
+    let mut env = Vec::new();
+    for raw in entries {
+        if let Some((key, value)) = raw.split_once('=') {
+            if key.trim().is_empty() {
+                anyhow::bail!("invalid --env entry '{raw}': missing key");
+            }
+            env.push((key.trim().to_string(), value.to_string()));
+            continue;
+        }
+
+        let key = raw.trim();
+        if key.is_empty() {
+            anyhow::bail!("invalid --env entry '{raw}': missing key");
+        }
+        let value = std::env::var(key).unwrap_or_default();
+        env.push((key.to_string(), value));
+    }
+    Ok(env)
 }
 
 pub fn resolve_target_runtimes(
@@ -741,8 +786,8 @@ fn provider_key_env_names(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_runtime_env_vars, channels_for_runtime, validate_direct_runtime_config,
-        verify_runtime_startup, ClawDenYaml,
+        build_runtime_env_vars, channels_for_runtime, parse_env_overrides,
+        validate_direct_runtime_config, verify_runtime_startup, ClawDenYaml,
     };
     use crate::commands::test_env_lock;
     use clawden_core::{ExecutionMode, ProcessManager};
@@ -1021,5 +1066,30 @@ channels:
             .local_addr()
             .expect("local addr")
             .port()
+    }
+
+    #[test]
+    fn parse_env_overrides_supports_key_value_and_key_only() {
+        let _guard = test_env_lock().lock().expect("env lock");
+        std::env::set_var("CLAWDEN_TEST_ENV_ONLY", "from-host");
+        let vars = parse_env_overrides(&[
+            "A=1".to_string(),
+            "CLAWDEN_TEST_ENV_ONLY".to_string(),
+            "A=2".to_string(),
+        ])
+        .expect("env vars should parse");
+        assert_eq!(vars[0], ("A".to_string(), "1".to_string()));
+        assert_eq!(
+            vars[1],
+            ("CLAWDEN_TEST_ENV_ONLY".to_string(), "from-host".to_string())
+        );
+        assert_eq!(vars[2], ("A".to_string(), "2".to_string()));
+        std::env::remove_var("CLAWDEN_TEST_ENV_ONLY");
+    }
+
+    #[test]
+    fn parse_env_overrides_rejects_empty_key() {
+        let err = parse_env_overrides(&["=value".to_string()]).expect_err("empty key should fail");
+        assert!(err.to_string().contains("missing key"));
     }
 }

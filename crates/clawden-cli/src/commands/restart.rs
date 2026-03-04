@@ -26,6 +26,9 @@ pub async fn exec_restart(
     exec_up(
         UpOptions {
             runtimes: runtimes.clone(),
+            env_vars: Vec::new(),
+            env_file: None,
+            allow_missing_credentials: false,
             detach: true,
             no_log_prefix: false,
             timeout,

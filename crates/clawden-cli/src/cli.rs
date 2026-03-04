@@ -9,6 +9,10 @@ use clap::{Parser, Subcommand};
 pub struct Cli {
     #[arg(long, global = true, default_value_t = false)]
     pub no_docker: bool,
+    #[arg(short = 'v', long, global = true, default_value_t = false)]
+    pub verbose: bool,
+    #[arg(long, global = true)]
+    pub log_level: Option<String>,
 
     #[command(subcommand)]
     pub command: Commands,
@@ -55,6 +59,15 @@ pub enum Commands {
     Up {
         /// Specific runtimes to start (starts all if empty)
         runtimes: Vec<String>,
+        /// Set environment variables (KEY=VAL). Overrides .env and clawden.yaml values.
+        #[arg(short = 'e', long = "env")]
+        env_vars: Vec<String>,
+        /// Override auto-detected .env file.
+        #[arg(long = "env-file")]
+        env_file: Option<String>,
+        /// Proceed even when required provider/channel credentials are missing.
+        #[arg(long, default_value_t = false)]
+        allow_missing_credentials: bool,
         /// Run in background and return immediately
         #[arg(short = 'd', long, default_value_t = false)]
         detach: bool,
@@ -95,6 +108,39 @@ pub enum Commands {
         /// Channels to connect (must appear before runtime name)
         #[arg(long)]
         channel: Vec<String>,
+        /// Set environment variables (KEY=VAL). Overrides .env and clawden.yaml values.
+        #[arg(short = 'e', long = "env")]
+        env_vars: Vec<String>,
+        /// Override auto-detected .env file.
+        #[arg(long = "env-file")]
+        env_file: Option<String>,
+        /// Override provider to use.
+        #[arg(long)]
+        provider: Option<String>,
+        /// Override model to use.
+        #[arg(long)]
+        model: Option<String>,
+        /// Channel token shortcut for the selected --channel values.
+        #[arg(long)]
+        token: Option<String>,
+        /// LLM API key shortcut.
+        #[arg(long = "api-key")]
+        api_key: Option<String>,
+        /// Channel app token shortcut (e.g. Slack).
+        #[arg(long = "app-token")]
+        app_token: Option<String>,
+        /// Channel phone shortcut (e.g. Signal).
+        #[arg(long)]
+        phone: Option<String>,
+        /// Override system prompt value. Prefix with @ to load from file.
+        #[arg(long = "system-prompt")]
+        system_prompt: Option<String>,
+        /// Port mapping (HOST:CONTAINER). Multiple allowed.
+        #[arg(short = 'p', long = "port")]
+        ports: Vec<String>,
+        /// Proceed even when required provider/channel credentials are missing.
+        #[arg(long, default_value_t = false)]
+        allow_missing_credentials: bool,
         /// Tools to enable (must appear before runtime name)
         #[arg(long = "with")]
         tools: Option<String>,
@@ -156,6 +202,11 @@ pub enum Commands {
     Tools {
         #[command(subcommand)]
         command: ToolCommand,
+    },
+    /// Show resolved runtime config and environment.
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommand,
     },
 }
 
@@ -267,5 +318,23 @@ pub enum ToolCommand {
     Info {
         /// Tool name
         tool: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ConfigCommand {
+    /// Show resolved runtime configuration.
+    Show {
+        /// Runtime name.
+        runtime: String,
+        /// Output format: native | env | json
+        #[arg(long, default_value = "native")]
+        format: String,
+        /// Reveal secret values instead of redacting.
+        #[arg(long, default_value_t = false)]
+        reveal: bool,
+        /// Override auto-detected .env file.
+        #[arg(long = "env-file")]
+        env_file: Option<String>,
     },
 }

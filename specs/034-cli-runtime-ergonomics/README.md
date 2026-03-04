@@ -1,5 +1,5 @@
 ---
-status: planned
+status: in-progress
 created: 2026-03-04
 priority: high
 tags:
@@ -14,9 +14,11 @@ depends_on:
 - 031-direct-mode-config-injection
 - 025-llm-provider-api-key-management
 created_at: 2026-03-04T01:48:05.129647004Z
-updated_at: 2026-03-04T01:50:05.038594321Z
+updated_at: 2026-03-04T02:40:04.026681478Z
+transitions:
+- status: in-progress
+  at: 2026-03-04T02:40:04.026681478Z
 ---
-
 # CLI Run-Time Ergonomics — Inline Credentials, Model Override & Config Show
 
 ## Overview
@@ -380,34 +382,34 @@ After implementation, `clawden run -h` must list all new flags in this spec with
 
 ## Plan
 
-- [ ] Add `-e` / `--env` flag to `Run` command (parse KEY=VAL, inject into env)
-- [ ] Add `-e` / `--env` flag to `Up` command
+- [x] Add `-e` / `--env` flag to `Run` command (parse KEY=VAL, inject into env)
+- [x] Add `-e` / `--env` flag to `Up` command
 - [ ] Add `--token` flag to `Run` — map to channel-specific env var based on `--channel`
 - [ ] Add `--app-token` and `--phone` flags to `Run` for channels with multi-field credentials
 - [ ] Add `--api-key` flag to `Run` — map to provider-specific env var based on `--provider` or config
 - [ ] Ensure `--api-key` always sets `CLAWDEN_LLM_API_KEY` and runtime-scoped `*_LLM_API_KEY` (plus optional generic alias)
 - [ ] Add required-fields summary builder (provider/channel requirements + resolved sources + missing list)
-- [ ] Add `--allow-missing-credentials` to `Run` and `Up`
+- [x] Add `--allow-missing-credentials` to `Run` and `Up`
 - [ ] Make missing-required-field flow friendly and actionable (no stack trace panic path)
-- [ ] Add `--provider` flag to `Run` command
-- [ ] Add `--model` flag to `Run` command
+- [x] Add `--provider` flag to `Run` command
+- [x] Add `--model` flag to `Run` command
 - [ ] Apply `--model` and `--provider` overrides in config translation pipeline
-- [ ] Add `--system-prompt` flag to `Run` command (with @file support)
+- [x] Add `--system-prompt` flag to `Run` command (with @file support)
 - [ ] Map `--system-prompt` to env var and config-dir output
-- [ ] Add `--env-file` flag to `Run` and `Up` commands
-- [ ] Add `-p` / `--port` flag to `Run` command
-- [ ] Add `clawden config show` command with runtime resolution and secret redaction
-- [ ] Add `--verbose` / `-v` global flag
-- [ ] Add `--log-level` global flag
-- [ ] Wire verbose/log-level to `tracing` subscriber initialization
+- [x] Add `--env-file` flag to `Run` and `Up` commands
+- [x] Add `-p` / `--port` flag to `Run` command
+- [x] Add `clawden config show` command with runtime resolution and secret redaction
+- [x] Add `--verbose` / `-v` global flag
+- [x] Add `--log-level` global flag
+- [x] Wire verbose/log-level to `tracing` subscriber initialization
 - [ ] Update audit logging to redact `-e` values (log keys only)
-- [ ] Add tests for `-e` parsing (KEY=VAL, KEY-only, multiple)
+- [x] Add tests for `-e` parsing (KEY=VAL, KEY-only, multiple)
 - [ ] Add tests for `--model` / `--provider` override in config translation
 - [ ] Add tests for `config show` output and redaction
 - [ ] Add tests for precedence matrix (`-e` vs shortcut flags vs env-file vs yaml)
 - [ ] Add `up` command tests for `-e` and `--env-file`
 - [ ] Add `-p` / `--port` flag to `Run` tests (Direct mode env var + Docker mode passthrough)
-- [ ] Add `Config` command variant to the `Commands` enum in `cli.rs`
+- [x] Add `Config` command variant to the `Commands` enum in `cli.rs`
 - [ ] Wire `--env-file` into `load_config()` to override `.env` auto-detection path
 - [ ] Add tests for `config show` format variants (`native`, `env`, `json`)
 - [ ] Add tests for `--env-file` with `run`
