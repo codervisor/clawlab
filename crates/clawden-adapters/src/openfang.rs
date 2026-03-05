@@ -36,7 +36,7 @@ impl ClawAdapter for OpenFangAdapter {
             version: "unknown".to_string(),
             language: "rust".to_string(),
             capabilities: vec!["chat".to_string(), "agents".to_string()],
-            default_port: Some(4200),
+            default_port: Some(50051),
             config_format: Some("toml".to_string()),
             channel_support,
         }

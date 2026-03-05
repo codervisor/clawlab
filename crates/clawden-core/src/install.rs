@@ -403,9 +403,7 @@ impl RuntimeInstaller {
 
         self.report_progress("Installing nanoclaw dependencies…");
         run_command(
-            command_in_dir("pnpm", &repo_dir)
-                .arg("install")
-                .arg("--ignore-scripts"),
+            command_in_dir("pnpm", &repo_dir).arg("install"),
             "install nanoclaw dependencies",
         )?;
 
@@ -574,7 +572,7 @@ pub fn runtime_default_start_args_for_up(runtime: &str) -> &'static [&'static st
     match runtime {
         "zeroclaw" => &["daemon"],
         "picoclaw" => &["gateway"],
-        "openfang" => &["daemon"],
+        "openfang" => &["start"],
         "nullclaw" => &["daemon"],
         _ => &[],
     }
@@ -594,8 +592,8 @@ pub fn runtime_subcommand_hints(runtime: &str) -> &'static [(&'static str, &'sta
             ("proxy", "reverse proxy mode"),
         ],
         "openfang" => &[
-            ("daemon", "run as background daemon"),
-            ("serve", "HTTP API server"),
+            ("start", "start the daemon"),
+            ("chat", "quick chat with default agent"),
         ],
         "nullclaw" => &[("daemon", "run as background daemon")],
         _ => &[],

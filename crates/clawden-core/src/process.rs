@@ -582,7 +582,7 @@ fn runtime_health_url(runtime: &str) -> Option<String> {
         "openclaw" => Some("http://127.0.0.1:18789/health".to_string()),
         "picoclaw" => Some("http://127.0.0.1:8080/health".to_string()),
         "nullclaw" => Some("http://127.0.0.1:3000/health".to_string()),
-        "openfang" => Some("http://127.0.0.1:4200/health".to_string()),
+        "openfang" => Some("http://127.0.0.1:50051/health".to_string()),
         _ => None,
     }
 }
