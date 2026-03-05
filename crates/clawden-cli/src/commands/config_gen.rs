@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clawden_config::{ChannelCredentialMapper, ClawDenYaml};
-use clawden_core::{runtime_descriptor, ConfigDirFlag, ConfigFormat};
+use clawden_core::{channel_descriptor, runtime_descriptor, ConfigDirFlag, ConfigFormat};
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 use std::fs;
@@ -11,7 +11,7 @@ use std::process::{Command, Stdio};
 use toml::Value as TomlValue;
 use tracing::debug;
 
-use super::up::{channels_for_runtime, runtime_provider_and_model};
+use super::up::{channel_credential_value, channels_for_runtime, runtime_provider_and_model};
 
 pub(crate) fn generate_config_dir(
     config: &ClawDenYaml,
@@ -220,18 +220,17 @@ pub(crate) fn generate_toml_config(
         let channel_type = ClawDenYaml::resolve_channel_type(&channel_name, channel)
             .unwrap_or_else(|| channel_name.clone());
         let mut row = toml::Table::new();
-        match channel_type.as_str() {
-            "telegram" => {
-                if let Some(token) = channel
-                    .token
-                    .as_ref()
-                    .or(channel.bot_token.as_ref())
-                    .filter(|v| !v.trim().is_empty())
-                {
-                    row.insert("bot_token".to_string(), TomlValue::String(token.clone()));
+        if let Some(descriptor) = channel_descriptor(&channel_type) {
+            for credential in descriptor
+                .required_credentials
+                .iter()
+                .chain(descriptor.optional_credentials.iter())
+            {
+                if let Some(value) = channel_credential_value(channel, credential) {
+                    row.insert((*credential).to_string(), TomlValue::String(value));
                 }
-                // zeroclaw requires `allowed_users` to always be present
-                // (empty = deny all, which is the safe default).
+            }
+            if descriptor.supports_allowed_users {
                 row.insert(
                     "allowed_users".to_string(),
                     TomlValue::Array(
@@ -244,44 +243,6 @@ pub(crate) fn generate_toml_config(
                     ),
                 );
             }
-            "discord" => {
-                if let Some(token) = channel
-                    .token
-                    .as_ref()
-                    .or(channel.bot_token.as_ref())
-                    .filter(|v| !v.trim().is_empty())
-                {
-                    row.insert("bot_token".to_string(), TomlValue::String(token.clone()));
-                }
-                if let Some(guild_id) = channel.guild.as_ref().filter(|v| !v.trim().is_empty()) {
-                    row.insert("guild_id".to_string(), TomlValue::String(guild_id.clone()));
-                }
-            }
-            "slack" => {
-                if let Some(bot_token) = channel.bot_token.as_ref().filter(|v| !v.trim().is_empty())
-                {
-                    row.insert(
-                        "bot_token".to_string(),
-                        TomlValue::String(bot_token.clone()),
-                    );
-                }
-                if let Some(app_token) = channel.app_token.as_ref().filter(|v| !v.trim().is_empty())
-                {
-                    row.insert(
-                        "app_token".to_string(),
-                        TomlValue::String(app_token.clone()),
-                    );
-                }
-            }
-            "signal" => {
-                if let Some(phone) = channel.phone.as_ref().filter(|v| !v.trim().is_empty()) {
-                    row.insert("phone".to_string(), TomlValue::String(phone.clone()));
-                }
-                if let Some(token) = channel.token.as_ref().filter(|v| !v.trim().is_empty()) {
-                    row.insert("token".to_string(), TomlValue::String(token.clone()));
-                }
-            }
-            _ => {}
         }
         if !row.is_empty() {
             channels_cfg.insert(channel_type, TomlValue::Table(row));
@@ -301,15 +262,18 @@ pub(crate) fn generate_toml_config(
         }
     }
 
-    // zeroclaw requires `cli = true` in channels_config — ensure it's
-    // always present even when no base template was seeded via onboard.
-    if runtime == "zeroclaw" {
-        let channels = root
-            .entry("channels_config".to_string())
-            .or_insert_with(|| TomlValue::Table(toml::Table::new()));
-        if let TomlValue::Table(t) = channels {
-            t.entry("cli".to_string())
-                .or_insert(TomlValue::Boolean(true));
+    if let Some(descriptor) = runtime_descriptor(runtime) {
+        for (section, key, value) in descriptor.required_config_defaults {
+            let section_table = root
+                .entry((*section).to_string())
+                .or_insert_with(|| TomlValue::Table(toml::Table::new()));
+            if let TomlValue::Table(table) = section_table {
+                let parsed = value
+                    .parse::<bool>()
+                    .map(TomlValue::Boolean)
+                    .unwrap_or_else(|_| TomlValue::String((*value).to_string()));
+                table.entry((*key).to_string()).or_insert(parsed);
+            }
         }
     }
 
@@ -318,6 +282,10 @@ pub(crate) fn generate_toml_config(
     // template config defaults to `[proxy] enabled = false` will ignore the
     // inherited proxy environment and fail to reach external APIs.
     inject_proxy_config(&mut root);
+
+    // Inject a relaxed security profile so the runtime defers resource limits,
+    // seccomp, capability dropping, and sandbox to ClawDen's outer layer.
+    inject_security_profile(&mut root, runtime);
 
     merge_json_into_toml(&mut root, runtime_config_overrides(config, runtime));
     root
@@ -331,6 +299,50 @@ fn inject_proxy_config(root: &mut toml::Table) {
     };
     let mut emitter = TomlProxyEmitter { root };
     inject_proxy_config_with_emitter(&mut emitter, &settings);
+}
+
+/// Inject a `[security]` section with a "managed" profile so the runtime
+/// defers resource limits, seccomp, capability dropping, and tool sandboxing
+/// to ClawDen.  Applies to TOML-based runtimes: ZeroClaw, OpenFang, NullClaw.
+fn inject_security_profile(root: &mut toml::Table, runtime: &str) {
+    let sec = root
+        .entry("security".to_string())
+        .or_insert_with(|| TomlValue::Table(toml::Table::new()));
+    let TomlValue::Table(table) = sec else {
+        return;
+    };
+    table
+        .entry("profile".to_string())
+        .or_insert(TomlValue::String("managed".to_string()));
+    table
+        .entry("rlimit_as".to_string())
+        .or_insert(TomlValue::Integer(0));
+    table
+        .entry("rlimit_nofile".to_string())
+        .or_insert(TomlValue::Integer(0));
+    table
+        .entry("rlimit_nproc".to_string())
+        .or_insert(TomlValue::Integer(0));
+    table
+        .entry("seccomp".to_string())
+        .or_insert(TomlValue::String("disabled".to_string()));
+    table
+        .entry("drop_capabilities".to_string())
+        .or_insert(TomlValue::Boolean(false));
+    table
+        .entry("sandbox_tools".to_string())
+        .or_insert(TomlValue::Boolean(false));
+
+    // OpenFang-specific: relax gRPC TLS and bind restrictions so ClawDen can
+    // reach the health endpoint and manage the network layer.
+    if runtime == "openfang" {
+        table
+            .entry("tls_required".to_string())
+            .or_insert(TomlValue::Boolean(false));
+        table
+            .entry("bind_address".to_string())
+            .or_insert(TomlValue::String("0.0.0.0".to_string()));
+    }
 }
 
 pub(crate) fn generate_picoclaw_config(
@@ -409,23 +421,19 @@ pub(crate) fn generate_openclaw_config(
         root.insert(k.clone(), v.clone());
     }
 
-    // Inject agent model into the config so OpenClaw routes requests through
-    // the correct provider.  Without this, OpenClaw parses the model prefix
-    // (e.g. "anthropic" from "anthropic/claude-opus-4-6") as the provider and
-    // tries to authenticate directly — which fails when the actual provider is
-    // a routing service like OpenRouter.
-    inject_openclaw_agent_model(&mut root, config, runtime);
+    inject_runtime_agent_model(&mut root, config, runtime);
 
     root
 }
 
-/// Set `agents.defaults.model` in the OpenClaw JSON config when the configured
-/// provider differs from the model's apparent provider prefix.
-fn inject_openclaw_agent_model(
+fn inject_runtime_agent_model(
     root: &mut serde_json::Map<String, JsonValue>,
     config: &ClawDenYaml,
     runtime: &str,
 ) {
+    let Some(transform) = runtime_descriptor(runtime).and_then(|d| d.model_transform) else {
+        return;
+    };
     // Skip if the user already set agents.defaults.model via config overrides.
     if root
         .get("agents")
@@ -453,11 +461,7 @@ fn inject_openclaw_agent_model(
     // built-in default so we can re-prefix it through the configured provider.
     let model = model_opt.unwrap_or_else(|| "anthropic/claude-opus-4-6".to_string());
 
-    let model_ref = if model.starts_with(&format!("{provider_lower}/")) {
-        model
-    } else {
-        format!("{provider_lower}/{model}")
-    };
+    let model_ref = transform(&provider_lower, &model);
 
     let agents = root
         .entry("agents".to_string())
@@ -757,17 +761,17 @@ pub(crate) fn state_dir_env_vars(
     }
     let dir = runtime_config_dir(project_hash, runtime)?;
     fs::create_dir_all(&dir)?;
-    let runtime_key = runtime.to_ascii_uppercase().replace('-', "_");
+    let runtime_key = clawden_core::runtime_env_prefix(runtime);
     let dir_str = dir.to_string_lossy().to_string();
     let mut vars = vec![(format!("{runtime_key}_STATE_DIR"), dir_str.clone())];
-    // OpenClaw needs CONFIG_PATH set separately from STATE_DIR so the
-    // config file also lands inside the isolated directory.
-    if runtime == "openclaw" {
-        let config_path = dir.join("openclaw.json");
-        vars.push((
-            "OPENCLAW_CONFIG_PATH".to_string(),
-            config_path.to_string_lossy().to_string(),
-        ));
+    for (env_name, _) in descriptor.extra_env_vars {
+        if *env_name == "OPENCLAW_CONFIG_PATH" {
+            let config_path = dir.join("openclaw.json");
+            vars.push((
+                (*env_name).to_string(),
+                config_path.to_string_lossy().to_string(),
+            ));
+        }
     }
     Ok(vars)
 }

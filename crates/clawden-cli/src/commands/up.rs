@@ -3,8 +3,8 @@ use clawden_config::{
     ChannelCredentialMapper, ClawDenYaml, LlmProvider, ProviderEntryYaml, ProviderRefYaml,
 };
 use clawden_core::{
-    runtime_default_start_args, AgentState, ExecutionMode, LifecycleManager, ProcessInfo,
-    ProcessManager, RuntimeInstaller,
+    channel_descriptor, runtime_default_start_args, runtime_env_prefix, AgentState, ExecutionMode,
+    LifecycleManager, ProcessInfo, ProcessManager, ProviderDescriptor, RuntimeInstaller,
 };
 use std::collections::HashMap;
 use std::time::Duration;
@@ -325,6 +325,69 @@ fn source_of(config_value_present: bool, env_value_present: bool) -> &'static st
     }
 }
 
+pub(crate) fn channel_credential_value(
+    channel: &clawden_config::ChannelInstanceYaml,
+    credential: &str,
+) -> Option<String> {
+    match credential {
+        "token" => channel
+            .token
+            .as_ref()
+            .or(channel.bot_token.as_ref())
+            .filter(|v| !v.trim().is_empty())
+            .cloned(),
+        "bot_token" => channel
+            .bot_token
+            .as_ref()
+            .or(channel.token.as_ref())
+            .filter(|v| !v.trim().is_empty())
+            .cloned(),
+        "app_token" => channel
+            .app_token
+            .as_ref()
+            .filter(|v| !v.trim().is_empty())
+            .cloned(),
+        "phone" => channel
+            .phone
+            .as_ref()
+            .filter(|v| !v.trim().is_empty())
+            .cloned(),
+        "guild_id" => channel
+            .guild
+            .as_ref()
+            .filter(|v| !v.trim().is_empty())
+            .cloned(),
+        other => channel
+            .extra
+            .get(other)
+            .and_then(|v| v.as_str())
+            .filter(|v| !v.trim().is_empty())
+            .map(|v| v.to_string()),
+    }
+}
+
+fn channel_credential_env_var(
+    descriptor: &clawden_core::ChannelDescriptor,
+    channel_type: &str,
+    credential: &str,
+) -> String {
+    if let Some((_, env)) = descriptor
+        .extra_env_vars
+        .iter()
+        .find(|(field, _)| *field == credential)
+    {
+        return (*env).to_string();
+    }
+    match credential {
+        "token" | "bot_token" => descriptor.token_env_var.to_string(),
+        other => format!(
+            "{}_{}",
+            channel_type.to_ascii_uppercase().replace('-', "_"),
+            other.to_ascii_uppercase()
+        ),
+    }
+}
+
 fn add_channel_requirements(
     config: &ClawDenYaml,
     channel_name: &str,
@@ -335,118 +398,12 @@ fn add_channel_requirements(
     let channel_type = channel
         .and_then(|ch| ClawDenYaml::resolve_channel_type(channel_name, ch))
         .unwrap_or_else(|| channel_name.to_string());
-
-    let config_has_token_or_bot = |ch: Option<&clawden_config::ChannelInstanceYaml>| -> bool {
-        ch.and_then(|c| c.token.as_ref().or(c.bot_token.as_ref()))
-            .is_some_and(|v| !v.trim().is_empty())
-    };
-
-    match channel_type.as_str() {
-        "telegram" => {
-            let cfg_ok = config_has_token_or_bot(channel);
-            let env_ok = env_has("TELEGRAM_BOT_TOKEN");
-            fields.push((
-                "channel",
-                channel_name.to_string(),
-                "TELEGRAM_BOT_TOKEN".to_string(),
-                cfg_ok || env_ok,
-                source_of(cfg_ok, env_ok),
-            ));
-        }
-        "discord" => {
-            let cfg_ok = config_has_token_or_bot(channel);
-            let env_ok = env_has("DISCORD_BOT_TOKEN");
-            fields.push((
-                "channel",
-                channel_name.to_string(),
-                "DISCORD_BOT_TOKEN".to_string(),
-                cfg_ok || env_ok,
-                source_of(cfg_ok, env_ok),
-            ));
-        }
-        "slack" => {
-            let cfg_bt = channel
-                .and_then(|c| c.bot_token.as_ref())
-                .is_some_and(|v| !v.trim().is_empty());
-            let env_bt = env_has("SLACK_BOT_TOKEN");
-            fields.push((
-                "channel",
-                channel_name.to_string(),
-                "SLACK_BOT_TOKEN".to_string(),
-                cfg_bt || env_bt,
-                source_of(cfg_bt, env_bt),
-            ));
-
-            let cfg_at = channel
-                .and_then(|c| c.app_token.as_ref())
-                .is_some_and(|v| !v.trim().is_empty());
-            let env_at = env_has("SLACK_APP_TOKEN");
-            fields.push((
-                "channel",
-                channel_name.to_string(),
-                "SLACK_APP_TOKEN".to_string(),
-                cfg_at || env_at,
-                source_of(cfg_at, env_at),
-            ));
-        }
-        "signal" => {
-            let cfg_p = channel
-                .and_then(|c| c.phone.as_ref())
-                .is_some_and(|v| !v.trim().is_empty());
-            let env_p = env_has("SIGNAL_PHONE");
-            fields.push((
-                "channel",
-                channel_name.to_string(),
-                "SIGNAL_PHONE".to_string(),
-                cfg_p || env_p,
-                source_of(cfg_p, env_p),
-            ));
-
-            let cfg_t = channel
-                .and_then(|c| c.token.as_ref())
-                .is_some_and(|v| !v.trim().is_empty());
-            let env_t = env_has("SIGNAL_TOKEN");
-            fields.push((
-                "channel",
-                channel_name.to_string(),
-                "SIGNAL_TOKEN".to_string(),
-                cfg_t || env_t,
-                source_of(cfg_t, env_t),
-            ));
-        }
-        "feishu" | "lark" => {
-            let cfg_id = channel
-                .and_then(|c| c.extra.get("app_id"))
-                .and_then(|v| v.as_str())
-                .is_some_and(|s| !s.trim().is_empty());
-            let env_id = env_has("FEISHU_APP_ID");
-            fields.push((
-                "channel",
-                channel_name.to_string(),
-                "FEISHU_APP_ID".to_string(),
-                cfg_id || env_id,
-                source_of(cfg_id, env_id),
-            ));
-
-            let cfg_secret = channel
-                .and_then(|c| c.extra.get("app_secret"))
-                .and_then(|v| v.as_str())
-                .is_some_and(|s| !s.trim().is_empty());
-            let env_secret = env_has("FEISHU_APP_SECRET");
-            fields.push((
-                "channel",
-                channel_name.to_string(),
-                "FEISHU_APP_SECRET".to_string(),
-                cfg_secret || env_secret,
-                source_of(cfg_secret, env_secret),
-            ));
-        }
-        _ => {
-            let env_var_name = format!(
-                "{}_BOT_TOKEN",
-                channel_type.to_ascii_uppercase().replace('-', "_")
-            );
-            let cfg_ok = config_has_token_or_bot(channel);
+    if let Some(descriptor) = channel_descriptor(&channel_type) {
+        for credential in descriptor.required_credentials {
+            let env_var_name = channel_credential_env_var(descriptor, &channel_type, credential);
+            let cfg_ok = channel
+                .and_then(|c| channel_credential_value(c, credential))
+                .is_some();
             let env_ok = env_has(&env_var_name);
             fields.push((
                 "channel",
@@ -456,6 +413,22 @@ fn add_channel_requirements(
                 source_of(cfg_ok, env_ok),
             ));
         }
+    } else {
+        let env_var_name = format!(
+            "{}_BOT_TOKEN",
+            channel_type.to_ascii_uppercase().replace('-', "_")
+        );
+        let cfg_ok = channel
+            .and_then(|c| channel_credential_value(c, "bot_token"))
+            .is_some();
+        let env_ok = env_has(&env_var_name);
+        fields.push((
+            "channel",
+            channel_name.to_string(),
+            env_var_name,
+            cfg_ok || env_ok,
+            source_of(cfg_ok, env_ok),
+        ));
     }
 }
 
@@ -823,12 +796,12 @@ pub fn build_runtime_env_vars(
         let provider_type = provider
             .provider_type
             .clone()
-            .or_else(|| infer_provider_type(&provider_name));
+            .or_else(|| provider_type_from_name(&provider_name));
         let provider_label = provider_type
             .as_ref()
             .map(provider_slug)
             .unwrap_or_else(|| provider_name.to_ascii_lowercase());
-        let runtime_key = runtime.to_ascii_uppercase().replace('-', "_");
+        let runtime_key = runtime_env_prefix(runtime);
 
         env.insert("CLAWDEN_LLM_PROVIDER".to_string(), provider_label.clone());
         env.insert(format!("{runtime_key}_LLM_PROVIDER"), provider_label);
@@ -892,6 +865,15 @@ pub fn build_runtime_env_vars(
         }
     }
 
+    // Signal to all runtimes that ClawDen is managing security boundaries.
+    env.insert("CLAWDEN_MANAGED".to_string(), "1".to_string());
+
+    // For OpenClaw: relax worker isolation and sandbox when managed.
+    if runtime == "openclaw" {
+        env.insert("OPENCLAW_WORKER_ISOLATION".to_string(), "none".to_string());
+        env.insert("OPENCLAW_SANDBOX_MODE".to_string(), "external".to_string());
+    }
+
     let mut pairs: Vec<_> = env.into_iter().collect();
     pairs.sort_by(|a, b| a.0.cmp(&b.0));
     Ok(pairs)
@@ -923,7 +905,7 @@ pub(crate) fn runtime_provider_and_model(
                         .get(name)
                         .cloned()
                         .unwrap_or(ProviderEntryYaml {
-                            provider_type: infer_provider_type(name),
+                            provider_type: provider_type_from_name(name),
                             api_key: None,
                             base_url: None,
                             org_id: None,
@@ -942,7 +924,7 @@ pub(crate) fn runtime_provider_and_model(
         .get(&provider_name)
         .cloned()
         .unwrap_or(ProviderEntryYaml {
-            provider_type: infer_provider_type(&provider_name),
+            provider_type: provider_type_from_name(&provider_name),
             api_key: None,
             base_url: None,
             org_id: None,
@@ -952,15 +934,20 @@ pub(crate) fn runtime_provider_and_model(
     Some((provider_name, provider, entry.model.clone()))
 }
 
-pub(crate) fn infer_provider_type(name: &str) -> Option<LlmProvider> {
-    match name.to_ascii_lowercase().as_str() {
+pub(crate) fn provider_type_from_name(name: &str) -> Option<LlmProvider> {
+    let Some(descriptor) = ProviderDescriptor::from_name(name) else {
+        return match name.to_ascii_lowercase().as_str() {
+            "ollama" => Some(LlmProvider::Ollama),
+            _ => None,
+        };
+    };
+    match descriptor.name {
         "openai" => Some(LlmProvider::OpenAi),
         "anthropic" => Some(LlmProvider::Anthropic),
         "google" => Some(LlmProvider::Google),
         "mistral" => Some(LlmProvider::Mistral),
         "groq" => Some(LlmProvider::Groq),
         "openrouter" => Some(LlmProvider::OpenRouter),
-        "ollama" => Some(LlmProvider::Ollama),
         _ => None,
     }
 }
@@ -984,7 +971,7 @@ fn provider_key_env_names(
 ) -> Vec<&'static str> {
     let resolved = provider_type
         .cloned()
-        .or_else(|| infer_provider_type(provider_name));
+        .or_else(|| provider_type_from_name(provider_name));
     let provider_id = match resolved.as_ref() {
         Some(LlmProvider::OpenAi) => "openai",
         Some(LlmProvider::Anthropic) => "anthropic",

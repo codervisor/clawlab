@@ -4,3 +4,7 @@ pub fn current_unix_ms() -> u64 {
         .expect("system clock before UNIX_EPOCH")
         .as_millis() as u64
 }
+
+pub fn runtime_env_prefix(runtime: &str) -> String {
+    runtime.to_ascii_uppercase().replace('-', "_")
+}

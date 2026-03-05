@@ -111,6 +111,19 @@ fn build_run_args(
         }
     }
 
+    // Relaxed resource limits for managed execution — runtime-internal limits
+    // are disabled via config injection; container-level limits provide the
+    // outer boundary instead.
+    args.extend([
+        "--ulimit".to_string(),
+        "nofile=65536:65536".to_string(),
+        "--security-opt".to_string(),
+        "seccomp=unconfined".to_string(),
+    ]);
+
+    // Signal to the runtime that ClawDen manages security.
+    args.extend(["-e".to_string(), "CLAWDEN_MANAGED=1".to_string()]);
+
     if !config.tools.is_empty() {
         args.push("-e".to_string());
         args.push(format!("TOOLS={}", config.tools.join(",")));

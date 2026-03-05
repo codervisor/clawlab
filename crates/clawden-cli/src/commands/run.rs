@@ -13,9 +13,10 @@ use crate::commands::config_gen::{
     generate_config_dir, inject_config_dir_arg, state_dir_env_vars, write_env_runtime_config,
 };
 use crate::commands::up::{
-    build_runtime_env_vars, channels_for_runtime, infer_provider_type, load_config_with_env_file,
-    parse_env_overrides, pinned_version_for_runtime, render_log_line, runtime_provider_and_model,
-    tools_for_runtime, validate_direct_runtime_config, verify_runtime_startup,
+    build_runtime_env_vars, channel_credential_value, channels_for_runtime,
+    load_config_with_env_file, parse_env_overrides, pinned_version_for_runtime,
+    provider_type_from_name, render_log_line, runtime_provider_and_model, tools_for_runtime,
+    validate_direct_runtime_config, verify_runtime_startup,
 };
 use crate::util::{append_audit_file, ensure_installed_runtime, parse_runtime, project_hash};
 
@@ -72,7 +73,7 @@ pub async fn exec_run(
                 cfg.providers
                     .entry(provider_name.to_string())
                     .or_insert(ProviderEntryYaml {
-                        provider_type: infer_provider_type(provider_name),
+                        provider_type: provider_type_from_name(provider_name),
                         api_key,
                         base_url: None,
                         org_id: None,
@@ -151,38 +152,31 @@ pub async fn exec_run(
         // channels_config and the runtime reports "no channels configured".
         for ch in &resolved_channels {
             if let Some(instance) = cfg.channels.get_mut(ch) {
-                if instance.token.is_none() && instance.bot_token.is_none() {
-                    let env_name = channel_token_env_name(ch);
-                    if let Ok(val) = std::env::var(&env_name) {
-                        if !val.trim().is_empty() {
-                            instance.bot_token = Some(val);
+                let channel_type =
+                    ClawDenYaml::resolve_channel_type(ch, instance).unwrap_or_else(|| ch.clone());
+                if let Some(descriptor) = clawden_core::channel_descriptor(&channel_type) {
+                    for credential in descriptor.required_credentials {
+                        if channel_credential_value(instance, credential).is_some() {
+                            continue;
                         }
-                    }
-                }
-                if ch == "slack" && instance.app_token.is_none() {
-                    if let Ok(val) = std::env::var("SLACK_APP_TOKEN") {
-                        if !val.trim().is_empty() {
-                            instance.app_token = Some(val);
-                        }
-                    }
-                }
-                if matches!(ch.as_str(), "feishu" | "lark") {
-                    if !instance.extra.contains_key("app_id") {
-                        if let Ok(val) = std::env::var("FEISHU_APP_ID") {
+                        let env_name = if let Some((_, env)) = descriptor
+                            .extra_env_vars
+                            .iter()
+                            .find(|(field, _)| *field == *credential)
+                        {
+                            (*env).to_string()
+                        } else if *credential == "token" || *credential == "bot_token" {
+                            descriptor.token_env_var.to_string()
+                        } else {
+                            format!(
+                                "{}_{}",
+                                channel_type.to_ascii_uppercase().replace('-', "_"),
+                                credential.to_ascii_uppercase()
+                            )
+                        };
+                        if let Ok(val) = std::env::var(&env_name) {
                             if !val.trim().is_empty() {
-                                instance
-                                    .extra
-                                    .insert("app_id".to_string(), serde_json::Value::String(val));
-                            }
-                        }
-                    }
-                    if !instance.extra.contains_key("app_secret") {
-                        if let Ok(val) = std::env::var("FEISHU_APP_SECRET") {
-                            if !val.trim().is_empty() {
-                                instance.extra.insert(
-                                    "app_secret".to_string(),
-                                    serde_json::Value::String(val),
-                                );
+                                set_channel_credential(instance, credential, val);
                             }
                         }
                     }
@@ -435,7 +429,7 @@ fn apply_shortcut_env_overrides(
         env_vars.retain(|(k, _)| *k != key);
         env_vars.push((key, value));
     };
-    let runtime_key = opts.runtime.to_ascii_uppercase().replace('-', "_");
+    let runtime_key = clawden_core::runtime_env_prefix(&opts.runtime);
     if let Some(model) = &opts.model {
         set_env("CLAWDEN_LLM_MODEL".to_string(), model.clone());
         set_env(format!("{runtime_key}_LLM_MODEL"), model.clone());
@@ -449,9 +443,9 @@ fn apply_shortcut_env_overrides(
         set_env("CLAWDEN_API_KEY".to_string(), api_key.clone());
         set_env(format!("{runtime_key}_LLM_API_KEY"), api_key.clone());
         if let Some(provider) = opts.provider.as_ref() {
-            if let Some(known) = infer_provider_type(provider) {
-                for key in provider_env_key_aliases(&known) {
-                    set_env(key.to_string(), api_key.clone());
+            if let Some(descriptor) = clawden_core::ProviderDescriptor::from_name(provider) {
+                for key in descriptor.env_var_names() {
+                    set_env((*key).to_string(), api_key.clone());
                 }
             }
         } else {
@@ -528,7 +522,7 @@ fn apply_run_overrides(config: &mut ClawDenYaml, opts: &RunOptions) -> Result<()
                     .providers
                     .entry(provider_name.clone())
                     .or_insert(ProviderEntryYaml {
-                        provider_type: infer_provider_type(&provider_name),
+                        provider_type: provider_type_from_name(&provider_name),
                         api_key: None,
                         base_url: None,
                         org_id: None,
@@ -578,7 +572,10 @@ fn apply_run_overrides(config: &mut ClawDenYaml, opts: &RunOptions) -> Result<()
                 .as_deref()
                 .unwrap_or(channel_name)
                 .to_ascii_lowercase();
-            if channel_type == "telegram" {
+            if clawden_core::channel_descriptor(&channel_type)
+                .map(|d| d.supports_allowed_users)
+                .unwrap_or(false)
+            {
                 channel.allowed_users = users.clone();
             } else {
                 debug!(
@@ -616,6 +613,21 @@ fn empty_channel_instance() -> ChannelInstanceYaml {
     }
 }
 
+fn set_channel_credential(channel: &mut ChannelInstanceYaml, credential: &str, value: String) {
+    match credential {
+        "token" => channel.token = Some(value),
+        "bot_token" => channel.bot_token = Some(value),
+        "app_token" => channel.app_token = Some(value),
+        "phone" => channel.phone = Some(value),
+        "guild_id" => channel.guild = Some(value),
+        other => {
+            channel
+                .extra
+                .insert(other.to_string(), serde_json::Value::String(value));
+        }
+    }
+}
+
 fn read_system_prompt(value: &str) -> Result<String> {
     if let Some(path) = value.strip_prefix('@') {
         return Ok(fs::read_to_string(path)?);
@@ -625,18 +637,6 @@ fn read_system_prompt(value: &str) -> Result<String> {
 
 fn channel_token_env_name(channel: &str) -> String {
     clawden_core::channel_token_env_name(channel)
-}
-
-fn provider_env_key_aliases(provider: &clawden_config::LlmProvider) -> &'static [&'static str] {
-    match provider {
-        clawden_config::LlmProvider::OpenAi => &["OPENAI_API_KEY"],
-        clawden_config::LlmProvider::Anthropic => &["ANTHROPIC_API_KEY"],
-        clawden_config::LlmProvider::Google => &["GOOGLE_API_KEY", "GEMINI_API_KEY"],
-        clawden_config::LlmProvider::Mistral => &["MISTRAL_API_KEY"],
-        clawden_config::LlmProvider::Groq => &["GROQ_API_KEY"],
-        clawden_config::LlmProvider::OpenRouter => &["OPENROUTER_API_KEY"],
-        _ => &[],
-    }
 }
 
 fn empty_clawden_yaml(runtime: &str) -> ClawDenYaml {

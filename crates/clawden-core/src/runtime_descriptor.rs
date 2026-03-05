@@ -62,6 +62,9 @@ pub struct RuntimeDescriptor {
     pub has_onboard_command: bool,
     pub health_port: Option<u16>,
     pub cost_tier: u8,
+    pub required_config_defaults: &'static [(&'static str, &'static str, &'static str)],
+    pub extra_env_vars: &'static [(&'static str, &'static str)],
+    pub model_transform: Option<fn(provider: &str, model: &str) -> String>,
 }
 
 impl RuntimeDescriptor {
@@ -97,6 +100,15 @@ const OPENCLAW_HINTS: &[(&str, &str)] = &[
 
 const NULLCLAW_HINTS: &[(&str, &str)] = &[("daemon", "run as background daemon")];
 
+fn openclaw_model_transform(provider: &str, model: &str) -> String {
+    let provider_lower = provider.to_ascii_lowercase();
+    if model.starts_with(&format!("{provider_lower}/")) {
+        model.to_string()
+    } else {
+        format!("{provider_lower}/{model}")
+    }
+}
+
 static DESCRIPTORS: &[RuntimeDescriptor] = &[
     RuntimeDescriptor {
         runtime: ClawRuntime::OpenClaw,
@@ -118,6 +130,9 @@ static DESCRIPTORS: &[RuntimeDescriptor] = &[
         has_onboard_command: false,
         health_port: Some(18789),
         cost_tier: 3,
+        required_config_defaults: &[],
+        extra_env_vars: &[("OPENCLAW_CONFIG_PATH", "Path to OpenClaw config file")],
+        model_transform: Some(openclaw_model_transform),
     },
     RuntimeDescriptor {
         runtime: ClawRuntime::ZeroClaw,
@@ -142,6 +157,9 @@ static DESCRIPTORS: &[RuntimeDescriptor] = &[
         has_onboard_command: true,
         health_port: Some(42617),
         cost_tier: 2,
+        required_config_defaults: &[("channels_config", "cli", "true")],
+        extra_env_vars: &[],
+        model_transform: None,
     },
     RuntimeDescriptor {
         runtime: ClawRuntime::PicoClaw,
@@ -166,6 +184,9 @@ static DESCRIPTORS: &[RuntimeDescriptor] = &[
         has_onboard_command: false,
         health_port: Some(8080),
         cost_tier: 1,
+        required_config_defaults: &[],
+        extra_env_vars: &[],
+        model_transform: None,
     },
     RuntimeDescriptor {
         runtime: ClawRuntime::NanoClaw,
@@ -187,6 +208,9 @@ static DESCRIPTORS: &[RuntimeDescriptor] = &[
         has_onboard_command: false,
         health_port: None,
         cost_tier: 2,
+        required_config_defaults: &[],
+        extra_env_vars: &[],
+        model_transform: None,
     },
     RuntimeDescriptor {
         runtime: ClawRuntime::IronClaw,
@@ -204,6 +228,9 @@ static DESCRIPTORS: &[RuntimeDescriptor] = &[
         has_onboard_command: false,
         health_port: None,
         cost_tier: 3,
+        required_config_defaults: &[],
+        extra_env_vars: &[],
+        model_transform: None,
     },
     RuntimeDescriptor {
         runtime: ClawRuntime::NullClaw,
@@ -221,6 +248,9 @@ static DESCRIPTORS: &[RuntimeDescriptor] = &[
         has_onboard_command: false,
         health_port: Some(3000),
         cost_tier: 1,
+        required_config_defaults: &[],
+        extra_env_vars: &[],
+        model_transform: None,
     },
     RuntimeDescriptor {
         runtime: ClawRuntime::MicroClaw,
@@ -238,6 +268,9 @@ static DESCRIPTORS: &[RuntimeDescriptor] = &[
         has_onboard_command: false,
         health_port: None,
         cost_tier: 1,
+        required_config_defaults: &[],
+        extra_env_vars: &[],
+        model_transform: None,
     },
     RuntimeDescriptor {
         runtime: ClawRuntime::MimiClaw,
@@ -255,6 +288,9 @@ static DESCRIPTORS: &[RuntimeDescriptor] = &[
         has_onboard_command: false,
         health_port: None,
         cost_tier: 2,
+        required_config_defaults: &[],
+        extra_env_vars: &[],
+        model_transform: None,
     },
     RuntimeDescriptor {
         runtime: ClawRuntime::OpenFang,
@@ -281,6 +317,9 @@ static DESCRIPTORS: &[RuntimeDescriptor] = &[
         has_onboard_command: false,
         health_port: Some(50051),
         cost_tier: 2,
+        required_config_defaults: &[],
+        extra_env_vars: &[],
+        model_transform: None,
     },
 ];
 

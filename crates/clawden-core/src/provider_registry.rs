@@ -6,6 +6,16 @@ pub struct ProviderDescriptor {
     pub test_base_url: &'static str,
 }
 
+impl ProviderDescriptor {
+    pub fn from_name(name: &str) -> Option<&'static ProviderDescriptor> {
+        provider_descriptor(name)
+    }
+
+    pub fn env_var_names(&self) -> &[&str] {
+        self.env_vars
+    }
+}
+
 pub static PROVIDERS: &[ProviderDescriptor] = &[
     ProviderDescriptor {
         name: "openrouter",

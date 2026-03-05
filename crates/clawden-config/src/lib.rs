@@ -633,6 +633,25 @@ pub struct SecurityConfig {
     pub allowlist: Vec<String>,
     #[serde(default)]
     pub sandboxed: bool,
+    /// Security profile: "strict" (runtime default), "managed" (ClawDen manages
+    /// isolation), or "permissive" (no restrictions).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
+    /// Memory limit, e.g. "4g" or "unlimited".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memory_limit: Option<String>,
+    /// Maximum open file descriptors.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_open_files: Option<u64>,
+    /// Override runtime seccomp default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seccomp_enabled: Option<bool>,
+    /// Override runtime capability-dropping default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drop_capabilities: Option<bool>,
+    /// When true, delegate sandbox to ClawDen instead of the runtime's own layer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delegate_sandbox: Option<bool>,
 }
 
 impl ClawDenConfig {
@@ -937,6 +956,12 @@ fn base_config_with_runtime(
             security: serde_json::from_value(security).unwrap_or(SecurityConfig {
                 allowlist: vec![],
                 sandboxed: false,
+                profile: None,
+                memory_limit: None,
+                max_open_files: None,
+                seccomp_enabled: None,
+                drop_capabilities: None,
+                delegate_sandbox: None,
             }),
             extras,
         },
@@ -1556,6 +1581,12 @@ mod tests {
                 security: SecurityConfig {
                     allowlist: vec!["team".to_string()],
                     sandboxed: true,
+                    profile: None,
+                    memory_limit: None,
+                    max_open_files: None,
+                    seccomp_enabled: None,
+                    drop_capabilities: None,
+                    delegate_sandbox: None,
                 },
                 extras: Map::new(),
             },

@@ -46,7 +46,7 @@ pub use runtime_descriptor::{
     ConfigDirFlag, ConfigFormat, InstallSource, RuntimeDescriptor, VersionSource,
 };
 pub use swarm::{SwarmCoordinator, SwarmMember, SwarmRole};
-pub use util::current_unix_ms;
+pub use util::{current_unix_ms, runtime_env_prefix};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
