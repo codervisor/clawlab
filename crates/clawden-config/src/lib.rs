@@ -1147,9 +1147,35 @@ impl ChannelCredentialMapper {
         ch: &ChannelInstanceYaml,
     ) -> Result<Value, String> {
         match channel_type {
-            "telegram" => Ok(serde_json::json!({
-                "telegram": { "token": ch.token.as_deref().unwrap_or("") }
-            })),
+            "telegram" => {
+                let mut telegram = serde_json::Map::new();
+                if let Some(token) = ch
+                    .token
+                    .as_ref()
+                    .or(ch.bot_token.as_ref())
+                    .filter(|v| !v.trim().is_empty())
+                {
+                    telegram.insert("botToken".to_string(), Value::String(token.clone()));
+                }
+                if !ch.allowed_users.is_empty() {
+                    telegram.insert("allowFrom".to_string(), serde_json::json!(ch.allowed_users));
+                    // OpenClaw defaults to pairing for DMs. When an explicit
+                    // allowlist is provided, default to allowlist policy unless
+                    // the user set dmPolicy explicitly via extra fields.
+                    if !ch.extra.contains_key("dmPolicy") {
+                        telegram.insert(
+                            "dmPolicy".to_string(),
+                            Value::String("allowlist".to_string()),
+                        );
+                    }
+                }
+                for (k, v) in &ch.extra {
+                    telegram.insert(k.clone(), v.clone());
+                }
+                Ok(serde_json::json!({
+                    "telegram": Value::Object(telegram)
+                }))
+            }
             "discord" => {
                 let mut cfg = serde_json::json!({
                     "discord": { "token": ch.token.as_deref().unwrap_or("") }
@@ -1279,6 +1305,27 @@ impl ChannelCredentialMapper {
                     vars.insert(format!("{prefix}_APP_TOKEN"), at.clone());
                 }
             }
+        }
+        vars
+    }
+
+    /// Generate OpenClaw env vars for a channel instance.
+    /// OpenClaw consumes standard channel env vars plus runtime-specific aliases.
+    pub fn openclaw_env_vars(
+        channel_type: &str,
+        ch: &ChannelInstanceYaml,
+    ) -> HashMap<String, String> {
+        let mut vars = HashMap::new();
+        match channel_type {
+            "telegram" => {
+                if !ch.allowed_users.is_empty() {
+                    vars.insert(
+                        "OPENCLAW_TELEGRAM_ALLOW_FROM".to_string(),
+                        ch.allowed_users.join(","),
+                    );
+                }
+            }
+            _ => {}
         }
         vars
     }
@@ -1966,6 +2013,46 @@ runtimes:
                 .and_then(|v| v.get("phone"))
                 .and_then(|v| v.as_str()),
             Some("+15551234567")
+        );
+    }
+
+    #[test]
+    fn openclaw_telegram_mapping_contains_allow_from() {
+        let mut ch = sample_channel();
+        ch.token = Some("tg-token".to_string());
+        ch.allowed_users = vec!["12345".to_string(), "67890".to_string()];
+        let cfg = ChannelCredentialMapper::openclaw_channel_config("telegram", &ch)
+            .expect("telegram config should map");
+        assert_eq!(
+            cfg.get("telegram")
+                .and_then(|v| v.get("botToken"))
+                .and_then(|v| v.as_str()),
+            Some("tg-token")
+        );
+        let allow = cfg
+            .get("telegram")
+            .and_then(|v| v.get("allowFrom"))
+            .and_then(|v| v.as_array())
+            .expect("allowFrom should exist");
+        assert_eq!(allow.len(), 2);
+        assert_eq!(allow[0].as_str(), Some("12345"));
+        assert_eq!(allow[1].as_str(), Some("67890"));
+        assert_eq!(
+            cfg.get("telegram")
+                .and_then(|v| v.get("dmPolicy"))
+                .and_then(|v| v.as_str()),
+            Some("allowlist")
+        );
+    }
+
+    #[test]
+    fn openclaw_telegram_env_mapping_contains_allow_from() {
+        let mut ch = sample_channel();
+        ch.allowed_users = vec!["12345".to_string(), "67890".to_string()];
+        let vars = ChannelCredentialMapper::openclaw_env_vars("telegram", &ch);
+        assert_eq!(
+            vars.get("OPENCLAW_TELEGRAM_ALLOW_FROM").map(String::as_str),
+            Some("12345,67890")
         );
     }
 

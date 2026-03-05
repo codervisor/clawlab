@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 use tracing::{debug, warn};
 
-use crate::commands::config_gen::{generate_config_dir, inject_config_dir_arg};
+use crate::commands::config_gen::{generate_config_dir, inject_config_dir_arg, state_dir_env_vars};
 use crate::commands::InitOptions;
 use crate::util::{
     append_audit_file, ensure_installed_runtime, get_provider_key_from_vault, is_first_run_context,
@@ -166,6 +166,7 @@ pub async fn exec_up(
                 // Channel and tool lists are passed via env vars — runtimes
                 // do NOT accept --channels / --tools CLI flags.
                 let mut combined_env = env_vars.clone();
+                combined_env.extend(state_dir_env_vars(&runtime, &current_project_hash)?);
                 if !channels.is_empty() {
                     combined_env.push(("CLAWDEN_CHANNELS".to_string(), channels.join(",")));
                 }
@@ -890,6 +891,7 @@ pub fn build_runtime_env_vars(
             let channel_vars = match runtime_slug.as_str() {
                 "zeroclaw" => ChannelCredentialMapper::zeroclaw_env_vars(&ch_type, ch_instance),
                 "nanoclaw" => ChannelCredentialMapper::nanoclaw_env_vars(&ch_type, ch_instance),
+                "openclaw" => ChannelCredentialMapper::openclaw_env_vars(&ch_type, ch_instance),
                 _ => ChannelCredentialMapper::zeroclaw_env_vars(&ch_type, ch_instance),
             };
             env.extend(channel_vars);
@@ -1055,6 +1057,7 @@ channels:
   bot:
     type: telegram
     token: tg-test
+    allowed_users: ["12345", "67890"]
 "#;
         let mut config = ClawDenYaml::parse_yaml(yaml).expect("yaml should parse");
         config
@@ -1071,6 +1074,9 @@ channels:
         assert!(env
             .iter()
             .any(|(k, v)| k == "OPENCLAW_LLM_PROVIDER" && v == "openai"));
+        assert!(env
+            .iter()
+            .any(|(k, v)| k == "OPENCLAW_TELEGRAM_ALLOW_FROM" && v == "12345,67890"));
     }
 
     #[test]

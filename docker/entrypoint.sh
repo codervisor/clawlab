@@ -94,6 +94,7 @@ runtime_default_args() {
     case "$1" in
         zeroclaw)  echo "daemon" ;;
         picoclaw)  echo "gateway" ;;
+        openclaw)  echo "gateway" ;;
         openfang)  echo "daemon" ;;
         nullclaw)  echo "daemon" ;;
         *)         echo "" ;;

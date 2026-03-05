@@ -9,7 +9,9 @@ use std::fs;
 use std::time::Duration;
 use tracing::{debug, warn};
 
-use crate::commands::config_gen::{generate_config_dir, inject_config_dir_arg};
+use crate::commands::config_gen::{
+    generate_config_dir, inject_config_dir_arg, state_dir_env_vars, write_env_runtime_config,
+};
 use crate::commands::up::{
     build_runtime_env_vars, channels_for_runtime, infer_provider_type, load_config_with_env_file,
     parse_env_overrides, pinned_version_for_runtime, render_log_line, runtime_provider_and_model,
@@ -266,7 +268,18 @@ pub async fn exec_run(
         )? {
             inject_config_dir_arg(&opts.runtime, &mut args, &config_dir);
         }
+
+        // Env-var-based runtimes like OpenClaw still consume a JSON config
+        // file for channel settings (allowFrom, dmPolicy, groupPolicy, ...).
+        // Generate that file in the project-isolated state/config directory.
+        write_env_runtime_config(cfg, &opts.runtime, &current_project_hash)?;
     }
+
+    // Inject project-scoped state dir for env-var-based runtimes (e.g.
+    // OPENCLAW_STATE_DIR) so that clawden-managed launches don't pollute
+    // the user's global runtime config.
+    let state_env = state_dir_env_vars(&opts.runtime, &current_project_hash)?;
+    env_vars.extend(state_env);
 
     debug!(
         "exec_run command: {} {}",

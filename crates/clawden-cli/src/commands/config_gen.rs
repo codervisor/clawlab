@@ -421,6 +421,122 @@ pub(crate) fn generate_picoclaw_config(
     root
 }
 
+pub(crate) fn generate_openclaw_config(
+    config: &ClawDenYaml,
+    runtime: &str,
+) -> serde_json::Map<String, JsonValue> {
+    let mut root = serde_json::Map::new();
+
+    let mut channels = serde_json::Map::new();
+    for channel_name in channels_for_runtime(config, runtime) {
+        let Some(channel) = config.channels.get(&channel_name) else {
+            continue;
+        };
+        let channel_type = ClawDenYaml::resolve_channel_type(&channel_name, channel)
+            .unwrap_or_else(|| channel_name.clone());
+        if let Ok(JsonValue::Object(obj)) =
+            ChannelCredentialMapper::openclaw_channel_config(&channel_type, channel)
+        {
+            channels.extend(obj);
+        }
+    }
+    if !channels.is_empty() {
+        root.insert("channels".to_string(), JsonValue::Object(channels));
+    }
+
+    for (k, v) in runtime_config_overrides(config, runtime) {
+        root.insert(k.clone(), v.clone());
+    }
+
+    // Inject agent model into the config so OpenClaw routes requests through
+    // the correct provider.  Without this, OpenClaw parses the model prefix
+    // (e.g. "anthropic" from "anthropic/claude-opus-4-6") as the provider and
+    // tries to authenticate directly — which fails when the actual provider is
+    // a routing service like OpenRouter.
+    inject_openclaw_agent_model(&mut root, config, runtime);
+
+    root
+}
+
+/// Set `agents.defaults.model` in the OpenClaw JSON config when the configured
+/// provider differs from the model's apparent provider prefix.
+fn inject_openclaw_agent_model(
+    root: &mut serde_json::Map<String, JsonValue>,
+    config: &ClawDenYaml,
+    runtime: &str,
+) {
+    // Skip if the user already set agents.defaults.model via config overrides.
+    if root
+        .get("agents")
+        .and_then(|a| a.get("defaults"))
+        .and_then(|d| d.get("model"))
+        .is_some()
+    {
+        return;
+    }
+
+    let Some((provider_name, _provider, model_opt)) = runtime_provider_and_model(config, runtime)
+    else {
+        return;
+    };
+
+    let provider_lower = provider_name.to_ascii_lowercase();
+
+    // OpenClaw's built-in default: anthropic/claude-opus-4-6.
+    // If the configured provider already matches, no override is needed.
+    if provider_lower == "anthropic" {
+        return;
+    }
+
+    // Use the explicit model if provided, otherwise fall back to OpenClaw's
+    // built-in default so we can re-prefix it through the configured provider.
+    let model = model_opt.unwrap_or_else(|| "anthropic/claude-opus-4-6".to_string());
+
+    let model_ref = if model.starts_with(&format!("{provider_lower}/")) {
+        model
+    } else {
+        format!("{provider_lower}/{model}")
+    };
+
+    let agents = root
+        .entry("agents".to_string())
+        .or_insert_with(|| JsonValue::Object(serde_json::Map::new()));
+    if let JsonValue::Object(agents_obj) = agents {
+        let defaults = agents_obj
+            .entry("defaults".to_string())
+            .or_insert_with(|| JsonValue::Object(serde_json::Map::new()));
+        if let JsonValue::Object(defaults_obj) = defaults {
+            defaults_obj.insert("model".to_string(), JsonValue::String(model_ref));
+        }
+    }
+}
+
+pub(crate) fn write_env_runtime_config(
+    config: &ClawDenYaml,
+    runtime: &str,
+    project_hash: &str,
+) -> Result<()> {
+    let Some(descriptor) = runtime_descriptor(runtime) else {
+        return Ok(());
+    };
+    if descriptor.config_format != ConfigFormat::EnvVars {
+        return Ok(());
+    }
+
+    let dir = runtime_config_dir(project_hash, runtime)?;
+    fs::create_dir_all(&dir)?;
+
+    if runtime == "openclaw" {
+        let body = generate_openclaw_config(config, runtime);
+        write_secret_file(
+            &dir.join("openclaw.json"),
+            serde_json::to_string_pretty(&body)?.as_bytes(),
+        )?;
+    }
+
+    Ok(())
+}
+
 /// Detect HTTP proxy environment variables from the host and populate a
 /// `"proxy"` object in a JSON runtime config (picoclaw).
 fn inject_proxy_config_json(root: &mut serde_json::Map<String, JsonValue>) {
@@ -541,6 +657,37 @@ fn supports_config_dir(runtime: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Create a project-isolated state directory for runtimes that use env vars
+/// (not `--config-dir`) for isolation.  Returns env var pairs to inject.
+pub(crate) fn state_dir_env_vars(
+    runtime: &str,
+    project_hash: &str,
+) -> Result<Vec<(String, String)>> {
+    let descriptor = match runtime_descriptor(runtime) {
+        Some(d) => d,
+        None => return Ok(Vec::new()),
+    };
+    // Only applies to env-var-based runtimes that don't use --config-dir
+    if descriptor.supports_config_dir || descriptor.config_format != ConfigFormat::EnvVars {
+        return Ok(Vec::new());
+    }
+    let dir = runtime_config_dir(project_hash, runtime)?;
+    fs::create_dir_all(&dir)?;
+    let runtime_key = runtime.to_ascii_uppercase().replace('-', "_");
+    let dir_str = dir.to_string_lossy().to_string();
+    let mut vars = vec![(format!("{runtime_key}_STATE_DIR"), dir_str.clone())];
+    // OpenClaw needs CONFIG_PATH set separately from STATE_DIR so the
+    // config file also lands inside the isolated directory.
+    if runtime == "openclaw" {
+        let config_path = dir.join("openclaw.json");
+        vars.push((
+            "OPENCLAW_CONFIG_PATH".to_string(),
+            config_path.to_string_lossy().to_string(),
+        ));
+    }
+    Ok(vars)
+}
+
 fn clawden_root_dir() -> Result<PathBuf> {
     let home = std::env::var("HOME")?;
     Ok(PathBuf::from(home).join(".clawden"))
@@ -555,7 +702,10 @@ fn runtime_config_dir(project_hash: &str, runtime: &str) -> Result<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::{cleanup_project_config_dir, generate_config_dir, inject_config_dir_arg};
+    use super::{
+        cleanup_project_config_dir, generate_config_dir, generate_openclaw_config,
+        inject_config_dir_arg, write_env_runtime_config,
+    };
     use crate::commands::test_env_lock;
     use clawden_config::ClawDenYaml;
     use std::fs;
@@ -810,6 +960,98 @@ providers:
 
         cleanup_project_config_dir("cleanup-ph").expect("cleanup should succeed");
         assert!(!dir.exists());
+
+        if let Some(home) = original_home {
+            std::env::set_var("HOME", home);
+        } else {
+            std::env::remove_var("HOME");
+        }
+        let _ = fs::remove_dir_all(tmp_home);
+    }
+
+    #[test]
+    fn generates_openclaw_json_with_telegram_allow_from() {
+        let yaml = r#"
+runtime: openclaw
+channels:
+  telegram:
+    token: tg-test-token
+    allowed_users: ["12345", "67890"]
+"#;
+        let mut config = ClawDenYaml::parse_yaml(yaml).expect("yaml parse");
+        config.resolve_env_vars().expect("resolve env");
+
+        let generated = generate_openclaw_config(&config, "openclaw");
+
+        assert_eq!(
+            generated
+                .get("channels")
+                .and_then(|v| v.get("telegram"))
+                .and_then(|v| v.get("botToken"))
+                .and_then(serde_json::Value::as_str),
+            Some("tg-test-token")
+        );
+        assert_eq!(
+            generated
+                .get("channels")
+                .and_then(|v| v.get("telegram"))
+                .and_then(|v| v.get("dmPolicy"))
+                .and_then(serde_json::Value::as_str),
+            Some("allowlist")
+        );
+        assert_eq!(
+            generated
+                .get("channels")
+                .and_then(|v| v.get("telegram"))
+                .and_then(|v| v.get("allowFrom"))
+                .and_then(serde_json::Value::as_array)
+                .map(Vec::len),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn writes_openclaw_json_to_project_state_dir() {
+        let _guard = test_env_lock().lock().expect("env lock");
+        let original_home = std::env::var("HOME").ok();
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let tmp_home = std::env::temp_dir().join(format!("clawden-openclaw-config-{unique}"));
+        fs::create_dir_all(&tmp_home).expect("tmp home");
+        std::env::set_var("HOME", &tmp_home);
+
+        let yaml = r#"
+runtime: openclaw
+channels:
+  telegram:
+    token: tg-test-token
+    allowed_users: ["12345"]
+"#;
+        let mut config = ClawDenYaml::parse_yaml(yaml).expect("yaml parse");
+        config.resolve_env_vars().expect("resolve env");
+
+        write_env_runtime_config(&config, "openclaw", "openclaw-ph").expect("write config");
+
+        let path = tmp_home
+            .join(".clawden")
+            .join("configs")
+            .join("openclaw-ph")
+            .join("openclaw")
+            .join("openclaw.json");
+        let body = fs::read_to_string(path).expect("read config");
+        let parsed: serde_json::Value = serde_json::from_str(&body).expect("valid json");
+
+        assert_eq!(
+            parsed
+                .get("channels")
+                .and_then(|v| v.get("telegram"))
+                .and_then(|v| v.get("allowFrom"))
+                .and_then(serde_json::Value::as_array)
+                .map(Vec::len),
+            Some(1)
+        );
 
         if let Some(home) = original_home {
             std::env::set_var("HOME", home);
@@ -1131,5 +1373,115 @@ providers:
         restore_var!("HTTP_PROXY", orig_http);
         restore_var!("https_proxy", orig_https_lc);
         restore_var!("http_proxy", orig_http_lc);
+    }
+
+    #[test]
+    fn openclaw_config_injects_openrouter_prefixed_model() {
+        let yaml = r#"
+runtime: openclaw
+provider: openrouter
+model: anthropic/claude-opus-4-6
+providers:
+  openrouter:
+    api_key: sk-or-test
+channels:
+  telegram:
+    token: tg-test-token
+"#;
+        let mut config = ClawDenYaml::parse_yaml(yaml).expect("yaml parse");
+        config.resolve_env_vars().expect("resolve env");
+
+        let generated = generate_openclaw_config(&config, "openclaw");
+
+        assert_eq!(
+            generated
+                .get("agents")
+                .and_then(|v| v.get("defaults"))
+                .and_then(|v| v.get("model"))
+                .and_then(serde_json::Value::as_str),
+            Some("openrouter/anthropic/claude-opus-4-6"),
+            "model should be prefixed with the provider for correct routing"
+        );
+    }
+
+    #[test]
+    fn openclaw_config_injects_default_model_for_non_anthropic_provider() {
+        let yaml = r#"
+runtime: openclaw
+provider: openrouter
+providers:
+  openrouter:
+    api_key: sk-or-test
+"#;
+        let mut config = ClawDenYaml::parse_yaml(yaml).expect("yaml parse");
+        config.resolve_env_vars().expect("resolve env");
+
+        let generated = generate_openclaw_config(&config, "openclaw");
+
+        // When no model is specified but provider is not anthropic, the
+        // default model should be re-prefixed through the provider.
+        assert_eq!(
+            generated
+                .get("agents")
+                .and_then(|v| v.get("defaults"))
+                .and_then(|v| v.get("model"))
+                .and_then(serde_json::Value::as_str),
+            Some("openrouter/anthropic/claude-opus-4-6"),
+        );
+    }
+
+    #[test]
+    fn openclaw_config_skips_model_for_anthropic_provider() {
+        let yaml = r#"
+runtime: openclaw
+provider: anthropic
+providers:
+  anthropic:
+    api_key: sk-ant-test
+"#;
+        let mut config = ClawDenYaml::parse_yaml(yaml).expect("yaml parse");
+        config.resolve_env_vars().expect("resolve env");
+
+        let generated = generate_openclaw_config(&config, "openclaw");
+
+        // When provider matches OpenClaw's default, no model override needed.
+        assert!(
+            generated
+                .get("agents")
+                .and_then(|v| v.get("defaults"))
+                .and_then(|v| v.get("model"))
+                .is_none(),
+            "anthropic provider should not inject model override"
+        );
+    }
+
+    #[test]
+    fn openclaw_config_respects_user_model_override() {
+        let yaml = r#"
+runtime: openclaw
+provider: openrouter
+model: anthropic/claude-opus-4-6
+providers:
+  openrouter:
+    api_key: sk-or-test
+config:
+  agents:
+    defaults:
+      model: "custom/my-model"
+"#;
+        let mut config = ClawDenYaml::parse_yaml(yaml).expect("yaml parse");
+        config.resolve_env_vars().expect("resolve env");
+
+        let generated = generate_openclaw_config(&config, "openclaw");
+
+        // User-provided config override should take precedence.
+        assert_eq!(
+            generated
+                .get("agents")
+                .and_then(|v| v.get("defaults"))
+                .and_then(|v| v.get("model"))
+                .and_then(serde_json::Value::as_str),
+            Some("custom/my-model"),
+        );
     }
 }

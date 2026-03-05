@@ -88,6 +88,13 @@ const OPENFANG_HINTS: &[(&str, &str)] = &[
     ("chat", "quick chat with default agent"),
 ];
 
+const OPENCLAW_HINTS: &[(&str, &str)] = &[
+    ("gateway", "run the WebSocket gateway (foreground)"),
+    ("setup", "initialize local config and workspace"),
+    ("tui", "open terminal UI connected to the gateway"),
+    ("node run", "run the headless node host (foreground)"),
+];
+
 const NULLCLAW_HINTS: &[(&str, &str)] = &[("daemon", "run as background daemon")];
 
 static DESCRIPTORS: &[RuntimeDescriptor] = &[
@@ -103,8 +110,8 @@ static DESCRIPTORS: &[RuntimeDescriptor] = &[
             package: "openclaw",
         },
         direct_install_supported: true,
-        default_start_args: &[],
-        subcommand_hints: &[],
+        default_start_args: &["gateway", "--allow-unconfigured"],
+        subcommand_hints: OPENCLAW_HINTS,
         config_format: ConfigFormat::EnvVars,
         supports_config_dir: false,
         config_dir_flag: ConfigDirFlag::ConfigDir,
