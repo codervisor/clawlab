@@ -327,7 +327,7 @@ fn inject_security_profile(root: &mut toml::Table, runtime: &str) {
         .entry("seccomp".to_string())
         .or_insert(TomlValue::String("disabled".to_string()));
     table
-        .entry("drop_capabilities".to_string())
+        .entry("drop_caps".to_string())
         .or_insert(TomlValue::Boolean(false));
     table
         .entry("sandbox_tools".to_string())
