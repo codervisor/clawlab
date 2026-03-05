@@ -1,5 +1,5 @@
 ---
-status: planned
+status: in-progress
 created: 2026-03-05
 priority: high
 tags:
@@ -10,9 +10,11 @@ tags:
 - config
 - ux
 created_at: 2026-03-05T14:08:24.530411Z
-updated_at: 2026-03-05T14:08:24.530411Z
+updated_at: 2026-03-05T14:27:18.265681Z
+transitions:
+- status: in-progress
+  at: 2026-03-05T14:27:18.265681Z
 ---
-
 # Telegram Username-to-ID Resolution for OpenClaw
 
 ## Overview
@@ -102,31 +104,31 @@ Useful for scripting, CI, or pre-populating the cache.
 
 ## Plan
 
-- [ ] Add `is_numeric_telegram_id()` helper to `clawden-config`
-- [ ] Implement `TelegramIdResolver` in `clawden-cli` with 3-phase resolution (cache → history → interactive poll)
-- [ ] Create `.clawden/telegram-ids.json` cache read/write logic
-- [ ] Integrate resolver into `run.rs` config generation path — resolve before `openclaw_channel_config()`
-- [ ] Integrate resolver into `up.rs` config generation path
-- [ ] Add `clawden telegram resolve-id <username>` subcommand
-- [ ] Add `.clawden/` to default `.gitignore` template
-- [ ] Log resolved mappings during run/up
+- [x] Add `is_numeric_telegram_id()` helper to `clawden-config`
+- [x] Implement `TelegramIdResolver` in `clawden-cli` with 3-phase resolution (cache → history → interactive poll)
+- [x] Create `.clawden/telegram-ids.json` cache read/write logic
+- [x] Integrate resolver into `run.rs` config generation path — resolve before `openclaw_channel_config()`
+- [x] Integrate resolver into `up.rs` config generation path
+- [x] Add `clawden telegram resolve-id <username>` subcommand
+- [x] Add `.clawden/` to default `.gitignore` template
+- [x] Log resolved mappings during run/up
 - [ ] Handle edge cases: wildcard, no-username users, stale cache, cross-bot isolation
-- [ ] Add unit tests for resolution logic and cache operations
-- [ ] Add integration test: username in config → numeric ID in generated OpenClaw config
+- [x] Add unit tests for resolution logic and cache operations
+- [x] Add integration test: username in config → numeric ID in generated OpenClaw config
 
 ## Test
 
-- [ ] `allowed_users: ["marvzhang"]` with cached ID → OpenClaw config gets `allowFrom: ["123456789"]`
-- [ ] `allowed_users: ["123456789"]` → passed through unchanged (no resolution attempt)
+- [x] `allowed_users: ["marvzhang"]` with cached ID → OpenClaw config gets `allowFrom: ["123456789"]`
+- [x] `allowed_users: ["123456789"]` → passed through unchanged (no resolution attempt)
 - [ ] `allowed_users: ["*"]` → passed through unchanged
 - [ ] `allowed_users: ["marvzhang", "123456789"]` → mixed resolution: username resolved, numeric passed through
 - [ ] Cache miss + `getUpdates` has matching username → resolves and caches
 - [ ] Cache miss + `getUpdates` empty + interactive prompt → polls and resolves on message
 - [ ] Cache miss + timeout → clear error message with instructions
 - [ ] Cache hit with different ID → warns and updates cache
-- [ ] `clawden telegram resolve-id marvzhang` → prints resolved ID and updates cache
-- [ ] Multiple bot tokens → separate cache files, no cross-contamination
-- [ ] ZeroClaw `allowed_users` with usernames → no resolution attempted (ZeroClaw handles natively)
+- [x] `clawden telegram resolve-id marvzhang` → prints resolved ID and updates cache
+- [x] Multiple bot tokens → separate cache files, no cross-contamination
+- [x] ZeroClaw `allowed_users` with usernames → no resolution attempted (ZeroClaw handles natively)
 
 ## Notes
 

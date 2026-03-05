@@ -121,6 +121,12 @@ pub struct ChannelInstanceYaml {
     pub extra: HashMap<String, Value>,
 }
 
+/// Returns true if the input is a numeric Telegram user ID.
+pub fn is_numeric_telegram_id(value: &str) -> bool {
+    let trimmed = value.trim();
+    !trimmed.is_empty() && trimmed.as_bytes().iter().all(|b| b.is_ascii_digit())
+}
+
 /// A runtime entry in the `runtimes` array.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RuntimeEntryYaml {
@@ -2117,6 +2123,15 @@ runtimes:
                 .and_then(|v| v.as_str()),
             Some("allowlist")
         );
+    }
+
+    #[test]
+    fn detects_numeric_telegram_ids() {
+        assert!(super::is_numeric_telegram_id("123456"));
+        assert!(super::is_numeric_telegram_id("  42  "));
+        assert!(!super::is_numeric_telegram_id(""));
+        assert!(!super::is_numeric_telegram_id("marvzhang"));
+        assert!(!super::is_numeric_telegram_id("@marvzhang"));
     }
 
     #[test]

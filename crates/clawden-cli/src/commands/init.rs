@@ -107,6 +107,9 @@ pub fn exec_init(options: InitOptions) -> Result<()> {
     let env_path = yaml_path.parent().unwrap().join(".env");
     ensure_env_file(&env_path, template, &selection)?;
 
+    let gitignore_path = yaml_path.parent().unwrap().join(".gitignore");
+    ensure_gitignore_file(&gitignore_path)?;
+
     if let (Some(provider), Some(key)) = (&selection.provider, &selection.provider_key) {
         if !key.is_empty() {
             let path = store_provider_key_in_vault(provider, key)?;
@@ -652,6 +655,27 @@ fn ensure_env_file(
 
     std::fs::write(env_path, content)?;
     println!("Created {}", env_path.display());
+    Ok(())
+}
+
+fn ensure_gitignore_file(path: &std::path::Path) -> Result<()> {
+    let required_entry = ".clawden/";
+    let mut content = if path.exists() {
+        std::fs::read_to_string(path)?
+    } else {
+        String::from("# ClawDen local state\n")
+    };
+
+    if !content.lines().any(|line| line.trim() == required_entry) {
+        if !content.ends_with('\n') {
+            content.push('\n');
+        }
+        content.push_str(required_entry);
+        content.push('\n');
+    }
+
+    std::fs::write(path, content)?;
+    println!("Updated {}", path.display());
     Ok(())
 }
 

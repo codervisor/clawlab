@@ -131,7 +131,7 @@ pub enum Commands {
         /// Channel phone shortcut (e.g. Signal).
         #[arg(long)]
         phone: Option<String>,
-        /// Comma-separated user allowlist (e.g. Telegram user IDs).
+        /// Comma-separated user allowlist (e.g. Telegram user IDs or usernames).
         #[arg(long = "allowed-users")]
         allowed_users: Option<String>,
         /// Override system prompt value. Prefix with @ to load from file.
@@ -190,6 +190,11 @@ pub enum Commands {
     Channels {
         #[command(subcommand)]
         command: Option<ChannelCommand>,
+    },
+    /// Telegram utilities
+    Telegram {
+        #[command(subcommand)]
+        command: TelegramCommand,
     },
     /// LLM provider management
     Providers {
@@ -291,6 +296,15 @@ pub enum ChannelCommand {
 }
 
 #[derive(Debug, Subcommand)]
+pub enum TelegramCommand {
+    /// Resolve a Telegram username to numeric user ID
+    ResolveId {
+        /// Telegram username (with or without @)
+        username: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
 pub enum ProviderCommand {
     /// Validate configured provider credentials
     Test {
@@ -379,7 +393,7 @@ pub enum DockerCommand {
         /// Channel phone shortcut (e.g. Signal).
         #[arg(long)]
         phone: Option<String>,
-        /// Comma-separated user allowlist (e.g. Telegram user IDs).
+        /// Comma-separated user allowlist (e.g. Telegram user IDs or usernames).
         #[arg(long = "allowed-users")]
         allowed_users: Option<String>,
         /// Override system prompt value. Prefix with @ to load from file.

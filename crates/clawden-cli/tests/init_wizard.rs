@@ -42,6 +42,9 @@ fn init_non_interactive_generates_valid_config_and_env() {
 
     let env_file = fs::read_to_string(dir.join(".env")).expect("env should exist");
     assert!(env_file.contains("OPENAI_API_KEY="));
+
+    let gitignore = fs::read_to_string(dir.join(".gitignore")).expect("gitignore should exist");
+    assert!(gitignore.contains(".clawden/"));
 }
 
 #[test]

@@ -53,6 +53,7 @@ pub async fn exec_run(
 
     if let Some(cfg) = config.as_mut() {
         apply_run_overrides(cfg, &opts)?;
+        super::telegram::resolve_openclaw_telegram_allowed_users_for_runtime(cfg, &opts.runtime)?;
     }
 
     // Host environment auto-detection: infer provider from well-known env vars

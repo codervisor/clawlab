@@ -54,7 +54,7 @@ pub async fn exec_up(
         }
     }
 
-    let config = load_config_with_env_file(opts.env_file.as_deref())?;
+    let mut config = load_config_with_env_file(opts.env_file.as_deref())?;
     let mode = resolve_up_mode(&opts, config.as_ref(), process_manager);
     let target_runtimes =
         resolve_target_runtimes(opts.runtimes.clone(), config.as_ref(), installer)?;
@@ -68,6 +68,10 @@ pub async fn exec_up(
     let mut started_runtimes = Vec::new();
 
     for runtime in target_runtimes {
+        if let Some(cfg) = config.as_mut() {
+            super::telegram::resolve_openclaw_telegram_allowed_users_for_runtime(cfg, &runtime)?;
+        }
+
         let env_vars = if let Some(cfg) = config.as_ref() {
             build_runtime_env_vars(cfg, &runtime)?
         } else {
