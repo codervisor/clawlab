@@ -19,7 +19,7 @@ pub use channels::{
 };
 pub use discovery::{DiscoveredEndpoint, DiscoveryMethod, DiscoveryService};
 pub use install::{
-    runtime_default_start_args_for_up, runtime_subcommand_hints, runtime_supports_config_dir,
+    runtime_default_start_args, runtime_subcommand_hints, runtime_supports_config_dir,
     version_satisfies, InstallOutcome, InstalledRuntime, RuntimeInstaller, VersionCheck,
 };
 pub use lifecycle::AgentState;

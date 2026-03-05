@@ -1,7 +1,8 @@
 use anyhow::Result;
 use clawden_config::{ChannelInstanceYaml, ClawDenYaml, ProviderEntryYaml, ProviderRefYaml};
 use clawden_core::{
-    runtime_subcommand_hints, ExecutionMode, LifecycleManager, ProcessManager, RuntimeInstaller,
+    runtime_default_start_args, runtime_subcommand_hints, ExecutionMode, LifecycleManager,
+    ProcessManager, RuntimeInstaller,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -240,6 +241,22 @@ pub async fn exec_run(
     let installed = ensure_installed_runtime(installer, &opts.runtime, pinned_version)?;
 
     let mut args = opts.extra_args.clone();
+
+    // Smart default: inject the runtime's default subcommand when the user
+    // didn't pass any extra args.  This avoids the common mistake of running
+    // `clawden run zeroclaw` without the required `daemon` subcommand.
+    if args.is_empty() {
+        let defaults = runtime_default_start_args(&opts.runtime);
+        if !defaults.is_empty() {
+            eprintln!(
+                "\u{2139} No subcommand specified — using default: {} {}",
+                opts.runtime,
+                defaults.join(" "),
+            );
+            args.extend(defaults.iter().map(|s| (*s).to_string()));
+        }
+    }
+
     if let Some(cfg) = config.as_ref() {
         if let Some(config_dir) = generate_config_dir(
             cfg,

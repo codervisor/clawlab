@@ -20,19 +20,23 @@ fn binary_path() -> PathBuf {
 }
 
 fn setup_direct_runtime(home: &Path) {
+    setup_direct_runtime_with_script(
+        home,
+        "zeroclaw",
+        "#!/usr/bin/env sh\nprintenv > \"$CLAWDEN_ENV_DUMP_FILE\"\nsleep 15\nexit 0\n",
+    );
+}
+
+fn setup_direct_runtime_with_script(home: &Path, runtime: &str, script: &str) {
     let runtime_dir = home
         .join(".clawden")
         .join("runtimes")
-        .join("zeroclaw")
+        .join(runtime)
         .join("latest");
     fs::create_dir_all(&runtime_dir).expect("runtime directory should be created");
 
-    let executable = runtime_dir.join("zeroclaw");
-    fs::write(
-        &executable,
-        "#!/usr/bin/env sh\nprintenv > \"$CLAWDEN_ENV_DUMP_FILE\"\nsleep 15\nexit 0\n",
-    )
-    .expect("runtime script should be written");
+    let executable = runtime_dir.join(runtime);
+    fs::write(&executable, script).expect("runtime script should be written");
 
     let mut perms = fs::metadata(&executable)
         .expect("metadata should be available")
@@ -43,7 +47,7 @@ fn setup_direct_runtime(home: &Path) {
     let current_link = home
         .join(".clawden")
         .join("runtimes")
-        .join("zeroclaw")
+        .join(runtime)
         .join("current");
     std::os::unix::fs::symlink("latest", current_link).expect("current symlink should be created");
 }
@@ -165,4 +169,86 @@ fn run_sets_allowed_users_env_shortcut() {
 
     let env_dump = wait_for_dump(&dump_path);
     assert!(env_dump.contains("CLAWDEN_ALLOWED_USERS=3000,42617"));
+}
+
+#[test]
+fn run_injects_default_subcommand_when_none_provided() {
+    let dir = temp_dir("run-default-subcmd");
+    let home = dir.join("home");
+    let project = dir.join("project");
+    let dump_path = dir.join("runtime.args");
+
+    fs::create_dir_all(&home).expect("home should be created");
+    fs::create_dir_all(&project).expect("project should be created");
+
+    // Fake zeroclaw that dumps its CLI arguments to a file.
+    setup_direct_runtime_with_script(
+        &home,
+        "zeroclaw",
+        &format!(
+            "#!/usr/bin/env sh\necho \"$@\" > \"{}\"\nsleep 15\nexit 0\n",
+            dump_path.display()
+        ),
+    );
+
+    fs::write(project.join("clawden.yaml"), "runtime: zeroclaw\n").expect("yaml should be written");
+
+    let status = Command::new(binary_path())
+        .current_dir(&project)
+        .env("HOME", &home)
+        .env_remove("OPENAI_API_KEY")
+        // No extra args — should inject "daemon" automatically
+        .args(["run", "--allow-missing-credentials", "zeroclaw"])
+        .status()
+        .expect("run should execute");
+    assert!(status.success());
+
+    let args_dump = wait_for_dump(&dump_path);
+    assert!(
+        args_dump.contains("daemon"),
+        "expected default 'daemon' subcommand, got: {args_dump}"
+    );
+}
+
+#[test]
+fn run_does_not_inject_default_when_user_passes_subcommand() {
+    let dir = temp_dir("run-explicit-subcmd");
+    let home = dir.join("home");
+    let project = dir.join("project");
+    let dump_path = dir.join("runtime.args");
+
+    fs::create_dir_all(&home).expect("home should be created");
+    fs::create_dir_all(&project).expect("project should be created");
+
+    // Fake zeroclaw that dumps its CLI arguments to a file.
+    setup_direct_runtime_with_script(
+        &home,
+        "zeroclaw",
+        &format!(
+            "#!/usr/bin/env sh\necho \"$@\" > \"{}\"\nsleep 15\nexit 0\n",
+            dump_path.display()
+        ),
+    );
+
+    fs::write(project.join("clawden.yaml"), "runtime: zeroclaw\n").expect("yaml should be written");
+
+    let status = Command::new(binary_path())
+        .current_dir(&project)
+        .env("HOME", &home)
+        .env_remove("OPENAI_API_KEY")
+        // Explicit subcommand — should NOT inject default
+        .args(["run", "--allow-missing-credentials", "zeroclaw", "repl"])
+        .status()
+        .expect("run should execute");
+    assert!(status.success());
+
+    let args_dump = wait_for_dump(&dump_path);
+    assert!(
+        args_dump.contains("repl"),
+        "expected 'repl' subcommand, got: {args_dump}"
+    );
+    assert!(
+        !args_dump.contains("daemon"),
+        "should not inject default 'daemon' when user passes explicit subcommand, got: {args_dump}"
+    );
 }

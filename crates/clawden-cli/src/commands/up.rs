@@ -3,7 +3,7 @@ use clawden_config::{
     ChannelCredentialMapper, ClawDenYaml, LlmProvider, ProviderEntryYaml, ProviderRefYaml,
 };
 use clawden_core::{
-    runtime_default_start_args_for_up, AgentState, ExecutionMode, LifecycleManager, ProcessInfo,
+    runtime_default_start_args, AgentState, ExecutionMode, LifecycleManager, ProcessInfo,
     ProcessManager, RuntimeInstaller,
 };
 use std::collections::HashMap;
@@ -148,7 +148,7 @@ pub async fn exec_up(
                 }
                 let installed = ensure_installed_runtime(installer, &runtime, pinned_version)?;
 
-                let mut args = runtime_default_start_args_for_up(&runtime)
+                let mut args = runtime_default_start_args(&runtime)
                     .iter()
                     .map(|arg| (*arg).to_string())
                     .collect::<Vec<_>>();

@@ -407,6 +407,12 @@ impl RuntimeInstaller {
             "install nanoclaw dependencies",
         )?;
 
+        // pnpm's content-addressable store may skip install scripts for
+        // native addons.  Walk node_modules looking for packages with a
+        // binding.gyp and no compiled .node file, then build them.
+        self.report_progress("Building native modules…");
+        rebuild_native_modules(&repo_dir)?;
+
         if !repo_dir.join("package.json").exists() {
             bail!("nanoclaw validation failed: expected package.json missing");
         }
@@ -567,8 +573,9 @@ pub fn runtime_supports_config_dir(runtime: &str) -> bool {
     matches!(runtime, "zeroclaw" | "picoclaw" | "openfang" | "nullclaw")
 }
 
-/// Default start args used by the orchestrated `clawden up` flow only.
-pub fn runtime_default_start_args_for_up(runtime: &str) -> &'static [&'static str] {
+/// Default start args for a runtime when no subcommand is provided.
+/// Used by both `clawden run` (smart default) and `clawden up` (managed start).
+pub fn runtime_default_start_args(runtime: &str) -> &'static [&'static str] {
     match runtime {
         "zeroclaw" => &["daemon"],
         "picoclaw" => &["gateway"],
@@ -964,6 +971,87 @@ fn make_executable(path: &Path) -> Result<()> {
     perms.set_mode(0o755);
     fs::set_permissions(path, perms)?;
     Ok(())
+}
+
+/// Walk `node_modules/.pnpm` for packages that have a `binding.gyp` but no
+/// compiled `.node` file under `build/`.  For each such package, attempt
+/// `prebuild-install` (downloads prebuilt binary) with fallback to
+/// `node-gyp rebuild`.  Errors are logged but not fatal — the runtime may
+/// still work if the missing addon is optional.
+fn rebuild_native_modules(project_dir: &Path) -> Result<()> {
+    let pnpm_dir = project_dir.join("node_modules").join(".pnpm");
+    if !pnpm_dir.exists() {
+        return Ok(());
+    }
+
+    // Collect package dirs that contain binding.gyp (native addon marker).
+    let mut native_dirs = Vec::new();
+    for entry in walkdir(&pnpm_dir) {
+        let gyp = entry.join("binding.gyp");
+        if gyp.exists() {
+            // Already compiled?
+            let has_node = entry
+                .join("build")
+                .join("Release")
+                .read_dir()
+                .ok()
+                .and_then(|mut rd| {
+                    rd.find(|e| {
+                        e.as_ref()
+                            .map(|e| e.path().extension().is_some_and(|ext| ext == "node"))
+                            .unwrap_or(false)
+                    })
+                })
+                .is_some();
+            if !has_node {
+                native_dirs.push(entry);
+            }
+        }
+    }
+
+    for dir in &native_dirs {
+        // Try prebuild-install first, then fall back to node-gyp.
+        let ok = Command::new("npx")
+            .args(["--yes", "prebuild-install"])
+            .current_dir(dir)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if !ok {
+            let _ = Command::new("npx")
+                .args(["--yes", "node-gyp", "rebuild", "--release"])
+                .current_dir(dir)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status();
+        }
+    }
+    Ok(())
+}
+
+/// Recursively find directories under `root` that directly contain a file
+/// named `binding.gyp`.  Returns the directories, not the file paths.
+fn walkdir(root: &Path) -> Vec<PathBuf> {
+    let mut result = Vec::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let rd = match fs::read_dir(&dir) {
+            Ok(rd) => rd,
+            Err(_) => continue,
+        };
+        for entry in rd.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            }
+        }
+        if dir.join("binding.gyp").exists() {
+            result.push(dir);
+        }
+    }
+    result
 }
 
 #[cfg(test)]
