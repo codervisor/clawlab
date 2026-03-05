@@ -206,22 +206,8 @@ fn redact_json_secrets(json_str: &str) -> String {
 }
 
 pub fn exec_config_env(reveal: bool) -> Result<()> {
-    let provider_vars: &[(&str, &str)] = &[
-        ("OPENROUTER_API_KEY", "openrouter"),
-        ("OPENAI_API_KEY", "openai"),
-        ("ANTHROPIC_API_KEY", "anthropic"),
-        ("GEMINI_API_KEY", "google"),
-        ("GOOGLE_API_KEY", "google"),
-        ("MISTRAL_API_KEY", "mistral"),
-        ("GROQ_API_KEY", "groq"),
-    ];
-
-    let channel_vars: &[&str] = &[
-        "TELEGRAM_BOT_TOKEN",
-        "DISCORD_BOT_TOKEN",
-        "SLACK_BOT_TOKEN",
-        "SLACK_APP_TOKEN",
-    ];
+    let provider_vars = clawden_core::provider_env_candidates();
+    let channel_vars = clawden_core::known_channel_env_vars();
 
     let config_vars: &[&str] = &[
         "CLAWDEN_LLM_API_KEY",
@@ -285,27 +271,20 @@ fn maybe_redact(key: &str, value: &str, reveal: bool) -> String {
 
 /// Scan the host environment for known ClawDen-relevant variables.
 fn detect_host_env_vars() -> Vec<(String, String)> {
-    let known_vars: &[&str] = &[
+    let mut known_vars: Vec<&str> = vec![
         "CLAWDEN_LLM_API_KEY",
         "CLAWDEN_LLM_PROVIDER",
         "CLAWDEN_LLM_MODEL",
         "CLAWDEN_LLM_BASE_URL",
-        "OPENROUTER_API_KEY",
-        "OPENAI_API_KEY",
-        "ANTHROPIC_API_KEY",
-        "GEMINI_API_KEY",
-        "GOOGLE_API_KEY",
-        "MISTRAL_API_KEY",
-        "GROQ_API_KEY",
-        "TELEGRAM_BOT_TOKEN",
-        "DISCORD_BOT_TOKEN",
-        "SLACK_BOT_TOKEN",
-        "SLACK_APP_TOKEN",
     ];
+    known_vars.extend(clawden_core::known_provider_env_vars());
+    known_vars.extend(clawden_core::known_channel_env_vars().iter().copied());
+    known_vars.sort_unstable();
+    known_vars.dedup();
 
     let mut pairs: Vec<(String, String)> = known_vars
-        .iter()
-        .filter_map(|&name| {
+        .into_iter()
+        .filter_map(|name| {
             std::env::var(name)
                 .ok()
                 .filter(|v| !v.trim().is_empty())

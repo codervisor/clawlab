@@ -1,5 +1,5 @@
 ---
-status: planned
+status: in-progress
 created: 2026-03-05
 priority: medium
 tags:
@@ -9,7 +9,10 @@ tags:
 - config
 - parity
 created_at: 2026-03-05T06:59:07.922540818Z
-updated_at: 2026-03-05T06:59:07.922540818Z
+updated_at: 2026-03-05T08:15:23.510960122Z
+transitions:
+- status: in-progress
+  at: 2026-03-05T08:15:23.510960122Z
 ---
 
 # OpenClaw Telegram Channel Parity — Full Config Translation for DM Policy, Groups & Access Control
@@ -23,8 +26,8 @@ This spec closes the gap between ClawDen's `clawden.yaml` channel schema and the
 ## Motivation
 
 - Users coming from raw OpenClaw expect `dmPolicy`, `groupPolicy`, `groups`, and `requireMention` to work — these are in the Quick Setup on the official docs.
-- `group_mode` already exists in `ChannelInstanceYaml` but is never mapped to OpenClaw's `groupPolicy`.
-- The `extra` HashMap catches unknown keys but the `openclaw_channel_config()` and `openclaw_env_vars()` functions ignore them.
+- `group_mode` already exists in `ChannelInstanceYaml` but is still not mapped to OpenClaw's `groupPolicy`.
+- The `extra` HashMap is now passed through by `openclaw_channel_config()` for Telegram, but structured snake_case fields and env-var aliases are still incomplete in `openclaw_env_vars()`.
 - Dashboard `ChannelOverview.tsx` only shows `allowed_users` and `group_mode` as optional fields for Telegram — minimal compared to what users actually need.
 
 ## Design
@@ -103,3 +106,5 @@ All remaining fields (`textChunkLimit`, `chunkMode`, `linkPreview`, `mediaMaxMb`
 - Multi-account support (`channels.telegram.accounts.*`, `defaultAccount`) is deferred — it requires schema changes beyond per-channel-instance config.
 - The `extra` pass-through approach mirrors how `ChannelInstanceYaml` already uses `#[serde(flatten)]` — we just need to actually forward those values in the config mapper.
 - OpenClaw's pairing flow (`openclaw pairing list/approve`) is runtime-side; ClawDen only needs to set `dmPolicy: pairing` and let OpenClaw handle the rest.
+
+- Implementation reality (2026-03-05): OpenClaw Telegram mapping currently supports `botToken`, `allowFrom`, implicit `dmPolicy=allowlist` when `allowed_users` is set, and raw `extra` pass-through. Remaining gaps are dedicated `ChannelInstanceYaml` fields, `group_mode` compatibility mapping, env-var aliases for policy fields, dashboard optional field list expansion, and validation warning for allowlist-without-users.

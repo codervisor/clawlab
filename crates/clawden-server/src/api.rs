@@ -122,7 +122,7 @@ pub async fn start_agent(
     let record = manager
         .start_agent(&agent_id)
         .await
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
     append_audit(&state.audit, "api", "agent.start", &agent_id);
     Ok(Json(record))
 }
@@ -135,7 +135,7 @@ pub async fn stop_agent(
     let record = manager
         .stop_agent(&agent_id)
         .await
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
     append_audit(&state.audit, "api", "agent.stop", &agent_id);
     Ok(Json(record))
 }
@@ -174,7 +174,7 @@ pub async fn send_task(
             request.agent_id.clone(),
         )
         .await
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
 
     append_audit(&state.audit, "api", "task.send", &agent.id);
 
@@ -298,7 +298,7 @@ pub async fn fan_out_task(
             &req.task_description,
             req.subtask_descriptions,
         )
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
 
     let value = serde_json::to_value(&tasks).unwrap_or_default();
     append_audit(&state.audit, "api", "swarm.fan_out", &req.team_name);
@@ -381,7 +381,7 @@ pub async fn deploy_runtime(
                 completed: true,
             }))
         }
-        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, e)),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
     }
 }
 
@@ -461,7 +461,7 @@ pub async fn upsert_channel_config(
     let mut channels = state.channels.write().await;
     let config = channels
         .upsert_config(req)
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
     append_audit(
         &state.audit,
         "api",
@@ -599,7 +599,7 @@ pub async fn authorize_channel_sender(
             &req.sender_id,
             req.sender_role.as_deref(),
         )
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
     Ok(Json(serde_json::json!({
         "instance_name": req.instance_name,
         "sender_id": req.sender_id,
@@ -658,7 +658,7 @@ pub async fn create_binding(
     let mut channels = state.channels.write().await;
     let binding = channels
         .bind(req.instance_id.clone(), &req.channel_type, &req.bot_token)
-        .map_err(|e| (StatusCode::CONFLICT, e))?;
+        .map_err(|e| (StatusCode::CONFLICT, e.to_string()))?;
     append_audit(&state.audit, "api", "channel.bind", &req.instance_id);
     Ok((
         StatusCode::CREATED,
@@ -673,7 +673,7 @@ pub async fn delete_binding(
     let mut channels = state.channels.write().await;
     let binding = channels
         .unbind(binding_id)
-        .map_err(|e| (StatusCode::NOT_FOUND, e))?;
+        .map_err(|e| (StatusCode::NOT_FOUND, e.to_string()))?;
     append_audit(&state.audit, "api", "channel.unbind", &binding.instance_id);
     Ok(Json(serde_json::to_value(binding).unwrap_or_default()))
 }
@@ -717,7 +717,7 @@ pub async fn restart_agent(
     let record = manager
         .start_agent(&agent_id)
         .await
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
     append_audit(&state.audit, "api", "agent.restart", &agent_id);
     Ok(Json(record))
 }

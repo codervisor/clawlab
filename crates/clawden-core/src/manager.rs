@@ -3,10 +3,11 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use serde::Serialize;
+use thiserror::Error;
 
 use crate::{
-    AgentConfig, AgentHandle, AgentMessage, AgentResponse, AgentState, ChannelInstanceConfig,
-    ClawAdapter, ClawRuntime, HealthStatus, RuntimeConfig, RuntimeMetadata,
+    current_unix_ms, AgentConfig, AgentHandle, AgentMessage, AgentResponse, AgentState,
+    ChannelInstanceConfig, ClawAdapter, ClawRuntime, HealthStatus, RuntimeConfig, RuntimeMetadata,
 };
 
 #[derive(Debug, Clone, Serialize)]
@@ -30,6 +31,24 @@ pub struct LifecycleManager {
     configs: HashMap<String, AgentConfig>,
     next_id: AtomicU64,
     round_robin_index: usize,
+}
+
+#[derive(Debug, Error)]
+pub enum ManagerError {
+    #[error("agent `{0}` not found")]
+    AgentNotFound(String),
+    #[error("invalid state transition from {from:?} to {to:?}")]
+    InvalidTransition { from: AgentState, to: AgentState },
+    #[error("no adapter registered for runtime {0:?}")]
+    NoAdapter(ClawRuntime),
+    #[error("adapter {action} failed for {runtime:?}: {source}")]
+    Adapter {
+        runtime: ClawRuntime,
+        action: &'static str,
+        source: anyhow::Error,
+    },
+    #[error("{0}")]
+    Message(String),
 }
 
 impl LifecycleManager {
@@ -101,9 +120,9 @@ impl LifecycleManager {
         &self,
         agent_id: &str,
         channel_configs: Vec<ChannelInstanceConfig>,
-    ) -> Result<(), String> {
+    ) -> Result<(), ManagerError> {
         let Some(record) = self.agents.get(agent_id) else {
-            return Err(format!("agent {agent_id} not found"));
+            return Err(ManagerError::AgentNotFound(agent_id.to_string()));
         };
         let runtime = record.runtime.clone();
         let Some(handle) = self.handles.get(agent_id).cloned() else {
@@ -111,7 +130,7 @@ impl LifecycleManager {
             return Ok(());
         };
         let Some(adapter) = self.adapters.get(&runtime) else {
-            return Err(format!("no adapter registered for runtime {runtime:?}"));
+            return Err(ManagerError::NoAdapter(runtime));
         };
         let values =
             serde_json::to_value(&channel_configs).unwrap_or(serde_json::Value::Array(vec![]));
@@ -119,7 +138,11 @@ impl LifecycleManager {
         adapter
             .set_config(&handle, &config)
             .await
-            .map_err(|e| format!("set_config failed: {e}"))
+            .map_err(|source| ManagerError::Adapter {
+                runtime,
+                action: "set_config",
+                source,
+            })
     }
 
     pub fn list_runtime_metadata(&self) -> Vec<RuntimeMetadata> {
@@ -132,25 +155,22 @@ impl LifecycleManager {
         entries
     }
 
-    pub async fn start_agent(&mut self, agent_id: &str) -> Result<AgentRecord, String> {
+    pub async fn start_agent(&mut self, agent_id: &str) -> Result<AgentRecord, ManagerError> {
         let Some(record) = self.agents.get_mut(agent_id) else {
-            return Err(format!("agent {agent_id} not found"));
+            return Err(ManagerError::AgentNotFound(agent_id.to_string()));
         };
 
         let Some(adapter) = self.adapters.get(&record.runtime) else {
-            return Err(format!(
-                "no adapter registered for runtime {:?}",
-                record.runtime
-            ));
+            return Err(ManagerError::NoAdapter(record.runtime.clone()));
         };
 
         if !record.state.can_transition_to(AgentState::Running)
             && record.state != AgentState::Registered
         {
-            return Err(format!(
-                "invalid state transition from {:?} to running",
-                record.state
-            ));
+            return Err(ManagerError::InvalidTransition {
+                from: record.state,
+                to: AgentState::Running,
+            });
         }
 
         let config = self
@@ -169,7 +189,11 @@ impl LifecycleManager {
         let handle = adapter
             .start(&config)
             .await
-            .map_err(|e| format!("failed to start agent: {e}"))?;
+            .map_err(|source| ManagerError::Adapter {
+                runtime: record.runtime.clone(),
+                action: "start",
+                source,
+            })?;
 
         record.state = AgentState::Running;
         record.health = HealthStatus::Unknown;
@@ -177,9 +201,9 @@ impl LifecycleManager {
         Ok(record.clone())
     }
 
-    pub async fn stop_agent(&mut self, agent_id: &str) -> Result<AgentRecord, String> {
+    pub async fn stop_agent(&mut self, agent_id: &str) -> Result<AgentRecord, ManagerError> {
         let Some(record) = self.agents.get_mut(agent_id) else {
-            return Err(format!("agent {agent_id} not found"));
+            return Err(ManagerError::AgentNotFound(agent_id.to_string()));
         };
 
         let Some(handle) = self.handles.get(agent_id) else {
@@ -190,16 +214,17 @@ impl LifecycleManager {
         };
 
         let Some(adapter) = self.adapters.get(&record.runtime) else {
-            return Err(format!(
-                "no adapter registered for runtime {:?}",
-                record.runtime
-            ));
+            return Err(ManagerError::NoAdapter(record.runtime.clone()));
         };
 
         adapter
             .stop(handle)
             .await
-            .map_err(|e| format!("failed to stop agent: {e}"))?;
+            .map_err(|source| ManagerError::Adapter {
+                runtime: record.runtime.clone(),
+                action: "stop",
+                source,
+            })?;
 
         self.handles.remove(agent_id);
         if record.state.can_transition_to(AgentState::Stopped) {
@@ -330,7 +355,7 @@ impl LifecycleManager {
         required_capabilities: &[String],
         message: String,
         target_agent_id: Option<String>,
-    ) -> Result<(AgentRecord, AgentResponse), String> {
+    ) -> Result<(AgentRecord, AgentResponse), ManagerError> {
         let selected_id = if let Some(id) = target_agent_id {
             id
         } else {
@@ -338,22 +363,25 @@ impl LifecycleManager {
         };
 
         let Some(record) = self.agents.get_mut(&selected_id) else {
-            return Err(format!("agent {selected_id} not found"));
+            return Err(ManagerError::AgentNotFound(selected_id));
         };
 
         if record.state != AgentState::Running {
-            return Err(format!("agent {} is not running", record.id));
+            return Err(ManagerError::Message(format!(
+                "agent {} is not running",
+                record.id
+            )));
         }
 
         let Some(handle) = self.handles.get(&selected_id) else {
-            return Err(format!("agent {} has no active handle", record.id));
+            return Err(ManagerError::Message(format!(
+                "agent {} has no active handle",
+                record.id
+            )));
         };
 
         let Some(adapter) = self.adapters.get(&record.runtime) else {
-            return Err(format!(
-                "no adapter registered for runtime {:?}",
-                record.runtime
-            ));
+            return Err(ManagerError::NoAdapter(record.runtime.clone()));
         };
 
         let response = adapter
@@ -365,13 +393,17 @@ impl LifecycleManager {
                 },
             )
             .await
-            .map_err(|e| format!("send failed: {e}"))?;
+            .map_err(|source| ManagerError::Adapter {
+                runtime: record.runtime.clone(),
+                action: "send",
+                source,
+            })?;
 
         record.task_count += 1;
         Ok((record.clone(), response))
     }
 
-    fn select_agent(&mut self, required_capabilities: &[String]) -> Result<String, String> {
+    fn select_agent(&mut self, required_capabilities: &[String]) -> Result<String, ManagerError> {
         let eligible: Vec<&AgentRecord> = self
             .agents
             .values()
@@ -384,7 +416,9 @@ impl LifecycleManager {
             .collect();
 
         if eligible.is_empty() {
-            return Err("no running agent matches required capabilities".to_string());
+            return Err(ManagerError::Message(
+                "no running agent matches required capabilities".to_string(),
+            ));
         }
 
         let mut ranked: Vec<&AgentRecord> = eligible;
@@ -407,13 +441,6 @@ impl LifecycleManager {
         self.round_robin_index = self.round_robin_index.wrapping_add(1);
         Ok(best_group[idx].id.clone())
     }
-}
-
-fn current_unix_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("system clock before UNIX_EPOCH")
-        .as_millis() as u64
 }
 
 fn backoff_ms(base_ms: u64, failures: u32) -> u64 {

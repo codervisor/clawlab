@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use clawden_adapters::AdapterRegistry;
 use clawden_core::{
-    AgentConfig, AgentHandle, AgentMessage, AgentResponse, ClawRuntime, HealthStatus,
+    current_unix_ms, AgentConfig, AgentHandle, AgentMessage, AgentResponse, ClawRuntime, HealthStatus,
     RuntimeMetadata,
 };
 use serde::Serialize;
@@ -347,13 +347,6 @@ impl LifecycleManager {
     }
 }
 
-fn current_unix_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("system clock before UNIX_EPOCH")
-        .as_millis() as u64
-}
-
 fn backoff_ms(base_ms: u64, failures: u32) -> u64 {
     let exponent = failures.saturating_sub(1).min(6);
     let multiplier = 1_u64 << exponent;
@@ -368,10 +361,7 @@ fn runtime_cost_tier(runtime: &ClawRuntime) -> u8 {
 }
 
 pub fn append_audit(audit: &Arc<AuditLog>, action: &str, target: &str) {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("system clock before UNIX_EPOCH")
-        .as_millis() as u64;
+    let now = current_unix_ms();
 
     audit.append(AuditEvent {
         actor: "api".to_string(),

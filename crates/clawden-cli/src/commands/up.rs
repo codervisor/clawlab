@@ -515,17 +515,8 @@ pub(crate) fn validate_direct_runtime_config(
     let provider_missing = fields.iter().any(|(s, _, _, r, _)| *s == "provider" && !r);
     let no_provider = !fields.iter().any(|(s, _, _, _, _)| *s == "provider");
     if provider_missing || no_provider {
-        let candidates: &[(&str, &str)] = &[
-            ("OPENROUTER_API_KEY", "openrouter"),
-            ("OPENAI_API_KEY", "openai"),
-            ("ANTHROPIC_API_KEY", "anthropic"),
-            ("GEMINI_API_KEY", "google"),
-            ("GOOGLE_API_KEY", "google"),
-            ("MISTRAL_API_KEY", "mistral"),
-            ("GROQ_API_KEY", "groq"),
-        ];
         let mut found_hint = false;
-        for (ev, prov) in candidates {
+        for (ev, prov) in clawden_core::provider_env_candidates() {
             if let Ok(val) = std::env::var(ev) {
                 if !val.trim().is_empty() {
                     lines.push(format!(
@@ -991,15 +982,17 @@ fn provider_key_env_names(
     let resolved = provider_type
         .cloned()
         .or_else(|| infer_provider_type(provider_name));
-    match resolved.as_ref() {
-        Some(LlmProvider::OpenAi) => vec!["OPENAI_API_KEY"],
-        Some(LlmProvider::Anthropic) => vec!["ANTHROPIC_API_KEY"],
-        Some(LlmProvider::Google) => vec!["GOOGLE_API_KEY", "GEMINI_API_KEY"],
-        Some(LlmProvider::Mistral) => vec!["MISTRAL_API_KEY"],
-        Some(LlmProvider::Groq) => vec!["GROQ_API_KEY"],
-        Some(LlmProvider::OpenRouter) => vec!["OPENROUTER_API_KEY"],
-        _ => Vec::new(),
-    }
+    let provider_id = match resolved.as_ref() {
+        Some(LlmProvider::OpenAi) => "openai",
+        Some(LlmProvider::Anthropic) => "anthropic",
+        Some(LlmProvider::Google) => "google",
+        Some(LlmProvider::Mistral) => "mistral",
+        Some(LlmProvider::Groq) => "groq",
+        Some(LlmProvider::OpenRouter) => "openrouter",
+        Some(LlmProvider::Custom(name)) => name.as_str(),
+        _ => provider_name,
+    };
+    clawden_core::provider_env_vars(provider_id).to_vec()
 }
 
 #[cfg(test)]

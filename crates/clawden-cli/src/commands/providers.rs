@@ -50,23 +50,21 @@ fn list_providers() -> Result<()> {
 fn list_detected_providers() -> Result<()> {
     eprintln!("No clawden.yaml found — showing providers detected from environment\n");
 
-    let known_providers: &[(&str, &str)] = &[
-        ("openrouter", "OPENROUTER_API_KEY"),
-        ("openai", "OPENAI_API_KEY"),
-        ("anthropic", "ANTHROPIC_API_KEY"),
-        ("google", "GEMINI_API_KEY"),
-        ("mistral", "MISTRAL_API_KEY"),
-        ("groq", "GROQ_API_KEY"),
-    ];
-
     let mut found = false;
-    for (name, env_var) in known_providers {
-        let from_env = std::env::var(env_var).ok().filter(|v| !v.trim().is_empty());
-        let from_vault = get_provider_key_from_vault(name)?.filter(|v| !v.trim().is_empty());
+    for descriptor in clawden_core::provider_descriptors() {
+        let from_env = descriptor
+            .env_vars
+            .iter()
+            .find_map(|env_var| std::env::var(env_var).ok().filter(|v| !v.trim().is_empty()));
+        let from_vault =
+            get_provider_key_from_vault(descriptor.name)?.filter(|v| !v.trim().is_empty());
 
         if from_env.is_some() || from_vault.is_some() {
             let source = if from_env.is_some() { "env" } else { "vault" };
-            println!("provider={name}\tstatus=detected\tsource={source}");
+            println!(
+                "provider={}\tstatus=detected\tsource={source}",
+                descriptor.name
+            );
             found = true;
         }
     }
@@ -130,47 +128,27 @@ async fn test_providers(only: Option<String>) -> Result<()> {
 async fn test_detected_providers(only: Option<String>) -> Result<()> {
     eprintln!("No clawden.yaml found — testing providers detected from environment\n");
 
-    let known_providers: &[(&str, &str, &str)] = &[
-        (
-            "openrouter",
-            "OPENROUTER_API_KEY",
-            "https://openrouter.ai/api/v1",
-        ),
-        ("openai", "OPENAI_API_KEY", "https://api.openai.com/v1"),
-        (
-            "anthropic",
-            "ANTHROPIC_API_KEY",
-            "https://api.anthropic.com",
-        ),
-        (
-            "google",
-            "GEMINI_API_KEY",
-            "https://generativelanguage.googleapis.com/v1beta",
-        ),
-        ("mistral", "MISTRAL_API_KEY", "https://api.mistral.ai/v1"),
-        ("groq", "GROQ_API_KEY", "https://api.groq.com/openai/v1"),
-    ];
-
     let mut any = false;
-    for (name, env_var, base_url) in known_providers {
+    for descriptor in clawden_core::provider_descriptors() {
         if let Some(target) = &only {
-            if target != name {
+            if target != descriptor.name {
                 continue;
             }
         }
-        let api_key = std::env::var(env_var)
-            .ok()
-            .filter(|v| !v.trim().is_empty())
-            .or_else(|| get_provider_key_from_vault(name).ok().flatten());
+        let api_key = descriptor
+            .env_vars
+            .iter()
+            .find_map(|env_var| std::env::var(env_var).ok().filter(|v| !v.trim().is_empty()))
+            .or_else(|| get_provider_key_from_vault(descriptor.name).ok().flatten());
 
         let Some(api_key) = api_key else {
             continue;
         };
 
         any = true;
-        match test_provider_endpoint(name, base_url, &api_key).await {
-            Ok(()) => println!("provider={name}\ttest=ok\tsource=env"),
-            Err(err) => println!("provider={name}\ttest=fail\terror={err}"),
+        match test_provider_endpoint(descriptor.name, descriptor.test_base_url, &api_key).await {
+            Ok(()) => println!("provider={}\ttest=ok\tsource=env", descriptor.name),
+            Err(err) => println!("provider={}\ttest=fail\terror={err}", descriptor.name),
         }
     }
 
@@ -262,15 +240,7 @@ fn set_provider_key(provider: &str) -> Result<()> {
 }
 
 fn provider_env_var(provider: &str) -> Option<&'static str> {
-    match provider {
-        "openai" => Some("OPENAI_API_KEY"),
-        "anthropic" => Some("ANTHROPIC_API_KEY"),
-        "google" => Some("GEMINI_API_KEY"),
-        "openrouter" => Some("OPENROUTER_API_KEY"),
-        "mistral" => Some("MISTRAL_API_KEY"),
-        "groq" => Some("GROQ_API_KEY"),
-        _ => None,
-    }
+    clawden_core::provider_primary_env_var(provider)
 }
 
 fn parse_env_file(content: &str) -> HashMap<String, String> {

@@ -1,5 +1,5 @@
 ---
-status: planned
+status: in-progress
 created: 2026-03-05
 priority: high
 tags:
@@ -12,9 +12,11 @@ tags:
 depends_on:
 - 041-runtime-descriptor-refactor
 created_at: 2026-03-05T07:50:32.160972724Z
-updated_at: 2026-03-05T07:50:32.160972724Z
+updated_at: 2026-03-05T08:19:13.764245770Z
+transitions:
+- status: in-progress
+  at: 2026-03-05T08:19:13.764245770Z
 ---
-
 # Rust Codebase Structural Refactor — Deduplication, Error Types & Adapter Generics
 
 ## Overview
@@ -190,25 +192,25 @@ fn inject_proxy_config(emitter: &mut dyn ConfigEmitter, proxy: &ProxySettings) {
 ## Plan
 
 - [ ] Phase 1: Generic `DockerAdapter<R>` and `ConfigStore` trait
-- [ ] Phase 2: Provider and channel descriptor registries in clawden-core
-- [ ] Phase 3: `ManagerError` thiserror enum for lifecycle manager
+- [x] Phase 2: Provider and channel descriptor registries in clawden-core
+- [x] Phase 3: `ManagerError` thiserror enum for lifecycle manager
 - [ ] Phase 4: Decompose exec_run, exec_up, validate_direct_runtime_config
 - [ ] Phase 5: Format-agnostic config emitter
-- [ ] Phase 6: Minor cleanups (util extraction, thread leak, dead code, redaction, dashboard)
+- [x] Phase 6: Minor cleanups (util extraction, thread leak, dead code, redaction, dashboard)
 
 ## Test
 
-- [ ] `cargo test -p clawden-core --quiet` passes
-- [ ] `cargo test -p clawden-cli --quiet` passes
-- [ ] `cargo test -p clawden-adapters --quiet` passes
-- [ ] `cargo test -p clawden-config --quiet` passes
-- [ ] `cargo test -p clawden-server --quiet` passes
-- [ ] `cargo clippy` clean across workspace
-- [ ] `cargo build --no-default-features --quiet` succeeds (feature-gated compilation)
+- [x] `cargo test -p clawden-core --quiet` passes
+- [x] `cargo test -p clawden-cli --quiet` passes
+- [x] `cargo test -p clawden-adapters --quiet` passes
+- [x] `cargo test -p clawden-config --quiet` passes
+- [x] `cargo test -p clawden-server --quiet` passes
+- [x] `cargo clippy` clean across workspace
+- [x] `cargo build --no-default-features --quiet` succeeds (feature-gated compilation)
 - [ ] Adding a new adapter requires only a `RuntimeMeta` impl (~20 lines), not a 127-line file
 - [ ] Adding a new provider requires 1 entry in `PROVIDERS` array, 0 match edits
 - [ ] Adding a new channel requires 1 entry in `CHANNELS` array, 0 match edits
-- [ ] No behavioral regression in `clawden run`, `clawden up`, `clawden init` commands
+- [x] No behavioral regression in `clawden run`, `clawden up`, `clawden init` commands
 
 ## Notes
 
@@ -218,3 +220,7 @@ fn inject_proxy_config(emitter: &mut dyn ConfigEmitter, proxy: &ProxySettings) {
 - `SecretVault` XOR "encryption" is a known issue but out of scope — needs its own security-focused spec.
 - The `ClawAdapter` trait monolith (11 methods) could be split into `Lifecycle + Health + Messaging + Config` sub-traits, but that's a larger API break better handled as a follow-up.
 - Docker entrypoint.sh and Dockerfile match/case statements are shell scripts and out of scope.
+
+- 2026-03-05: Implemented `ManagerError` in `clawden-core` lifecycle manager and switched server API error mapping to preserve typed manager errors while returning stable HTTP error strings.
+- 2026-03-05: Implemented Phase 6 cleanups: extracted `current_unix_ms()` into `clawden-core::util`, wired core/server call sites, added `LogStream` cancellation to stop background log threads on drop, and made `dashboard` URL launching cross-platform via the `open` crate.
+- 2026-03-05 verification: `cargo test -p clawden-core --quiet && cargo test -p clawden-cli --quiet && cargo test -p clawden-server --quiet && cargo test -p clawden-config --quiet && cargo test -p clawden-adapters --quiet`, `cargo clippy --workspace --quiet`, and `cargo build --workspace --no-default-features --quiet` all passed.

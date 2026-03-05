@@ -5,6 +5,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -55,6 +56,7 @@ pub struct LogLine {
 
 pub struct LogStream {
     inner: Arc<Mutex<LogStreamInner>>,
+    running: Arc<AtomicBool>,
 }
 
 struct LogStreamInner {
@@ -89,6 +91,12 @@ impl LogStream {
         }
 
         out
+    }
+}
+
+impl Drop for LogStream {
+    fn drop(&mut self) {
+        self.running.store(false, Ordering::Relaxed);
     }
 }
 
@@ -372,8 +380,10 @@ impl ProcessManager {
             queue: VecDeque::with_capacity(LOG_STREAM_CAPACITY),
             dropped: HashMap::new(),
         }));
+        let running = Arc::new(AtomicBool::new(true));
 
         let stream_inner = Arc::clone(&inner);
+        let stream_running = Arc::clone(&running);
         thread::spawn(move || {
             let mut offsets: HashMap<String, usize> = watched
                 .iter()
@@ -384,7 +394,7 @@ impl ProcessManager {
                     (runtime.clone(), offset)
                 })
                 .collect();
-            loop {
+            while stream_running.load(Ordering::Relaxed) {
                 let mut any_sent = false;
                 for (runtime, log_path) in &watched {
                     let Ok(content) = fs::read_to_string(log_path) else {
@@ -429,7 +439,7 @@ impl ProcessManager {
             }
         });
 
-        Ok(LogStream { inner })
+        Ok(LogStream { inner, running })
     }
 
     fn finish_start(

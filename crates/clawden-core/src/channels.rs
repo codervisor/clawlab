@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::{
-    AgentState, ChannelBinding, ChannelBindingStatus, ChannelConnectionStatus,
+    current_unix_ms, AgentState, ChannelBinding, ChannelBindingStatus, ChannelConnectionStatus,
     ChannelInstanceConfig, ChannelType,
 };
 
@@ -470,13 +470,6 @@ fn hash_token(token: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(token.as_bytes());
     format!("{:x}", hasher.finalize())
-}
-
-fn current_unix_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("system clock before UNIX_EPOCH")
-        .as_millis() as u64
 }
 
 fn list_option_strings(options: &HashMap<String, serde_json::Value>, key: &str) -> Vec<String> {

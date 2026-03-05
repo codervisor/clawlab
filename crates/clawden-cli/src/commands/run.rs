@@ -590,10 +590,7 @@ fn read_system_prompt(value: &str) -> Result<String> {
 }
 
 fn channel_token_env_name(channel: &str) -> String {
-    format!(
-        "{}_BOT_TOKEN",
-        channel.to_ascii_uppercase().replace('-', "_")
-    )
+    clawden_core::channel_token_env_name(channel)
 }
 
 fn provider_env_key_aliases(provider: &clawden_config::LlmProvider) -> &'static [&'static str] {
@@ -623,41 +620,15 @@ fn empty_clawden_yaml(runtime: &str) -> ClawDenYaml {
     }
 }
 
-/// Well-known provider env vars in priority order for auto-detection.
-const PROVIDER_ENV_CANDIDATES: &[(&str, &str)] = &[
-    ("OPENROUTER_API_KEY", "openrouter"),
-    ("OPENAI_API_KEY", "openai"),
-    ("ANTHROPIC_API_KEY", "anthropic"),
-    ("GEMINI_API_KEY", "google"),
-    ("GOOGLE_API_KEY", "google"),
-    ("MISTRAL_API_KEY", "mistral"),
-    ("GROQ_API_KEY", "groq"),
-];
-
-/// Well-known channel token env vars for auto-detection.
-const CHANNEL_ENV_VARS: &[&str] = &[
-    "TELEGRAM_BOT_TOKEN",
-    "DISCORD_BOT_TOKEN",
-    "SLACK_BOT_TOKEN",
-    "SLACK_APP_TOKEN",
-];
-
 /// Infer provider from host environment variables. Returns (provider_name, env_var_name).
 fn infer_provider_from_host_env() -> Option<(&'static str, &'static str)> {
-    for (env_var, provider) in PROVIDER_ENV_CANDIDATES {
-        if let Ok(val) = std::env::var(env_var) {
-            if !val.trim().is_empty() {
-                return Some((provider, env_var));
-            }
-        }
-    }
-    None
+    clawden_core::infer_provider_from_host_env()
 }
 
 /// Inject detected host-env channel tokens into env_vars at lowest precedence.
 /// Only injects if the env var is not already present.
 fn inject_host_env_channel_tokens(env_vars: &mut Vec<(String, String)>) {
-    for var_name in CHANNEL_ENV_VARS {
+    for var_name in clawden_core::known_channel_env_vars() {
         if !env_vars.iter().any(|(k, _)| k == *var_name) {
             if let Ok(val) = std::env::var(var_name) {
                 if !val.trim().is_empty() {
@@ -935,13 +906,14 @@ providers:
         use crate::commands::test_env_lock;
 
         let _guard = test_env_lock().lock().expect("env lock");
-        let originals: Vec<_> = super::PROVIDER_ENV_CANDIDATES
+        let candidates = clawden_core::provider_env_candidates();
+        let originals: Vec<_> = candidates
             .iter()
             .map(|(k, _)| (*k, std::env::var(k).ok()))
             .collect();
 
         // Clear all
-        for (k, _) in super::PROVIDER_ENV_CANDIDATES {
+        for (k, _) in &candidates {
             std::env::remove_var(k);
         }
 

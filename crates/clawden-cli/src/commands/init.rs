@@ -483,12 +483,7 @@ fn render_wizard_yaml(selection: &WizardSelection) -> String {
             yaml.push_str("  {}\n");
         } else {
             for ch in &selection.channels {
-                let env_name = match ch.as_str() {
-                    "telegram" => "TELEGRAM_BOT_TOKEN",
-                    "discord" => "DISCORD_BOT_TOKEN",
-                    "slack" => "SLACK_BOT_TOKEN",
-                    _ => "CHANNEL_TOKEN",
-                };
+                let env_name = clawden_core::channel_token_env_name(ch);
                 yaml.push_str(&format!(
                     "  {ch}:\n    type: {ch}\n    token: ${env_name}\n"
                 ));
@@ -528,12 +523,7 @@ fn render_wizard_yaml(selection: &WizardSelection) -> String {
         } else {
             yaml.push_str("channels:\n");
             for ch in &selection.channels {
-                let env_name = match ch.as_str() {
-                    "telegram" => "TELEGRAM_BOT_TOKEN",
-                    "discord" => "DISCORD_BOT_TOKEN",
-                    "slack" => "SLACK_BOT_TOKEN",
-                    _ => "CHANNEL_TOKEN",
-                };
+                let env_name = clawden_core::channel_token_env_name(ch);
                 yaml.push_str(&format!(
                     "  {ch}:\n    type: {ch}\n    token: ${env_name}\n"
                 ));
@@ -674,25 +664,19 @@ fn provider_type_for_name(name: &str) -> &str {
 }
 
 fn env_var_for_provider(provider: &str) -> Option<&'static str> {
-    match provider {
-        "openai" => Some("OPENAI_API_KEY"),
-        "anthropic" => Some("ANTHROPIC_API_KEY"),
-        "google" => Some("GEMINI_API_KEY"),
-        "openrouter" => Some("OPENROUTER_API_KEY"),
-        _ => None,
-    }
+    clawden_core::provider_primary_env_var(provider)
 }
 
 /// Detect channel tokens already set in the environment.
 fn detect_channel_envs() -> Vec<String> {
     let mut channels = Vec::new();
-    if std::env::var("TELEGRAM_BOT_TOKEN").is_ok() {
+    if std::env::var(clawden_core::channel_token_env_name("telegram")).is_ok() {
         channels.push("telegram".to_string());
     }
-    if std::env::var("DISCORD_BOT_TOKEN").is_ok() {
+    if std::env::var(clawden_core::channel_token_env_name("discord")).is_ok() {
         channels.push("discord".to_string());
     }
-    if std::env::var("SLACK_BOT_TOKEN").is_ok() {
+    if std::env::var(clawden_core::channel_token_env_name("slack")).is_ok() {
         channels.push("slack".to_string());
     }
     channels

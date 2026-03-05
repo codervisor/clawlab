@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use clawden_core::{
-    AgentState, ChannelBinding, ChannelBindingStatus, ChannelConnectionStatus,
+    current_unix_ms, AgentState, ChannelBinding, ChannelBindingStatus, ChannelConnectionStatus,
     ChannelInstanceConfig, ChannelType,
 };
 use serde::{Deserialize, Serialize};
@@ -397,11 +397,4 @@ fn hash_token(token: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(token.as_bytes());
     format!("{:x}", hasher.finalize())
-}
-
-fn current_unix_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("system clock before UNIX_EPOCH")
-        .as_millis() as u64
 }

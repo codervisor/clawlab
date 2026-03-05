@@ -1,12 +1,15 @@
 mod audit;
+mod channel_registry;
 mod channels;
 mod discovery;
 mod install;
 mod lifecycle;
 mod manager;
 mod process;
+mod provider_registry;
 mod runtime_descriptor;
 mod swarm;
+mod util;
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -14,6 +17,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 pub use audit::{append_audit, AuditEvent, AuditLog};
+pub use channel_registry::{
+    channel_descriptor, channel_descriptors, channel_token_env_name, known_channel_env_vars,
+    ChannelDescriptor, CHANNELS,
+};
 pub use channels::{
     BindChannelRequest, BindingConflict, ChannelConfigRequest, ChannelCredentialCheck,
     ChannelHealthEntry, ChannelStore, ChannelTypeSummary, MatrixRow,
@@ -24,16 +31,22 @@ pub use install::{
     version_satisfies, InstallOutcome, InstalledRuntime, RuntimeInstaller, VersionCheck,
 };
 pub use lifecycle::AgentState;
-pub use manager::{AgentRecord, LifecycleManager};
+pub use manager::{AgentRecord, LifecycleManager, ManagerError};
 pub use process::{
     ExecutionMode, LogLine, LogStream, ProcessInfo, ProcessManager, RuntimeProcessStatus,
     StopOutcome,
+};
+pub use provider_registry::{
+    infer_provider_from_host_env, known_provider_env_vars, provider_descriptor,
+    provider_descriptors, provider_env_candidates, provider_env_vars, provider_primary_env_var,
+    ProviderDescriptor, PROVIDERS,
 };
 pub use runtime_descriptor::{
     direct_install_descriptors, runtime_descriptor, runtime_descriptor_for, runtime_descriptors,
     ConfigDirFlag, ConfigFormat, InstallSource, RuntimeDescriptor, VersionSource,
 };
 pub use swarm::{SwarmCoordinator, SwarmMember, SwarmRole};
+pub use util::current_unix_ms;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]

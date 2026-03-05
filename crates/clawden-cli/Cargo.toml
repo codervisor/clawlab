@@ -13,6 +13,7 @@ clawden-core = {path = "../clawden-core"}
 dialoguer.workspace = true
 dotenvy.workspace = true
 indicatif.workspace = true
+open.workspace = true
 reqwest.workspace = true
 rpassword = "7.3"
 serde_json.workspace = true
