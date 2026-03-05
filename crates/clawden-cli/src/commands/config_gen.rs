@@ -291,8 +291,63 @@ pub(crate) fn generate_toml_config(
         }
     }
 
+    // Auto-enable HTTP proxy in the runtime config when the host environment
+    // has proxy env vars set.  Without this, runtimes like zeroclaw whose
+    // template config defaults to `[proxy] enabled = false` will ignore the
+    // inherited proxy environment and fail to reach external APIs.
+    inject_proxy_config(&mut root);
+
     merge_json_into_toml(&mut root, runtime_config_overrides(config, runtime));
     root
+}
+
+/// Detect HTTP proxy environment variables from the host and populate the
+/// `[proxy]` section in the runtime config accordingly.
+fn inject_proxy_config(root: &mut toml::Table) {
+    let https_proxy = std::env::var("https_proxy")
+        .or_else(|_| std::env::var("HTTPS_PROXY"))
+        .ok()
+        .filter(|v| !v.trim().is_empty());
+    let http_proxy = std::env::var("http_proxy")
+        .or_else(|_| std::env::var("HTTP_PROXY"))
+        .ok()
+        .filter(|v| !v.trim().is_empty());
+    let no_proxy = std::env::var("no_proxy")
+        .or_else(|_| std::env::var("NO_PROXY"))
+        .ok()
+        .filter(|v| !v.trim().is_empty());
+
+    if https_proxy.is_none() && http_proxy.is_none() {
+        return;
+    }
+
+    let proxy = root
+        .entry("proxy".to_string())
+        .or_insert_with(|| TomlValue::Table(toml::Table::new()));
+    if let TomlValue::Table(t) = proxy {
+        t.insert("enabled".to_string(), TomlValue::Boolean(true));
+        // Use "environment" scope so ALL HTTP clients in the runtime
+        // process (LLM provider, channel polling, etc.) route through the
+        // proxy — not just the main zeroclaw client.
+        t.insert(
+            "scope".to_string(),
+            TomlValue::String("environment".to_string()),
+        );
+
+        if let Some(url) = &https_proxy {
+            t.insert("https_proxy".to_string(), TomlValue::String(url.clone()));
+        }
+        if let Some(url) = &http_proxy {
+            t.insert("http_proxy".to_string(), TomlValue::String(url.clone()));
+        }
+        if let Some(hosts) = &no_proxy {
+            let list: Vec<TomlValue> = hosts
+                .split(',')
+                .map(|s| TomlValue::String(s.trim().to_string()))
+                .collect();
+            t.insert("no_proxy".to_string(), TomlValue::Array(list));
+        }
+    }
 }
 
 pub(crate) fn generate_picoclaw_config(
