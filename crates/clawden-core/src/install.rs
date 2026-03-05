@@ -930,7 +930,7 @@ fn is_native_7z_archive(archive: &Path) -> Result<bool> {
                     stack.push(path);
                 } else if let Ok(meta) = fs::metadata(&path) {
                     let size = meta.len();
-                    if largest.as_ref().map_or(true, |(_, s)| size > *s) {
+                    if largest.as_ref().is_none_or(|(_, s)| size > *s) {
                         largest = Some((path, size));
                     }
                 }
