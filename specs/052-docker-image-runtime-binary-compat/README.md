@@ -1,5 +1,5 @@
 ---
-status: planned
+status: in-progress
 created: 2026-03-06
 priority: high
 tags:
@@ -11,9 +11,11 @@ tags:
 - ci
 parent: 017-docker-runtime-images
 created_at: 2026-03-06T05:28:14.483453041Z
-updated_at: 2026-03-06T05:28:14.483453041Z
+updated_at: 2026-03-06T05:41:03.487538427Z
+transitions:
+- status: in-progress
+  at: 2026-03-06T05:41:03.487538427Z
 ---
-
 # Docker Image Runtime Binary Compatibility — GLIBC Mismatch, Architecture Errors & Stale Image
 
 ## Overview
@@ -78,11 +80,11 @@ The published `latest` image does not include the `openfang` case in the entrypo
 
 ## Plan
 
-- [ ] Switch ZeroClaw bundling to musl-static binary (or upgrade base image glibc)
-- [ ] Ensure PicoClaw binary matches target architecture (`TARGETARCH`-aware download)
-- [ ] Add Dockerfile `RUN` smoke test that execs each bundled runtime binary with `--version` or `--help`
+- [x] Switch ZeroClaw bundling to musl-static binary (or upgrade base image glibc)
+- [x] Ensure PicoClaw binary matches target architecture (`TARGETARCH`-aware download)
+- [x] Add Dockerfile `RUN` smoke test that execs each bundled runtime binary with `--version` or `--help`
 - [ ] Rebuild and publish `ghcr.io/codervisor/clawden-runtime:latest` from current repo (picks up openfang entrypoint support)
-- [ ] Add CI gate: image build must pass smoke test before push to GHCR
+- [x] Add CI gate: image build must pass smoke test before push to GHCR
 
 ## Test
 
@@ -91,3 +93,9 @@ The published `latest` image does not include the `openfang` case in the entrypo
 - [ ] `docker run -e RUNTIME=openfang ghcr.io/codervisor/clawden-runtime:latest` recognized as valid runtime
 - [ ] Image build fails if any bundled runtime binary cannot execute `--version` or `--help`
 - [ ] Multi-arch build (amd64 + arm64) produces correct binaries for each platform
+
+## Notes
+
+- 2026-03-06: Installer now prefers Linux musl assets before glibc, probes downloaded GitHub-release binaries by executing `--version`/`--help`, and rejects ambiguous `.7z` archives unless the extracted runtime is runnable on the current platform.
+- 2026-03-06: `docker/Dockerfile` now pins `picoclaw@${PICOCLAW_VERSION}` and smoke-tests every bundled runtime during the image build, so the existing multi-arch GitHub Actions build fails before push if any runtime cannot execute.
+- Remaining operational work: rebuild/publish `ghcr.io/codervisor/clawden-runtime:latest` and run the container-level verification commands from the Test section.

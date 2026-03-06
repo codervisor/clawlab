@@ -301,13 +301,12 @@ impl RuntimeInstaller {
                     &only.name,
                     &only.url,
                 )?;
-                if !is_native_7z_archive(&probe)? {
-                    bail!(
-                        "{slug} release asset '{}' does not contain a native {os} binary. \
-                         {slug} may not publish binaries for this platform.",
-                        only.name,
-                    );
-                }
+                probe_runtime_archive(slug, &probe).with_context(|| {
+                    format!(
+                        "{slug} release asset '{}' is not runnable on {os}-{arch}",
+                        only.name
+                    )
+                })?;
                 only
             } else {
                 bail!(
@@ -357,6 +356,7 @@ impl RuntimeInstaller {
         let target = tmp_dir.join(slug);
         fs::rename(candidate, &target)?;
         make_executable(&target)?;
+        validate_runtime_binary_exec(slug, &target)?;
         Ok(target)
     }
 
@@ -678,15 +678,18 @@ fn pick_asset<'a>(
     patterns: &[&str],
     ext: &str,
 ) -> Option<&'a GithubAsset> {
-    assets.iter().find(|asset| {
-        asset.name.ends_with(ext)
-            && patterns.iter().any(|pattern| {
-                asset
+    for pattern in patterns {
+        if let Some(asset) = assets.iter().find(|asset| {
+            asset.name.ends_with(ext)
+                && asset
                     .name
                     .to_ascii_lowercase()
                     .contains(&pattern.to_ascii_lowercase())
-            })
-    })
+        }) {
+            return Some(asset);
+        }
+    }
+    None
 }
 
 fn validate_runtime_artifact(runtime: &str, executable: &Path) -> Result<()> {
@@ -696,6 +699,69 @@ fn validate_runtime_artifact(runtime: &str, executable: &Path) -> Result<()> {
         return Err(anyhow!("runtime artifact is empty for {runtime}"));
     }
     Ok(())
+}
+
+fn validate_runtime_binary_exec(runtime: &str, executable: &Path) -> Result<()> {
+    let mut failures = Vec::new();
+    for args in runtime_probe_candidates(runtime) {
+        let output = Command::new(executable)
+            .args(*args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .with_context(|| {
+                format!(
+                    "failed to start {runtime} probe with args `{}`",
+                    args.join(" ")
+                )
+            })?;
+
+        if output.status.success() {
+            return Ok(());
+        }
+
+        let mut detail = String::new();
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        if !stdout.is_empty() {
+            detail.push_str("stdout: ");
+            detail.push_str(&stdout);
+        }
+        if !stderr.is_empty() {
+            if !detail.is_empty() {
+                detail.push_str(" | ");
+            }
+            detail.push_str("stderr: ");
+            detail.push_str(&stderr);
+        }
+        if detail.is_empty() {
+            detail.push_str("no output captured");
+        }
+
+        failures.push(format!(
+            "`{}` exited with {} ({detail})",
+            args.join(" "),
+            output
+                .status
+                .code()
+                .map(|code| code.to_string())
+                .unwrap_or_else(|| "signal".to_string())
+        ));
+    }
+
+    Err(anyhow!(
+        "runtime artifact probe failed for {runtime}: {}",
+        failures.join("; ")
+    ))
+}
+
+fn runtime_probe_candidates(runtime: &str) -> &'static [&'static [&'static str]] {
+    match runtime {
+        "zeroclaw" => &[&["--version"], &["version"], &["--help"]],
+        "picoclaw" => &[&["--version"], &["version"], &["--help"], &["help"]],
+        "openfang" => &[&["--version"], &["version"], &["--help"]],
+        _ => &[&["--version"], &["--help"]],
+    }
 }
 
 fn ensure_runtime_supported(runtime: &str) -> Result<&'static crate::RuntimeDescriptor> {
@@ -789,16 +855,27 @@ fn host_os_arch() -> Result<(&'static str, &'static str)> {
 fn platform_asset_patterns(os: &str, arch: &str) -> Vec<&'static str> {
     match (os, arch) {
         ("linux", "x86_64") => vec![
+            "x86_64-unknown-linux-musl",
+            "linux-musl-x86_64",
+            "linux_x86_64_musl",
+            "linux-x64-musl",
+            "linux_amd64_musl",
             "x86_64-unknown-linux-gnu",
             "linux-x86_64",
             "linux_x64",
             "linux_amd64",
+            "x64",
         ],
         ("linux", "aarch64") => vec![
+            "aarch64-unknown-linux-musl",
+            "linux-musl-aarch64",
+            "linux_arm64_musl",
+            "linux-arm64-musl",
             "aarch64-unknown-linux-gnu",
             "linux-aarch64",
             "linux-arm64",
             "linux_arm64",
+            "arm64",
         ],
         ("darwin", "x86_64") => vec![
             "x86_64-apple-darwin",
@@ -817,60 +894,23 @@ fn platform_asset_patterns(os: &str, arch: &str) -> Vec<&'static str> {
     }
 }
 
-/// Extract a 7z archive to a temporary directory, find the largest file,
-/// and check whether its magic bytes indicate a native binary for the
-/// current host OS (ELF on Linux, Mach-O on macOS) rather than a Windows PE.
-fn is_native_7z_archive(archive: &Path) -> Result<bool> {
+/// Extract an archive to a temporary directory and verify that it contains a
+/// runnable runtime binary for the current host platform.
+fn probe_runtime_archive(runtime: &str, archive: &Path) -> Result<()> {
     let probe_dir = archive.with_extension("probe");
     if probe_dir.exists() {
         fs::remove_dir_all(&probe_dir)?;
     }
     fs::create_dir_all(&probe_dir)?;
-    let result = (|| -> Result<bool> {
+    let result = (|| -> Result<()> {
         sevenz_rust::decompress_file(archive, &probe_dir)
             .with_context(|| format!("failed to probe 7z archive: {}", archive.display()))?;
 
-        // Find the largest file — most likely the runtime binary.
-        let mut largest: Option<(PathBuf, u64)> = None;
-        let mut stack = vec![probe_dir.clone()];
-        while let Some(dir) = stack.pop() {
-            for entry in fs::read_dir(&dir)? {
-                let entry = entry?;
-                let path = entry.path();
-                if path.is_dir() {
-                    stack.push(path);
-                } else if let Ok(meta) = fs::metadata(&path) {
-                    let size = meta.len();
-                    if largest.as_ref().is_none_or(|(_, s)| size > *s) {
-                        largest = Some((path, size));
-                    }
-                }
-            }
-        }
-
-        let Some((binary_path, _)) = largest else {
-            return Ok(false);
+        let Some(candidate) = find_executable_by_name(&probe_dir, runtime)? else {
+            bail!("archive is missing expected runtime binary");
         };
-
-        // Read the first 4 bytes to check the magic number.
-        let magic = fs::read(&binary_path)
-            .map(|data| data.into_iter().take(4).collect::<Vec<_>>())
-            .unwrap_or_default();
-
-        let is_native = match std::env::consts::OS {
-            "linux" => magic.starts_with(&[0x7f, b'E', b'L', b'F']), // ELF
-            "macos" => {
-                // Mach-O: MH_MAGIC / MH_MAGIC_64 / FAT_MAGIC
-                magic.starts_with(&[0xfe, 0xed, 0xfa, 0xce])
-                    || magic.starts_with(&[0xfe, 0xed, 0xfa, 0xcf])
-                    || magic.starts_with(&[0xcf, 0xfa, 0xed, 0xfe])
-                    || magic.starts_with(&[0xce, 0xfa, 0xed, 0xfe])
-                    || magic.starts_with(&[0xca, 0xfe, 0xba, 0xbe])
-            }
-            _ => false,
-        };
-
-        Ok(is_native)
+        make_executable(&candidate)?;
+        validate_runtime_binary_exec(runtime, &candidate)
     })();
     let _ = fs::remove_dir_all(&probe_dir);
     result
@@ -1104,7 +1144,28 @@ fn walkdir(root: &Path) -> Vec<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::{runtime_subcommand_hints, runtime_supports_config_dir, version_satisfies};
+    use super::{
+        pick_asset, platform_asset_patterns, runtime_subcommand_hints, runtime_supports_config_dir,
+        validate_runtime_binary_exec, version_satisfies, GithubAsset,
+    };
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be after unix epoch")
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("clawden-install-{name}-{stamp}"));
+        fs::create_dir_all(&path).expect("temp dir should exist");
+        path
+    }
+
+    fn write_executable(path: &std::path::Path, content: &str) {
+        fs::write(path, content).expect("script should be written");
+        super::make_executable(path).expect("script should be executable");
+    }
 
     #[test]
     fn version_constraints_support_exact_wildcard_range_and_latest() {
@@ -1128,5 +1189,60 @@ mod tests {
     fn runtime_subcommand_hints_include_zeroclaw_repl() {
         let hints = runtime_subcommand_hints("zeroclaw");
         assert!(hints.iter().any(|(name, _)| *name == "repl"));
+    }
+
+    #[test]
+    fn linux_asset_patterns_prefer_musl_before_gnu() {
+        let patterns = platform_asset_patterns("linux", "x86_64");
+        let musl = patterns
+            .iter()
+            .position(|pattern| *pattern == "x86_64-unknown-linux-musl")
+            .expect("musl pattern should exist");
+        let gnu = patterns
+            .iter()
+            .position(|pattern| *pattern == "x86_64-unknown-linux-gnu")
+            .expect("gnu pattern should exist");
+        assert!(musl < gnu);
+    }
+
+    #[test]
+    fn pick_asset_respects_pattern_priority() {
+        let assets = vec![
+            GithubAsset {
+                name: "zeroclaw-x86_64-unknown-linux-gnu.tar.gz".to_string(),
+                url: "https://example.invalid/gnu".to_string(),
+            },
+            GithubAsset {
+                name: "zeroclaw-x86_64-unknown-linux-musl.tar.gz".to_string(),
+                url: "https://example.invalid/musl".to_string(),
+            },
+        ];
+        let patterns = platform_asset_patterns("linux", "x86_64");
+        let picked = pick_asset(&assets, &patterns, ".tar.gz").expect("asset should match");
+        assert_eq!(picked.name, "zeroclaw-x86_64-unknown-linux-musl.tar.gz");
+    }
+
+    #[test]
+    fn runtime_binary_probe_accepts_help_fallback() {
+        let dir = temp_dir("probe-help");
+        let executable = dir.join("picoclaw");
+        write_executable(
+            &executable,
+            r#"#!/usr/bin/env sh
+if [ "$1" = "--version" ]; then
+  echo "unknown flag" >&2
+  exit 1
+fi
+if [ "$1" = "--help" ]; then
+  echo "usage: picoclaw"
+  exit 0
+fi
+exit 1
+"#,
+        );
+
+        validate_runtime_binary_exec("picoclaw", &executable)
+            .expect("help probe should validate runtime");
+        let _ = fs::remove_dir_all(dir);
     }
 }
