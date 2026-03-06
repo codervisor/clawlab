@@ -1,8 +1,11 @@
 # ClawDen Docker Compose
 #
 # Quick start:
-#   cp .env.example .env        # add your API key(s)
+#   cp .env.example .env        # add provider keys and optional channel tokens
 #   docker compose up openclaw  # or: docker compose up zeroclaw
+#
+# CLI-managed mode (config translation, channel tokens, allowed-users):
+#   CLAWDEN_USE_CLI=1 docker compose up zeroclaw
 #
 # Build from source (instead of pulling from registry):
 #   docker compose build openclaw
@@ -24,6 +27,16 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
       - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
+      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-}
+      - SLACK_APP_TOKEN=${SLACK_APP_TOKEN:-}
+      - FEISHU_APP_ID=${FEISHU_APP_ID:-}
+      - FEISHU_APP_SECRET=${FEISHU_APP_SECRET:-}
+      - CLAWDEN_USE_CLI=${CLAWDEN_USE_CLI:-0}
+      - CLAWDEN_CHANNELS=${CLAWDEN_CHANNELS:-}
+      - CLAWDEN_ALLOWED_USERS=${CLAWDEN_ALLOWED_USERS:-}
+      - CLAWDEN_LLM_API_KEY=${CLAWDEN_LLM_API_KEY:-}
     volumes:
       - workspace:/home/clawden/workspace
     restart: unless-stopped
@@ -43,6 +56,16 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
       - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
+      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-}
+      - SLACK_APP_TOKEN=${SLACK_APP_TOKEN:-}
+      - FEISHU_APP_ID=${FEISHU_APP_ID:-}
+      - FEISHU_APP_SECRET=${FEISHU_APP_SECRET:-}
+      - CLAWDEN_USE_CLI=${CLAWDEN_USE_CLI:-0}
+      - CLAWDEN_CHANNELS=${CLAWDEN_CHANNELS:-}
+      - CLAWDEN_ALLOWED_USERS=${CLAWDEN_ALLOWED_USERS:-}
+      - CLAWDEN_LLM_API_KEY=${CLAWDEN_LLM_API_KEY:-}
     volumes:
       - workspace:/home/clawden/workspace
     restart: unless-stopped

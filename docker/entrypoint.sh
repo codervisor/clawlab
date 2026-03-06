@@ -4,9 +4,17 @@
 # The RUNTIME env var is pre-set by the Docker image (openclaw or zeroclaw).
 # Users just need to pass LLM provider API keys via environment variables.
 #
+# Two launch modes:
+#   CLAWDEN_USE_CLI=1  — start via `clawden run` (config translation, channel
+#                        token mapping, allowed-users, pre-start validation)
+#   CLAWDEN_USE_CLI=0  — (default) launch the runtime binary directly
+#
 # Usage:
 #   docker run -e OPENAI_API_KEY=sk-... ghcr.io/codervisor/openclaw:latest
 #   docker run -e ANTHROPIC_API_KEY=sk-... ghcr.io/codervisor/zeroclaw:latest
+#   docker run -e CLAWDEN_USE_CLI=1 -e TELEGRAM_BOT_TOKEN=... \
+#     -e CLAWDEN_CHANNELS=telegram -e CLAWDEN_ALLOWED_USERS=123 \
+#     ghcr.io/codervisor/zeroclaw:latest
 #   docker run ghcr.io/codervisor/openclaw:latest gateway --help
 
 set -euo pipefail
@@ -14,6 +22,7 @@ set -euo pipefail
 trap 'echo "[clawden] Interrupted"; exit 130' INT TERM
 
 RUNTIME="${RUNTIME:-}"
+CLAWDEN_USE_CLI="${CLAWDEN_USE_CLI:-0}"
 CLAWDEN_RUNTIMES="${HOME}/.clawden/runtimes"
 
 # --- Help ---
@@ -26,6 +35,12 @@ Usage:
     docker run -e ANTHROPIC_API_KEY=sk-... ghcr.io/codervisor/zeroclaw:latest
     docker run ghcr.io/codervisor/openclaw:latest [runtime-args...]
 
+CLI-managed mode (config translation, channel tokens, allowed-users):
+    docker run -e CLAWDEN_USE_CLI=1 \
+      -e TELEGRAM_BOT_TOKEN=... -e CLAWDEN_CHANNELS=telegram \
+      -e CLAWDEN_ALLOWED_USERS=123456789 \
+      ghcr.io/codervisor/zeroclaw:latest
+
 Environment variables:
   OPENAI_API_KEY          OpenAI API key
   ANTHROPIC_API_KEY       Anthropic API key
@@ -33,6 +48,18 @@ Environment variables:
   GEMINI_API_KEY          Google Gemini API key
   MISTRAL_API_KEY         Mistral API key
   GROQ_API_KEY            Groq API key
+
+  TELEGRAM_BOT_TOKEN      Telegram bot token
+  DISCORD_BOT_TOKEN       Discord bot token
+  SLACK_BOT_TOKEN         Slack bot token
+  SLACK_APP_TOKEN         Slack app-level token
+  FEISHU_APP_ID           Feishu app ID
+  FEISHU_APP_SECRET       Feishu app secret
+
+  CLAWDEN_USE_CLI         Set to 1 to launch via `clawden run` (default: 0)
+  CLAWDEN_CHANNELS        Comma-separated channels (e.g. telegram,discord)
+  CLAWDEN_ALLOWED_USERS   Comma-separated user allowlist (e.g. Telegram IDs)
+  CLAWDEN_LLM_API_KEY     LLM API key override (provider-agnostic)
 
 The container auto-detects which runtime to start from the image metadata.
 Common system tools (git, curl, jq, python3, yq) are pre-installed.
@@ -59,6 +86,51 @@ if [ -z "$RUNTIME" ]; then
     fi
 fi
 export RUNTIME
+
+# ============================================================
+# CLI-managed mode: delegate to `clawden run` for full config
+# translation, channel token mapping, and pre-start validation.
+# ============================================================
+if [ "$CLAWDEN_USE_CLI" = "1" ]; then
+    if ! command -v clawden >/dev/null 2>&1; then
+        echo "[clawden] Error: clawden CLI not found in PATH" >&2
+        exit 1
+    fi
+
+    CLI_ARGS=()
+
+    # Channels
+    IFS=',' read -ra _channels <<< "${CLAWDEN_CHANNELS:-}"
+    for ch in "${_channels[@]}"; do
+        ch="$(echo "$ch" | xargs)"  # trim whitespace
+        [ -n "$ch" ] && CLI_ARGS+=(--channel "$ch")
+    done
+
+    # Channel token shortcuts
+    [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && CLI_ARGS+=(--token "$TELEGRAM_BOT_TOKEN")
+    [ -n "${SLACK_APP_TOKEN:-}" ]    && CLI_ARGS+=(--app-token "$SLACK_APP_TOKEN")
+
+    # Allowed users
+    [ -n "${CLAWDEN_ALLOWED_USERS:-}" ] && CLI_ARGS+=(--allowed-users "$CLAWDEN_ALLOWED_USERS")
+
+    # Provider / model / api-key overrides
+    [ -n "${CLAWDEN_LLM_PROVIDER:-}" ] && CLI_ARGS+=(--provider "$CLAWDEN_LLM_PROVIDER")
+    [ -n "${CLAWDEN_LLM_MODEL:-}" ]    && CLI_ARGS+=(--model "$CLAWDEN_LLM_MODEL")
+    [ -n "${CLAWDEN_LLM_API_KEY:-}" ]  && CLI_ARGS+=(--api-key "$CLAWDEN_LLM_API_KEY")
+
+    # System prompt
+    [ -n "${CLAWDEN_SYSTEM_PROMPT:-}" ] && CLI_ARGS+=(--system-prompt "$CLAWDEN_SYSTEM_PROMPT")
+
+    # Allow proceeding without credentials when explicitly requested
+    [ "${CLAWDEN_ALLOW_MISSING_CREDENTIALS:-0}" = "1" ] && CLI_ARGS+=(--allow-missing-credentials)
+
+    echo "[clawden] Starting ${RUNTIME} via CLI: clawden run ${CLI_ARGS[*]} ${RUNTIME} $*"
+    exec clawden run "${CLI_ARGS[@]}" "$RUNTIME" "$@"
+fi
+
+# ============================================================
+# Direct mode (default): launch the runtime binary directly.
+# ============================================================
 
 # --- Resolve binary ---
 LAUNCHER="${CLAWDEN_RUNTIMES}/${RUNTIME}/current/${RUNTIME}"

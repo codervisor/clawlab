@@ -573,7 +573,9 @@ fn render_template(template: TemplateKind, runtime: &str) -> String {
              channels:\n\
                telegram:\n\
                  type: telegram\n\
-                 token: $TELEGRAM_BOT_TOKEN\n\
+                                 token: $TELEGRAM_BOT_TOKEN\n\
+                                 # Telegram defaults to deny-all until you set allowed_users.\n\
+                                 # allowed_users: [\"123456789\"]\n\
              provider: openai\n\
              model: gpt-4o-mini\n\
              tools: [git, http]\n"

@@ -69,6 +69,7 @@ fn init_template_telegram_bot_writes_expected_fields() {
     let yaml = fs::read_to_string(dir.join("clawden.yaml")).expect("yaml should exist");
     assert!(yaml.contains("telegram:"));
     assert!(yaml.contains("token: $TELEGRAM_BOT_TOKEN"));
+    assert!(yaml.contains("Telegram defaults to deny-all until you set allowed_users."));
 }
 
 #[test]

@@ -51,9 +51,19 @@ Moving aliases remain available per runtime repository: `:latest`, `:browser`, a
 Docker Compose (in `docker/`):
 
 ```bash
-cp docker/.env.example docker/.env  # add your API key(s)
+cp docker/.env.example docker/.env  # add provider keys and optional channel tokens
 cd docker && docker compose up openclaw
 ```
+
+To enable full config translation, channel token mapping, and allowed-users in Docker, set `CLAWDEN_USE_CLI=1`:
+
+```bash
+# CLI-managed Docker mode (validates credentials, maps tokens, applies allowlists)
+CLAWDEN_USE_CLI=1 CLAWDEN_CHANNELS=telegram CLAWDEN_ALLOWED_USERS=123456789 \
+  docker compose up zeroclaw
+```
+
+Without `CLAWDEN_USE_CLI=1`, the container launches the runtime binary directly (the default for simplicity).
 
 ### Config translation pipeline
 
@@ -72,7 +82,7 @@ Provider key management:
 ### Choose your path
 
 - Hobbyist or student: `cargo run -p clawden-cli -- run zeroclaw`
-- Solo developer: `cargo run -p clawden-cli -- install openclaw` then `cargo run -p clawden-cli -- run --channel telegram openclaw`
+- Solo developer: `cargo run -p clawden-cli -- install openclaw` then `cargo run -p clawden-cli -- run --channel telegram --token $TELEGRAM_BOT_TOKEN --allowed-users 123456789 openclaw`
 - Skill author: use `sdk/` and build with `pnpm --filter @clawden/sdk build`
 - Team workflow: `cargo run -p clawden-cli -- up` and `cargo run -p clawden-cli -- dashboard`
 
