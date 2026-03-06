@@ -8,7 +8,7 @@ use crate::commands::run::{exec_run, RunOptions};
 use crate::commands::up::{exec_up, UpOptions};
 use crate::util::command_exists;
 
-const DEFAULT_RUNTIME_IMAGE: &str = "ghcr.io/codervisor/clawden:openclaw";
+const DEFAULT_RUNTIME_IMAGE: &str = "ghcr.io/codervisor/openclaw:latest";
 
 pub async fn exec_docker(
     command: DockerCommand,
@@ -289,8 +289,17 @@ fn resolve_runtime_image(runtime: &str, tag: Option<&str>) -> String {
     }
 
     let normalized = runtime.to_ascii_lowercase();
-    let resolved_tag = tag.unwrap_or("latest");
-    format!("ghcr.io/codervisor/{normalized}:{resolved_tag}")
+    let (repository, default_tag) = match normalized.as_str() {
+        "openclaw" => ("openclaw", "latest"),
+        "openclaw-browser" => ("openclaw", "browser"),
+        "openclaw-computer" => ("openclaw", "computer"),
+        "zeroclaw" => ("zeroclaw", "latest"),
+        "zeroclaw-browser" => ("zeroclaw", "browser"),
+        "zeroclaw-computer" => ("zeroclaw", "computer"),
+        _ => (normalized.as_str(), "latest"),
+    };
+    let resolved_tag = tag.unwrap_or(default_tag);
+    format!("ghcr.io/codervisor/{repository}:{resolved_tag}")
 }
 
 fn resolve_container_id_or_name(runtime_or_container: &str) -> Result<String> {
@@ -346,5 +355,34 @@ impl Drop for EnvVarGuard {
                 std::env::remove_var(key);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_runtime_image;
+
+    #[test]
+    fn resolve_runtime_image_uses_runtime_specific_repositories() {
+        assert_eq!(
+            resolve_runtime_image("openclaw", None),
+            "ghcr.io/codervisor/openclaw:latest"
+        );
+        assert_eq!(
+            resolve_runtime_image("zeroclaw", None),
+            "ghcr.io/codervisor/zeroclaw:latest"
+        );
+    }
+
+    #[test]
+    fn resolve_runtime_image_maps_variant_names_to_alias_tags() {
+        assert_eq!(
+            resolve_runtime_image("openclaw-browser", None),
+            "ghcr.io/codervisor/openclaw:browser"
+        );
+        assert_eq!(
+            resolve_runtime_image("zeroclaw-computer", None),
+            "ghcr.io/codervisor/zeroclaw:computer"
+        );
     }
 }

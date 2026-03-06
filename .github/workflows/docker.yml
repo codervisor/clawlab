@@ -1,4 +1,4 @@
-name: Build & Push ClawDen Docker Image
+name: Build & Push ClawDen Runtime Images
 
 on:
   push:
@@ -9,20 +9,19 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
-      variant:
-        description: "Variant to build (`preview` builds the default openclaw image only)"
+      target:
+        description: "Runtime target to publish"
         required: false
-        default: "preview"
+        default: "openclaw"
         type: choice
         options:
-          - preview
-          - all
           - openclaw
-          - zeroclaw
           - openclaw-browser
-          - zeroclaw-browser
           - openclaw-computer
+          - zeroclaw
+          - zeroclaw-browser
           - zeroclaw-computer
+          - all
       include_arm64:
         description: "Also build linux/arm64"
         required: false
@@ -35,7 +34,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: codervisor/clawden
+  IMAGE_NAMESPACE: codervisor
 
 jobs:
   build-and-push:
@@ -75,47 +74,74 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract version tag
+      - name: Resolve image metadata
         id: meta
+        shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            TAG="${GITHUB_REF#refs/tags/v}"
-            echo "version=${TAG}" >> "$GITHUB_OUTPUT"
-          else
-            echo "version=preview" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Compose image tags
-        id: tags
-        run: |
-          VERSION="${{ steps.meta.outputs.version }}"
-          TAGS=""
           TARGET="${{ matrix.target }}"
 
-          add_tag() {
-            local tag="$1"
-            [ -n "$TAGS" ] && TAGS+=$'\n'
-            TAGS+="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${tag}"
-          }
+          case "$TARGET" in
+            openclaw)
+              REPOSITORY="openclaw"
+              VERSION_ARG="OPENCLAW_VERSION"
+              IMMUTABLE_SUFFIX=""
+              MOVING_ALIAS="latest"
+              ;;
+            openclaw-browser)
+              REPOSITORY="openclaw"
+              VERSION_ARG="OPENCLAW_VERSION"
+              IMMUTABLE_SUFFIX="-browser"
+              MOVING_ALIAS="browser"
+              ;;
+            openclaw-computer)
+              REPOSITORY="openclaw"
+              VERSION_ARG="OPENCLAW_VERSION"
+              IMMUTABLE_SUFFIX="-computer"
+              MOVING_ALIAS="computer"
+              ;;
+            zeroclaw)
+              REPOSITORY="zeroclaw"
+              VERSION_ARG="ZEROCLAW_VERSION"
+              IMMUTABLE_SUFFIX=""
+              MOVING_ALIAS="latest"
+              ;;
+            zeroclaw-browser)
+              REPOSITORY="zeroclaw"
+              VERSION_ARG="ZEROCLAW_VERSION"
+              IMMUTABLE_SUFFIX="-browser"
+              MOVING_ALIAS="browser"
+              ;;
+            zeroclaw-computer)
+              REPOSITORY="zeroclaw"
+              VERSION_ARG="ZEROCLAW_VERSION"
+              IMMUTABLE_SUFFIX="-computer"
+              MOVING_ALIAS="computer"
+              ;;
+            *)
+              echo "Unknown target: $TARGET" >&2
+              exit 1
+              ;;
+          esac
+
+          VERSION="$(sed -n "s/^ARG ${VERSION_ARG}=//p" docker/Dockerfile | head -n 1)"
+          if [ -z "$VERSION" ]; then
+            echo "Failed to extract ${VERSION_ARG} from docker/Dockerfile" >&2
+            exit 1
+          fi
+
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${REPOSITORY}"
+          IMMUTABLE_TAG="${IMAGE}:${VERSION}${IMMUTABLE_SUFFIX}"
 
           if [ "${{ github.event_name }}" = "push" ]; then
-            if [ "$TARGET" = "openclaw" ]; then
-              add_tag "$VERSION"
-              add_tag "stable"
-              add_tag "latest"
-              add_tag "openclaw"
-            else
-              add_tag "${VERSION}-${TARGET}"
-              add_tag "$TARGET"
-            fi
+            TAGS="${IMMUTABLE_TAG}"
+            TAGS+=$'\n'"${IMAGE}:${MOVING_ALIAS}"
           else
-            if [ "$TARGET" = "openclaw" ]; then
-              add_tag "$VERSION"
-              add_tag "${VERSION}-openclaw"
-            else
-              add_tag "${VERSION}-${TARGET}"
-            fi
+            TAGS="${IMAGE}:preview${IMMUTABLE_SUFFIX}"
           fi
+
+          echo "repository=${REPOSITORY}" >> "$GITHUB_OUTPUT"
+          echo "runtime_version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "immutable_tag=${IMMUTABLE_TAG}" >> "$GITHUB_OUTPUT"
 
           {
             echo "tags<<EOF"
@@ -139,9 +165,8 @@ jobs:
             github.event.workflow_run.conclusion == 'success' &&
             matrix.target == 'openclaw') ||
           (github.event_name == 'workflow_dispatch' && (
-            inputs.variant == 'all' ||
-            (inputs.variant == 'preview' && matrix.target == 'openclaw') ||
-            inputs.variant == matrix.target
+            inputs.target == 'all' ||
+            inputs.target == matrix.target
           ))
         uses: docker/build-push-action@v6
         with:
@@ -150,6 +175,6 @@ jobs:
           target: ${{ matrix.target }}
           push: true
           platforms: ${{ steps.platforms.outputs.platforms }}
-          tags: ${{ steps.tags.outputs.tags }}
+          tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

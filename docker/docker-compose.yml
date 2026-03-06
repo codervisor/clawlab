@@ -10,7 +10,7 @@
 
 services:
   openclaw:
-    image: ghcr.io/codervisor/clawden:openclaw
+    image: ghcr.io/codervisor/openclaw:latest
     build:
       context: ..
       dockerfile: docker/Dockerfile
@@ -29,7 +29,7 @@ services:
     restart: unless-stopped
 
   zeroclaw:
-    image: ghcr.io/codervisor/clawden:zeroclaw
+    image: ghcr.io/codervisor/zeroclaw:latest
     build:
       context: ..
       dockerfile: docker/Dockerfile

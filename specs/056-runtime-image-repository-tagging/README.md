@@ -1,5 +1,5 @@
 ---
-status: planned
+status: complete
 created: 2026-03-06
 priority: medium
 tags:
@@ -9,7 +9,13 @@ tags:
 - ux
 parent: 017-docker-runtime-images
 created_at: 2026-03-06T09:14:26.713701546Z
-updated_at: 2026-03-06T09:14:26.713701546Z
+updated_at: 2026-03-06T14:34:06.612738Z
+completed_at: 2026-03-06T14:34:06.612738Z
+transitions:
+- status: in-progress
+  at: 2026-03-06T14:25:57.249997Z
+- status: complete
+  at: 2026-03-06T14:34:06.612738Z
 ---
 
 # Runtime Image Repository & Tagging Simplification
@@ -62,21 +68,24 @@ Non-goals:
 
 ## Plan
 
-- [ ] Define the exact public naming contract for per-runtime repositories and variant suffixes.
-- [ ] Update the Docker publish workflow to map each matrix target to a repository name and runtime-version-derived tags.
-- [ ] Keep or remove moving aliases intentionally and document the decision.
-- [ ] Update user-facing docs and Compose examples to reference the new image names.
-- [ ] Update CLI defaults and tests that assume `ghcr.io/codervisor/clawden:openclaw`.
-- [ ] Verify the workflow emits the expected tags for release and manual dispatch paths.
+- [x] Define the exact public naming contract for per-runtime repositories and variant suffixes.
+- [x] Update the Docker publish workflow to map each matrix target to a repository name and runtime-version-derived tags.
+- [x] Keep or remove moving aliases intentionally and document the decision.
+- [x] Update user-facing docs and Compose examples to reference the new image names.
+- [x] Update CLI defaults and tests that assume `ghcr.io/codervisor/clawden:openclaw`.
+- [x] Verify the workflow emits the expected tags for release and manual dispatch paths.
 
 ## Test
 
-- [ ] For OpenClaw, confirm generated tags include `ghcr.io/codervisor/openclaw:<version>`, `:<version>-browser`, and `:<version>-computer` as applicable.
-- [ ] For ZeroClaw, confirm generated tags include `ghcr.io/codervisor/zeroclaw:<version>`, `:<version>-browser`, and `:<version>-computer` as applicable.
-- [ ] Confirm manual dispatch selects runtime/variant without requiring a separate freeform image-tag input.
-- [ ] Confirm docs and CLI defaults point at the new repository names.
-- [ ] Confirm there are no remaining references to the old single-repository image names outside intentional migration notes.
+- [x] For OpenClaw, confirm generated tags include `ghcr.io/codervisor/openclaw:<version>`, `:<version>-browser`, and `:<version>-computer` as applicable.
+- [x] For ZeroClaw, confirm generated tags include `ghcr.io/codervisor/zeroclaw:<version>`, `:<version>-browser`, and `:<version>-computer` as applicable.
+- [x] Confirm manual dispatch selects runtime/variant without requiring a separate freeform image-tag input.
+- [x] Confirm docs and CLI defaults point at the new repository names.
+- [x] Confirm there are no remaining references to the old single-repository image names outside intentional migration notes.
 
 ## Notes
 
 This is primarily a packaging and distribution UX change. The key design choice is whether moving aliases remain part of the public contract. Immutable runtime-version tags should be the source of truth either way.
+
+- Moving aliases are retained as secondary convenience tags per runtime repository: `latest` for the base image, plus `browser` and `computer` for the capability variants.
+- Non-release publishes keep using preview aliases (`preview`, `preview-browser`, `preview-computer`) so the immutable runtime-version tags remain release-only.

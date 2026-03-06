@@ -85,8 +85,8 @@ fn entrypoint_requires_runtime() {
 
     let combined = combined_output(&output);
     assert!(combined.contains("RUNTIME not set"));
-    assert!(combined.contains("clawden:openclaw"));
-    assert!(combined.contains("clawden:zeroclaw"));
+    assert!(combined.contains("openclaw:latest"));
+    assert!(combined.contains("zeroclaw:latest"));
 }
 
 #[test]
@@ -100,8 +100,8 @@ fn entrypoint_help_is_self_describing() {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("ClawDen Docker Image"));
-    assert!(stdout.contains("ghcr.io/codervisor/clawden:openclaw"));
-    assert!(stdout.contains("ghcr.io/codervisor/clawden:zeroclaw"));
+    assert!(stdout.contains("ghcr.io/codervisor/openclaw:latest"));
+    assert!(stdout.contains("ghcr.io/codervisor/zeroclaw:latest"));
 }
 
 #[test]

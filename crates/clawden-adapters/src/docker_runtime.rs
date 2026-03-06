@@ -4,7 +4,6 @@ use std::process::{Command, Stdio};
 use std::thread::sleep;
 use std::time::Duration;
 
-const DEFAULT_IMAGE: &str = "ghcr.io/codervisor/clawden:openclaw";
 const DEFAULT_STARTUP_GRACE_MS: u64 = 3_000;
 
 pub fn runtime_config_values(runtime: &str, config: &AgentConfig) -> RuntimeConfig {
@@ -50,7 +49,7 @@ pub fn start_container(runtime: ClawRuntime, config: &AgentConfig) -> Result<Str
     ensure_docker_available()?;
 
     let image =
-        std::env::var("CLAWDEN_RUNTIME_IMAGE").unwrap_or_else(|_| DEFAULT_IMAGE.to_string());
+        std::env::var("CLAWDEN_RUNTIME_IMAGE").unwrap_or_else(|_| default_runtime_image(&runtime));
 
     // Best-effort cleanup in case a stale same-name container exists. Suppress
     // daemon noise when the container is absent or when a previous instance is
@@ -271,6 +270,10 @@ fn startup_grace_period() -> Duration {
     Duration::from_millis(millis)
 }
 
+fn default_runtime_image(runtime: &ClawRuntime) -> String {
+    format!("ghcr.io/codervisor/{}:latest", runtime.as_slug())
+}
+
 fn ensure_docker_available() -> Result<()> {
     let output = Command::new("docker")
         .arg("--version")
@@ -286,7 +289,7 @@ fn ensure_docker_available() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_run_args, container_name, runtime_config_values};
+    use super::{build_run_args, container_name, default_runtime_image, runtime_config_values};
     use clawden_core::{AgentConfig, ClawRuntime};
 
     #[test]
@@ -327,7 +330,7 @@ mod tests {
             ClawRuntime::ZeroClaw,
             &cfg,
             "clawden-zeroclaw-alpha",
-            "ghcr.io/codervisor/clawden:openclaw",
+            "ghcr.io/codervisor/openclaw:latest",
         );
 
         assert!(args.contains(&"run".to_string()));
@@ -369,7 +372,7 @@ mod tests {
             ClawRuntime::ZeroClaw,
             &cfg,
             "clawden-zeroclaw-alpha",
-            "ghcr.io/codervisor/clawden:openclaw",
+            "ghcr.io/codervisor/openclaw:latest",
         );
 
         assert!(!args.contains(&"--rm".to_string()));
@@ -384,6 +387,18 @@ mod tests {
                 .iter()
                 .any(|entry| entry.starts_with("CLAWDEN_DOCKER_")),
             "internal docker override vars should not be forwarded into container env"
+        );
+    }
+
+    #[test]
+    fn default_runtime_image_uses_runtime_repository() {
+        assert_eq!(
+            default_runtime_image(&ClawRuntime::OpenClaw),
+            "ghcr.io/codervisor/openclaw:latest"
+        );
+        assert_eq!(
+            default_runtime_image(&ClawRuntime::ZeroClaw),
+            "ghcr.io/codervisor/zeroclaw:latest"
         );
     }
 }

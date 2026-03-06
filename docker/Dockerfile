@@ -1,21 +1,21 @@
-# ClawDen Docker Image
+# ClawDen runtime images
 #
-# Image: ghcr.io/codervisor/clawden
+# Repositories:
+#   ghcr.io/codervisor/openclaw
+#   ghcr.io/codervisor/zeroclaw
 #
-# Runtimes: OpenClaw, ZeroClaw
-# Variants: basic, browser, computer
+# Variant tags:
+#   :<runtime-version>              Base runtime image
+#   :<runtime-version>-browser      Runtime + Chromium/Playwright
+#   :<runtime-version>-computer     Runtime + browser + desktop (Xvfb/VNC/noVNC)
 #
-# Tags (build with --target):
-#   :openclaw              Basic OpenClaw image (default / :latest)
-#   :zeroclaw              Basic ZeroClaw image
-#   :openclaw-browser      OpenClaw + Chromium/Playwright
-#   :zeroclaw-browser      ZeroClaw + Chromium/Playwright
-#   :openclaw-computer     OpenClaw + browser + desktop (Xvfb/VNC/noVNC)
-#   :zeroclaw-computer     ZeroClaw + browser + desktop (Xvfb/VNC/noVNC)
+# Moving aliases (secondary to immutable version tags):
+#   openclaw  -> :latest, :browser, :computer
+#   zeroclaw  -> :latest, :browser, :computer
 #
 # Quick start:
-#   docker run -e OPENAI_API_KEY=sk-... ghcr.io/codervisor/clawden:openclaw
-#   docker run -e ANTHROPIC_API_KEY=sk-... ghcr.io/codervisor/clawden:zeroclaw
+#   docker run -e OPENAI_API_KEY=sk-... ghcr.io/codervisor/openclaw:latest
+#   docker run -e ANTHROPIC_API_KEY=sk-... ghcr.io/codervisor/zeroclaw:latest
 #
 # Runtimes are installed using `clawden install`, the same code path
 # used for local development. This ensures Docker and CLI stay in sync.

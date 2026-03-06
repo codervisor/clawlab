@@ -5,9 +5,9 @@
 # Users just need to pass LLM provider API keys via environment variables.
 #
 # Usage:
-#   docker run -e OPENAI_API_KEY=sk-... ghcr.io/codervisor/clawden:openclaw
-#   docker run -e ANTHROPIC_API_KEY=sk-... ghcr.io/codervisor/clawden:zeroclaw
-#   docker run ghcr.io/codervisor/clawden:openclaw gateway --help
+#   docker run -e OPENAI_API_KEY=sk-... ghcr.io/codervisor/openclaw:latest
+#   docker run -e ANTHROPIC_API_KEY=sk-... ghcr.io/codervisor/zeroclaw:latest
+#   docker run ghcr.io/codervisor/openclaw:latest gateway --help
 
 set -euo pipefail
 
@@ -22,9 +22,9 @@ if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
 ClawDen Docker Image
 
 Usage:
-  docker run -e OPENAI_API_KEY=sk-... ghcr.io/codervisor/clawden:openclaw
-  docker run -e ANTHROPIC_API_KEY=sk-... ghcr.io/codervisor/clawden:zeroclaw
-  docker run ghcr.io/codervisor/clawden:openclaw [runtime-args...]
+    docker run -e OPENAI_API_KEY=sk-... ghcr.io/codervisor/openclaw:latest
+    docker run -e ANTHROPIC_API_KEY=sk-... ghcr.io/codervisor/zeroclaw:latest
+    docker run ghcr.io/codervisor/openclaw:latest [runtime-args...]
 
 Environment variables:
   OPENAI_API_KEY          OpenAI API key
@@ -34,8 +34,8 @@ Environment variables:
   MISTRAL_API_KEY         Mistral API key
   GROQ_API_KEY            Groq API key
 
-The container auto-detects which runtime to start from the image tag.
-All tools (git, python, ripgrep, etc.) are pre-installed.
+The container auto-detects which runtime to start from the image metadata.
+Common system tools (git, curl, jq, python3, yq) are pre-installed.
 EOF
     exit 0
 fi
@@ -48,13 +48,13 @@ if [ -z "$RUNTIME" ]; then
         shift
     elif [ $# -gt 0 ]; then
         echo "[clawden] Error: Unknown runtime '$1'. Use openclaw or zeroclaw." >&2
-        echo "  docker run ghcr.io/codervisor/clawden:openclaw" >&2
-        echo "  docker run ghcr.io/codervisor/clawden:zeroclaw" >&2
+        echo "  docker run ghcr.io/codervisor/openclaw:latest" >&2
+        echo "  docker run ghcr.io/codervisor/zeroclaw:latest" >&2
         exit 1
     else
         echo "[clawden] Error: RUNTIME not set. Use a runtime-specific image:" >&2
-        echo "  docker run ghcr.io/codervisor/clawden:openclaw" >&2
-        echo "  docker run ghcr.io/codervisor/clawden:zeroclaw" >&2
+        echo "  docker run ghcr.io/codervisor/openclaw:latest" >&2
+        echo "  docker run ghcr.io/codervisor/zeroclaw:latest" >&2
         exit 1
     fi
 fi
