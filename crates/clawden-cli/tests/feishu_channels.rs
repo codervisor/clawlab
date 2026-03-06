@@ -30,6 +30,50 @@ fn cli_command(dir: &PathBuf, home: &PathBuf) -> Command {
     command
 }
 
+fn read_http_request(stream: &mut std::net::TcpStream) -> String {
+    let mut buffer = Vec::new();
+    let mut chunk = [0u8; 1024];
+    let mut header_end = None;
+    let mut content_length = 0usize;
+
+    loop {
+        let read = stream.read(&mut chunk).expect("request should read");
+        if read == 0 {
+            break;
+        }
+
+        buffer.extend_from_slice(&chunk[..read]);
+
+        if header_end.is_none() {
+            header_end = buffer.windows(4).position(|window| window == b"\r\n\r\n");
+            if let Some(index) = header_end {
+                let header_bytes = &buffer[..index + 4];
+                let headers = String::from_utf8_lossy(header_bytes);
+                content_length = headers
+                    .lines()
+                    .find_map(|line| {
+                        let (name, value) = line.split_once(':')?;
+                        if !name.eq_ignore_ascii_case("content-length") {
+                            return None;
+                        }
+
+                        value.trim().parse::<usize>().ok()
+                    })
+                    .unwrap_or(0);
+            }
+        }
+
+        if let Some(index) = header_end {
+            let body_start = index + 4;
+            if buffer.len() >= body_start + content_length {
+                break;
+            }
+        }
+    }
+
+    String::from_utf8_lossy(&buffer).into_owned()
+}
+
 fn start_feishu_success_server(expected_app_id: Option<&str>) -> String {
     let listener = TcpListener::bind("127.0.0.1:0").expect("server should bind");
     let addr = listener
@@ -40,9 +84,7 @@ fn start_feishu_success_server(expected_app_id: Option<&str>) -> String {
     thread::spawn(move || {
         for _ in 0..2 {
             let (mut stream, _) = listener.accept().expect("request should arrive");
-            let mut buffer = [0u8; 4096];
-            let size = stream.read(&mut buffer).expect("request should read");
-            let request = String::from_utf8_lossy(&buffer[..size]);
+            let request = read_http_request(&mut stream);
 
             let response_body = if request
                 .contains("POST /open-apis/auth/v3/tenant_access_token/internal")
@@ -82,8 +124,7 @@ fn start_feishu_invalid_credentials_server() -> String {
 
     thread::spawn(move || {
         let (mut stream, _) = listener.accept().expect("request should arrive");
-        let mut buffer = [0u8; 2048];
-        let _ = stream.read(&mut buffer).expect("request should read");
+        let _request = read_http_request(&mut stream);
         let body = r#"{"code":99991663,"msg":"invalid app secret"}"#;
         let response = format!(
             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
@@ -107,9 +148,7 @@ fn start_feishu_bot_disabled_server() -> String {
     thread::spawn(move || {
         for step in 0..2 {
             let (mut stream, _) = listener.accept().expect("request should arrive");
-            let mut buffer = [0u8; 2048];
-            let size = stream.read(&mut buffer).expect("request should read");
-            let request = String::from_utf8_lossy(&buffer[..size]);
+            let request = read_http_request(&mut stream);
             let (status_line, body) = if step == 0 {
                 assert!(request.contains("POST /open-apis/auth/v3/tenant_access_token/internal"));
                 (
