@@ -6,7 +6,6 @@ use serde_json::{Map, Value};
 use std::collections::HashMap;
 use std::fs;
 use std::hash::{Hash, Hasher};
-use std::io::{self, IsTerminal};
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -181,21 +180,13 @@ impl TelegramIdResolver {
             return Ok(found);
         }
 
-        if !io::stdin().is_terminal() {
-            anyhow::bail!(
-                "cannot resolve @{} from Telegram history and interactive polling is unavailable in non-interactive mode",
-                username_norm
-            );
-        }
-
         eprintln!(
-            "⚠ Cannot resolve Telegram username \"{}\" to numeric ID.\n  -> Send any message to your bot from @{}, then press Enter...",
+            "⚠ Cannot resolve Telegram username \"{}\" to numeric ID.\n  -> Send any message to your bot from @{}; polling Telegram updates now...",
             username_norm, username_norm
         );
-        let mut line = String::new();
-        io::stdin().read_line(&mut line)?;
 
-        let deadline = std::time::Instant::now() + Duration::from_secs(30);
+        let timeout_secs = telegram_username_resolution_timeout_secs();
+        let deadline = std::time::Instant::now() + Duration::from_secs(timeout_secs);
         while std::time::Instant::now() < deadline {
             if let Some(found) = self.find_in_recent_updates(&username_norm).await? {
                 self.upsert_cache(&mut cache, &username_norm, &found, false)?;
@@ -205,8 +196,8 @@ impl TelegramIdResolver {
         }
 
         let mut message = format!(
-            "timed out resolving @{} after 30s. Send a message to your bot from that account and retry.",
-            username_norm
+            "timed out resolving @{} after {}s. Send a message to your bot from that account and retry.",
+            username_norm, timeout_secs
         );
         if self.get_updates_raw().await?.is_empty() && is_openclaw_running() {
             message.push_str(" Another process appears to be polling Telegram updates (OpenClaw running). Stop it first and retry.");
@@ -414,6 +405,18 @@ fn now_rfc3339_like() -> String {
     format!("{}Z", secs)
 }
 
+fn telegram_username_resolution_timeout_secs() -> u64 {
+    const DEFAULT_SECS: u64 = 120;
+    const MIN_SECS: u64 = 10;
+    const MAX_SECS: u64 = 600;
+
+    std::env::var("CLAWDEN_TELEGRAM_RESOLVE_TIMEOUT_SECS")
+        .ok()
+        .and_then(|raw| raw.trim().parse::<u64>().ok())
+        .map(|secs| secs.clamp(MIN_SECS, MAX_SECS))
+        .unwrap_or(DEFAULT_SECS)
+}
+
 fn is_openclaw_running() -> bool {
     let Ok(pm) = clawden_core::ProcessManager::new(ExecutionMode::Auto) else {
         return false;
@@ -432,7 +435,7 @@ mod tests {
     use super::{
         collect_username_id_pairs, normalize_username,
         resolve_openclaw_telegram_allowed_users_for_runtime, telegram_cache_path,
-        token_hash_prefix,
+        telegram_username_resolution_timeout_secs, token_hash_prefix,
     };
     use crate::commands::config_gen::generate_openclaw_config;
     use crate::commands::test_env_lock;
@@ -460,6 +463,27 @@ mod tests {
         })];
         let pairs = collect_username_id_pairs(&updates);
         assert_eq!(pairs, vec![("marvzhang".to_string(), "123456".to_string())]);
+    }
+
+    #[test]
+    fn telegram_resolution_timeout_defaults_and_clamps() {
+        let _guard = test_env_lock().lock().expect("env lock");
+        std::env::remove_var("CLAWDEN_TELEGRAM_RESOLVE_TIMEOUT_SECS");
+        assert_eq!(telegram_username_resolution_timeout_secs(), 120);
+
+        std::env::set_var("CLAWDEN_TELEGRAM_RESOLVE_TIMEOUT_SECS", "5");
+        assert_eq!(telegram_username_resolution_timeout_secs(), 10);
+
+        std::env::set_var("CLAWDEN_TELEGRAM_RESOLVE_TIMEOUT_SECS", "9999");
+        assert_eq!(telegram_username_resolution_timeout_secs(), 600);
+
+        std::env::set_var("CLAWDEN_TELEGRAM_RESOLVE_TIMEOUT_SECS", "180");
+        assert_eq!(telegram_username_resolution_timeout_secs(), 180);
+
+        std::env::set_var("CLAWDEN_TELEGRAM_RESOLVE_TIMEOUT_SECS", "invalid");
+        assert_eq!(telegram_username_resolution_timeout_secs(), 120);
+
+        std::env::remove_var("CLAWDEN_TELEGRAM_RESOLVE_TIMEOUT_SECS");
     }
 
     #[test]
