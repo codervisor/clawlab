@@ -12,6 +12,8 @@
 
 set -euo pipefail
 
+EX_CONFIG=78
+
 RUNTIME="${RUNTIME:-}"
 TOOLS="${TOOLS:-}"
 
@@ -94,10 +96,38 @@ runtime_default_args() {
     case "$1" in
         zeroclaw)  echo "daemon" ;;
         picoclaw)  echo "gateway" ;;
-        openclaw)  echo "gateway" ;;
+        openclaw)  echo "gateway --allow-unconfigured" ;;
         openfang)  echo "daemon" ;;
         nullclaw)  echo "daemon" ;;
         *)         echo "" ;;
+    esac
+}
+
+has_any_env_var() {
+    for env_var in "$@"; do
+        if [ -n "${!env_var:-}" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+validate_runtime_env() {
+    case "$1" in
+        openclaw)
+            if ! has_any_env_var \
+                OPENROUTER_API_KEY \
+                OPENAI_API_KEY \
+                ANTHROPIC_API_KEY \
+                GEMINI_API_KEY \
+                GOOGLE_API_KEY \
+                MISTRAL_API_KEY \
+                GROQ_API_KEY; then
+                echo "[clawden] Error: openclaw requires at least one LLM provider API key." >&2
+                echo "[clawden] Set one of: OPENROUTER_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, GOOGLE_API_KEY, MISTRAL_API_KEY, GROQ_API_KEY" >&2
+                exit "$EX_CONFIG"
+            fi
+            ;;
     esac
 }
 
@@ -109,6 +139,7 @@ case "$RUNTIME" in
             echo "Run: clawden-cli install ${RUNTIME}" >&2
             exit 1
         fi
+        validate_runtime_env "$RUNTIME"
         if [ $# -eq 0 ]; then
             DEFAULT_ARGS="$(runtime_default_args "$RUNTIME")"
             if [ -n "$DEFAULT_ARGS" ]; then

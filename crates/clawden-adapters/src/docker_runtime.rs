@@ -1,8 +1,11 @@
 use anyhow::{bail, Context, Result};
 use clawden_core::{AgentConfig, ClawRuntime, RuntimeConfig};
 use std::process::{Command, Stdio};
+use std::thread::sleep;
+use std::time::Duration;
 
 const DEFAULT_IMAGE: &str = "ghcr.io/codervisor/clawden-runtime:latest";
+const DEFAULT_STARTUP_GRACE_MS: u64 = 3_000;
 
 pub fn runtime_config_values(runtime: &str, config: &AgentConfig) -> RuntimeConfig {
     RuntimeConfig {
@@ -74,17 +77,19 @@ pub fn start_container(runtime: ClawRuntime, config: &AgentConfig) -> Result<Str
         );
     }
 
+    let startup_grace = startup_grace_period();
+    if !startup_grace.is_zero() {
+        sleep(startup_grace);
+    }
+
     if !container_running(&name)? {
         let logs = container_logs(&name)?;
         if logs.is_empty() {
-            bail!(
-                "docker runtime {} exited immediately after start",
-                runtime.as_slug()
-            );
+            bail!("docker runtime {} exited during startup", runtime.as_slug());
         }
 
         bail!(
-            "docker runtime {} exited immediately after start:\n{}",
+            "docker runtime {} exited during startup:\n{}",
             runtime.as_slug(),
             logs
         );
@@ -256,6 +261,14 @@ fn container_logs(container_id: &str) -> Result<String> {
     };
 
     Ok(combined)
+}
+
+fn startup_grace_period() -> Duration {
+    let millis = std::env::var("CLAWDEN_DOCKER_START_GRACE_MS")
+        .ok()
+        .and_then(|raw| raw.parse::<u64>().ok())
+        .unwrap_or(DEFAULT_STARTUP_GRACE_MS);
+    Duration::from_millis(millis)
 }
 
 fn ensure_docker_available() -> Result<()> {

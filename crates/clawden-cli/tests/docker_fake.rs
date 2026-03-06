@@ -2,7 +2,7 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 fn temp_dir(name: &str) -> PathBuf {
     let stamp = SystemTime::now()
@@ -16,6 +16,13 @@ fn temp_dir(name: &str) -> PathBuf {
 
 fn binary_path() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_clawden-cli"))
+}
+
+fn entrypoint_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../docker/entrypoint.sh")
+        .canonicalize()
+        .expect("entrypoint path should resolve")
 }
 
 fn write_executable(path: &Path, content: &str) {
@@ -106,6 +113,7 @@ channels:
         .current_dir(&project)
         .env("HOME", &home)
         .env("PATH", path)
+        .env("CLAWDEN_DOCKER_START_GRACE_MS", "0")
         .env("OPENAI_API_KEY", "sk-up-test")
         .env("TELEGRAM_BOT_TOKEN", "tg-up-token")
         .args(["up", "--detach"])
@@ -160,6 +168,7 @@ providers:
         .current_dir(&project)
         .env("HOME", &home)
         .env("PATH", path)
+        .env("CLAWDEN_DOCKER_START_GRACE_MS", "0")
         .env_remove("OPENAI_API_KEY")
         .args([
             "up",
@@ -207,6 +216,7 @@ channels:
         .current_dir(&project)
         .env("HOME", &home)
         .env("PATH", path)
+        .env("CLAWDEN_DOCKER_START_GRACE_MS", "0")
         .env("OPENAI_API_KEY", "sk-run-test")
         .env("TELEGRAM_BOT_TOKEN", "tg-run-token")
         .args([
@@ -268,6 +278,7 @@ fn run_docker_suppresses_missing_stale_container_noise() {
         .current_dir(&project)
         .env("HOME", &home)
         .env("PATH", path)
+        .env("CLAWDEN_DOCKER_START_GRACE_MS", "0")
         .env("FAKE_DOCKER_RM_FAIL", "1")
         .args(["docker", "run", "openclaw"])
         .output()
@@ -287,7 +298,7 @@ fn run_docker_suppresses_missing_stale_container_noise() {
 }
 
 #[test]
-fn run_docker_fails_when_container_exits_immediately() {
+fn run_docker_fails_when_container_exits_during_startup_grace_period() {
     let dir = temp_dir("docker-fake-run-exits");
     let home = dir.join("home");
     let project = dir.join("project");
@@ -302,28 +313,106 @@ fn run_docker_fails_when_container_exits_immediately() {
     let base_path = std::env::var("PATH").unwrap_or_default();
     let path = format!("{}:{}", bin_dir.display(), base_path);
 
+    let started = Instant::now();
     let output = Command::new(binary_path())
         .current_dir(&project)
         .env("HOME", &home)
         .env("PATH", path)
+        .env("CLAWDEN_DOCKER_START_GRACE_MS", "150")
         .env("FAKE_DOCKER_INSPECT_RUNNING", "false")
         .env("FAKE_DOCKER_LOGS", "runtime boot failed")
         .args(["docker", "run", "openclaw"])
         .output()
         .expect("run should execute");
+    let elapsed = started.elapsed();
 
     assert!(!output.status.success());
+    assert!(
+        elapsed.as_millis() >= 100,
+        "expected startup grace wait, got {:?}",
+        elapsed
+    );
     let combined = format!(
         "{}{}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
-    assert!(combined.contains("docker runtime openclaw exited immediately after start"));
+    assert!(combined.contains("docker runtime openclaw exited during startup"));
     assert!(combined.contains("runtime boot failed"));
     assert!(
         !combined.contains("Started openclaw via Docker"),
         "combined output was: {combined}"
     );
+}
+
+#[test]
+fn entrypoint_openclaw_requires_provider_key() {
+    let dir = temp_dir("entrypoint-openclaw-missing-provider");
+    let home = dir.join("home");
+    let runtime_dir = home.join(".clawden/runtimes/openclaw/current");
+    let launcher_log = dir.join("launcher.log");
+
+    fs::create_dir_all(&runtime_dir).expect("runtime dir should be created");
+    write_executable(
+        &runtime_dir.join("openclaw"),
+        &format!(
+            "#!/usr/bin/env sh\nprintf 'launcher invoked\\n' >> \"{}\"\n",
+            launcher_log.display()
+        ),
+    );
+
+    let output = Command::new("bash")
+        .env("HOME", &home)
+        .env("RUNTIME", "openclaw")
+        .env_remove("OPENROUTER_API_KEY")
+        .env_remove("OPENAI_API_KEY")
+        .env_remove("ANTHROPIC_API_KEY")
+        .env_remove("GEMINI_API_KEY")
+        .env_remove("GOOGLE_API_KEY")
+        .env_remove("MISTRAL_API_KEY")
+        .env_remove("GROQ_API_KEY")
+        .arg(entrypoint_path())
+        .output()
+        .expect("entrypoint should execute");
+
+    assert!(!output.status.success());
+    assert_eq!(output.status.code(), Some(78));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("openclaw requires at least one LLM provider API key"));
+    assert!(stderr.contains("OPENAI_API_KEY"));
+    assert!(
+        !launcher_log.exists(),
+        "launcher should not run when provider key is missing"
+    );
+}
+
+#[test]
+fn entrypoint_openclaw_uses_gateway_allow_unconfigured_defaults() {
+    let dir = temp_dir("entrypoint-openclaw-default-args");
+    let home = dir.join("home");
+    let runtime_dir = home.join(".clawden/runtimes/openclaw/current");
+    let args_log = dir.join("args.log");
+
+    fs::create_dir_all(&runtime_dir).expect("runtime dir should be created");
+    write_executable(
+        &runtime_dir.join("openclaw"),
+        &format!(
+            "#!/usr/bin/env sh\nprintf '%s\\n' \"$@\" > \"{}\"\n",
+            args_log.display()
+        ),
+    );
+
+    let output = Command::new("bash")
+        .env("HOME", &home)
+        .env("RUNTIME", "openclaw")
+        .env("OPENAI_API_KEY", "sk-test")
+        .arg(entrypoint_path())
+        .output()
+        .expect("entrypoint should execute");
+
+    assert!(output.status.success());
+    let args = fs::read_to_string(&args_log).expect("args log should exist");
+    assert_eq!(args, "gateway\n--allow-unconfigured\n");
 }
 
 #[test]

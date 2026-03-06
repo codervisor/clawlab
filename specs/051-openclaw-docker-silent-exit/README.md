@@ -1,5 +1,5 @@
 ---
-status: planned
+status: complete
 created: 2026-03-06
 priority: high
 tags:
@@ -10,7 +10,13 @@ tags:
 - container
 parent: 017-docker-runtime-images
 created_at: 2026-03-06T05:28:14.473366266Z
-updated_at: 2026-03-06T05:28:14.473366266Z
+updated_at: 2026-03-06T05:42:21.141348593Z
+completed_at: 2026-03-06T05:42:21.141348593Z
+transitions:
+- status: in-progress
+  at: 2026-03-06T05:37:44.246935761Z
+- status: complete
+  at: 2026-03-06T05:42:21.141348593Z
 ---
 
 # OpenClaw Docker Silent Exit — Container Dies After Printing Help, CLI Reports Success
@@ -72,15 +78,15 @@ Both. Option A catches the problem at the source with an actionable message. Opt
 
 ## Plan
 
-- [ ] Add per-runtime minimum env var checks to `docker/entrypoint.sh` before the `exec` line
-- [ ] Align entrypoint default args with Rust `RuntimeDescriptor::default_start_args` (openclaw: `gateway --allow-unconfigured`)
-- [ ] Add a short grace-period health gate to `start_container()` in the adapter (wait ~3s, then check container state)
-- [ ] Surface container logs in the CLI error when the container exits during the grace period
-- [ ] Ensure `clawden docker run openclaw` with valid credentials actually sustains the container
+- [x] Add per-runtime minimum env var checks to `docker/entrypoint.sh` before the `exec` line
+- [x] Align entrypoint default args with Rust `RuntimeDescriptor::default_start_args` (openclaw: `gateway --allow-unconfigured`)
+- [x] Add a short grace-period health gate to `start_container()` in the adapter (wait ~3s, then check container state)
+- [x] Surface container logs in the CLI error when the container exits during the grace period
+- [x] Ensure `clawden docker run openclaw` with valid credentials actually sustains the container
 
 ## Test
 
-- [ ] `clawden docker run openclaw` without any provider key exits with clear "missing provider key" error, not silent exit
-- [ ] `clawden docker run openclaw` with valid `OPENROUTER_API_KEY` starts and container remains running
-- [ ] Entrypoint default args for openclaw match Rust descriptor (`gateway --allow-unconfigured`)
-- [ ] Container that exits within grace period causes CLI to report failure with logs, not success
+- [x] `clawden docker run openclaw` without any provider key exits with clear "missing provider key" error, not silent exit
+- [x] `clawden docker run openclaw` with valid `OPENROUTER_API_KEY` starts and container remains running
+- [x] Entrypoint default args for openclaw match Rust descriptor (`gateway --allow-unconfigured`)
+- [x] Container that exits within grace period causes CLI to report failure with logs, not success
