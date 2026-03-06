@@ -210,10 +210,6 @@ fn candidate_tool_roots() -> Vec<PathBuf> {
         roots.push(Path::new(&home).join(".clawden/community-tools"));
     }
 
-    if let Ok(cwd) = std::env::current_dir() {
-        roots.push(cwd.join("docker/tools"));
-    }
-
     roots
 }
 

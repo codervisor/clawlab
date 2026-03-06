@@ -10,11 +10,12 @@ on:
         required: false
         default: "latest"
       variant:
-        description: "Variant to build"
+        description: "Variant to build (`latest` builds the default openclaw image only)"
         required: false
-        default: "all"
+        default: "latest"
         type: choice
         options:
+          - latest
           - all
           - openclaw
           - zeroclaw
@@ -102,7 +103,13 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Build, smoke test, and push
-        if: github.event_name == 'push' || inputs.variant == 'all' || inputs.variant == matrix.target
+        if: >-
+          (github.event_name == 'push' && matrix.target == 'openclaw') ||
+          (github.event_name == 'workflow_dispatch' && (
+            inputs.variant == 'all' ||
+            (inputs.variant == 'latest' && matrix.target == 'openclaw') ||
+            inputs.variant == matrix.target
+          ))
         uses: docker/build-push-action@v6
         with:
           context: .

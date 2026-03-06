@@ -1,5 +1,5 @@
 ---
-status: planned
+status: complete
 created: 2026-03-06
 priority: high
 tags:
@@ -13,176 +13,164 @@ depends_on:
 - 052-docker-image-runtime-binary-compat
 parent: 017-docker-runtime-images
 created_at: 2026-03-06T08:17:36.969275199Z
-updated_at: 2026-03-06T08:17:36.969275199Z
+updated_at: 2026-03-06T08:56:01.682659274Z
 ---
-
 # Docker Image Hardening — Security, Consistency & Supply-Chain Fixes
 
 ## Overview
 
-A comprehensive audit of the ClawDen Docker runtime image (`docker/Dockerfile`, `docker/entrypoint.sh`, `docker/tools/`) revealed **1 critical, 6 high, and 14 medium** issues across security, supply-chain integrity, spec consistency, correctness, and UX. This spec tracks all actionable fixes.
+A comprehensive audit of the ClawDen Docker runtime image (`docker/Dockerfile`, `docker/entrypoint.sh`, `docker/tools/`) revealed **1 critical, 6 high, and 14 medium** issues across security, supply-chain integrity, spec consistency, correctness, and UX.
+
+All findings were resolved as part of the Docker distribution redesign that:
+- Scoped the image to **OpenClaw and ZeroClaw only** (stable runtimes)
+- Removed the tool activation system (all tools pre-installed in the image)
+- Removed the sandbox layer (runtimes handle their own security; Docker provides isolation)
+- Renamed the image from `clawden-runtime` to `clawden`
+- Introduced per-runtime image tags (`:openclaw`, `:zeroclaw`, `:openclaw-browser`, etc.)
 
 ### Why Now
 
-- **S1 (critical)**: Node.js is installed via `curl | bash` with no integrity verification — a supply-chain attack vector.
-- **S2**: `PICOCLAW_VERSION=latest` and `OPENCLAW_VERSION=latest` break reproducibility and allow compromised upstream releases.
-- **S3**: `nullclaw` appears in `runtime_default_args()` but is not an installed or supported runtime — dead code that misleads debugging.
-- **C1**: `core-utils` spec says `jq, yq, tree, file, zip/unzip, gzip` but `yq`, `file`, and `gzip` are never installed.
+- **S1 (critical)**: Node.js was installed via `curl | bash` with no integrity verification — a supply-chain attack vector.
+- **S2**: `PICOCLAW_VERSION=latest` and `OPENCLAW_VERSION=latest` broke reproducibility.
+- **S3**: `nullclaw` appeared in `runtime_default_args()` but was not installed — dead code.
+- **C1**: `core-utils` spec said `jq, yq, tree, file, zip/unzip, gzip` but `yq`, `file`, and `gzip` were never installed.
 
-## Design
+## Resolution
 
-### Phase 1 — Critical & High Severity
+All items were resolved through the Docker distribution redesign. The redesign replaced the old multi-runtime, tool-activation architecture with a focused two-runtime design.
 
-#### 1. Eliminate `curl | bash` for Node.js (S1)
+### Phase 1 — Critical & High Severity (all resolved)
 
-Replace the NodeSource setup script with a multi-stage `COPY --from`:
+#### 1. ~~Eliminate `curl | bash` for Node.js (S1)~~ ✅
+
+Replaced with `COPY --from=node:22-bookworm-slim`. pnpm via `corepack enable pnpm`.
+
+#### 2. ~~Pin all runtime versions (S2, S9)~~ ✅
+
+Only OpenClaw and ZeroClaw remain. Both pinned:
+```dockerfile
+ARG OPENCLAW_VERSION=2026.3.2
+ARG ZEROCLAW_VERSION=0.1.7
+```
+
+PicoClaw, NanoClaw, and OpenFang removed from the image (not stable enough).
+
+#### 3. ~~Remove dead `nullclaw` case (S3)~~ ✅
+
+Entrypoint rewritten — only `openclaw` and `zeroclaw` are recognized. No dead code.
+
+#### 4. ~~Fix tool setup.sh scripts that call `sudo apt-get` (S4, S5)~~ ✅
+
+Tool activation system removed entirely. All tools are pre-installed in the base image via apt-get. No setup scripts are sourced at container startup.
+
+Note: `docker/tools/` directory with old manifests/scripts still exists on disk but is no longer referenced by the Dockerfile or entrypoint. Can be cleaned up in a follow-up.
+
+#### 5. ~~Install missing `core-utils` components (C1)~~ ✅
+
+`file` and `gzip` were added to apt-get, and the Go-based `yq` is copied from the pinned `mikefarah/yq:4.47.2` image.
+
+#### 6. ~~Fix `$DEFAULT_ARGS` word-splitting (R1)~~ ✅
+
+Entrypoint rewritten with explicit `exec "$LAUNCHER" gateway --allow-unconfigured` and `exec "$LAUNCHER" daemon --config-dir ...`. No variable expansion.
+
+### Phase 2 — Medium Severity (all resolved)
+
+#### 7. ~~Runtime-aware HEALTHCHECK (S6)~~ ✅
+
+Each build target has its own `HEALTHCHECK` with the correct port:
+- `:openclaw` → port 18789
+- `:zeroclaw` → port 42617
+
+#### 8. ~~Sandbox `/proc` exposure (S7)~~ ✅
+
+Sandbox (bubblewrap) removed from the image. OpenClaw and ZeroClaw handle their own sandboxing. Docker itself provides process isolation.
+
+#### 9. ~~Add signal trap in entrypoint (R2)~~ ✅
+
+```bash
+trap 'echo "[clawden] Interrupted"; exit 130' INT TERM
+```
+
+#### 10. ~~Validate env vars for all runtimes (R4)~~ — Descoped
+
+Removed entrypoint-level validation. Runtimes handle their own API key validation and produce better error messages than a generic entrypoint check.
+
+#### 11. ~~Fix tools.json output (C8)~~ ✅
+
+Tool activation system removed. No `tools.json` is generated.
+
+#### 12. ~~Spec parity fixes (C2, C3, C4, C6, C7)~~ ✅
+
+Tool manifests and setup scripts are no longer used by the Dockerfile. The browser/gui empty directories are no longer created. All tools are pre-installed via apt-get.
+
+#### 13. ~~Remove vestigial `browser`/`gui` empty directories (C7)~~ ✅
+
+Removed from Dockerfile.
+
+#### 14. ~~Eliminate redundant `apt-get update` for p7zip purge (R5)~~ ✅
+
+`p7zip-full` no longer installed.
+
+### Phase 3 — Low Severity & Optimization (all resolved)
+
+#### 15. ~~Add `EXPOSE` directives (P4)~~ ✅
+
+Per-target EXPOSE: `18789` for OpenClaw, `42617` for ZeroClaw, `6080` for computer variants.
+
+#### 16. ~~Replace pnpm global install with corepack (P1)~~ ✅
 
 ```dockerfile
-COPY --from=node:22-bookworm-slim /usr/local/bin/node /usr/local/bin/node
-COPY --from=node:22-bookworm-slim /usr/local/lib/node_modules /usr/local/lib/node_modules
-RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
-    && ln -s /usr/local/lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack \
-    && corepack enable pnpm
+RUN ln -s ... && corepack enable pnpm
 ```
 
-This eliminates remote script execution and pins to a Docker-verified Node image.
+#### 17. ~~Reduce runtime list duplication (M1)~~ ✅
 
-#### 2. Pin all runtime versions (S2, S9)
+Only 2 runtimes. The runtime is set via `ENV RUNTIME=` in each build target — no duplication.
 
-```dockerfile
-ARG OPENCLAW_VERSION=0.4.7      # was: latest
-ARG PICOCLAW_VERSION=0.2.3      # was: latest
-ARG NANOCLAW_REF=v0.1.0         # was: main (floating git ref)
-```
+#### 18. ~~Add `phase` field to tool manifests (M2)~~ — Descoped
 
-All five runtimes must have pinned, reproducible version ARGs.
-
-#### 3. Remove dead `nullclaw` case (S3)
-
-Delete the `nullclaw)` branch from `runtime_default_args()` in `entrypoint.sh`. NullClaw is not installed, not in `SUPPORTED_RUNTIMES`, and not smoke-tested. Add it back when NullClaw is actually shipped.
-
-#### 4. Fix tool setup.sh scripts that call `sudo apt-get` (S4, S5)
-
-`git/setup.sh` and `http/setup.sh` have `sudo apt-get install` fallbacks that always fail (no sudo for `clawden` user). These packages are already baked into the base image. Replace install branches with validate-only checks like `python/setup.sh` does.
-
-#### 5. Install missing `core-utils` components (C1)
-
-Add `yq` (mikefarah/yq binary), `file`, and `gzip` to the Dockerfile's apt-get layer. Update `core-utils/setup.sh` to validate all six components, not just `jq`.
-
-#### 6. Fix `$DEFAULT_ARGS` word-splitting (R1)
-
-Replace:
-```bash
-exec "$LAUNCHER" $DEFAULT_ARGS
-```
-With array expansion:
-```bash
-read -ra default_args <<< "$DEFAULT_ARGS"
-exec "$LAUNCHER" "${default_args[@]}"
-```
-
-### Phase 2 — Medium Severity
-
-#### 7. Runtime-aware HEALTHCHECK (S6)
-
-Set `RUNTIME_PORT` per runtime in entrypoint.sh before exec:
-```bash
-case "$RUNTIME" in
-    openclaw)  export RUNTIME_PORT="${RUNTIME_PORT:-18789}" ;;
-    openfang)  export RUNTIME_PORT="${RUNTIME_PORT:-4200}" ;;
-    *)         export RUNTIME_PORT="${RUNTIME_PORT:-8080}" ;;
-esac
-```
-
-#### 8. Sandbox `/proc` exposure (S7)
-
-Replace `--ro-bind / /` with explicit path binds (`/usr`, `/lib`, `/bin`, `/etc`) and `--proc /proc` so `/proc/1/environ` (API keys) is not leaked to sandboxed processes.
-
-#### 9. Add signal trap in entrypoint (R2)
-
-Add near the top of `entrypoint.sh`:
-```bash
-trap 'echo "[clawden] Interrupted during setup"; exit 130' INT TERM
-```
-
-#### 10. Validate env vars for all runtimes (R4)
-
-Extend `validate_runtime_env` to cover ZeroClaw, PicoClaw, NanoClaw, and OpenFang required config.
-
-#### 11. Fix tools.json output (C8)
-
-Write actual binary paths and versions instead of `"bin": "$setup_script"` and `"version": "unknown"`.
-
-#### 12. Spec parity fixes (C2, C3, C4, C6)
-
-- Add `hexyl` to `code-tools` (C2).
-- Correct Python version in manifest to `3.11` to match Bookworm (C3).
-- Remove or stub `browser`/`gui` tool references from comments (C4).
-- Add `env` table to `python/manifest.toml` (C6).
-
-#### 13. Remove vestigial `browser`/`gui` empty directories (C7)
-
-Delete `mkdir` lines for `/opt/clawden/tools/browser` and `/opt/clawden/tools/gui` from Dockerfile. Spec 024 clarifies these are image variants, not tool-layer entries.
-
-#### 14. Eliminate redundant `apt-get update` for p7zip purge (R5)
-
-Either don't install `p7zip-full` at all, or if needed for runtime install only, combine install and purge in a single `RUN` layer.
-
-### Phase 3 — Low Severity & Optimization
-
-#### 15. Add `EXPOSE` directives (P4)
-
-```dockerfile
-EXPOSE 8080 18789 4200
-```
-
-#### 16. Replace pnpm global install with corepack (P1)
-
-`corepack enable pnpm` is zero-install and built into Node 22. Remove `npm install -g pnpm`.
-
-#### 17. Reduce runtime list duplication (M1)
-
-The runtime list is maintained in 3 places (Dockerfile ARGs, entrypoint `SUPPORTED_RUNTIMES`, smoke-test loop). Consider extracting to a shared file that all three consume.
-
-#### 18. Add `phase` field to tool manifests (M2)
-
-Spec 024 defines `phase` in the manifest schema but no manifest includes it. Add `phase = 1` to core tools and `phase = 2` to standard tools.
+Tool manifests are not used at runtime. Deferred to if/when tool manifests are reintroduced.
 
 ## Plan
 
-- [ ] **Phase 1**: S1 — Replace `curl | bash` with `COPY --from=node:22-bookworm-slim`
-- [ ] **Phase 1**: S2/S9 — Pin OpenClaw, PicoClaw, NanoClaw versions
-- [ ] **Phase 1**: S3 — Remove `nullclaw` dead code from entrypoint
-- [ ] **Phase 1**: S4/S5 — Fix `git/setup.sh` and `http/setup.sh` sudo fallbacks
-- [ ] **Phase 1**: C1 — Install `yq`, `file`, `gzip`; update `core-utils/setup.sh`
-- [ ] **Phase 1**: R1 — Fix `$DEFAULT_ARGS` word-splitting
-- [ ] **Phase 2**: S6 — Runtime-aware HEALTHCHECK port
-- [ ] **Phase 2**: S7 — Sandbox path bind hardening
-- [ ] **Phase 2**: R2 — Add signal trap to entrypoint
-- [ ] **Phase 2**: R4 — Env validation for all runtimes
-- [ ] **Phase 2**: C8 — Fix tools.json binary/version output
-- [ ] **Phase 2**: C2/C3/C4/C6/C7 — Spec parity fixes
-- [ ] **Phase 2**: R5 — Remove p7zip round-trip layer
-- [ ] **Phase 3**: P4 — Add EXPOSE directives
-- [ ] **Phase 3**: P1 — Replace pnpm global install with corepack
-- [ ] **Phase 3**: M1 — Reduce runtime list duplication
-- [ ] **Phase 3**: M2 — Add phase field to tool manifests
+- [x] **Phase 1**: S1 — Replace `curl | bash` with `COPY --from=node:22-bookworm-slim`
+- [x] **Phase 1**: S2/S9 — Pin OpenClaw and ZeroClaw versions; remove unstable runtimes
+- [x] **Phase 1**: S3 — Remove dead code (entrypoint rewritten)
+- [x] **Phase 1**: S4/S5 — Remove tool activation system; pre-install everything
+- [x] **Phase 1**: C1 — Install `file`, `gzip` via apt-get
+- [x] **Phase 1**: R1 — Fix `$DEFAULT_ARGS` word-splitting (explicit exec args)
+- [x] **Phase 2**: S6 — Runtime-aware HEALTHCHECK port (per-target)
+- [x] **Phase 2**: S7 — Remove sandbox (runtimes + Docker handle isolation)
+- [x] **Phase 2**: R2 — Add signal trap to entrypoint
+- [x] **Phase 2**: R4 — Descoped (runtimes validate their own env)
+- [x] **Phase 2**: C8 — Removed tools.json (no tool activation)
+- [x] **Phase 2**: C2/C3/C4/C6/C7 — Resolved by removing tool layer
+- [x] **Phase 2**: R5 — Removed p7zip
+- [x] **Phase 3**: P4 — Per-target EXPOSE directives
+- [x] **Phase 3**: P1 — pnpm via corepack
+- [x] **Phase 3**: M1 — No duplication (2 runtimes, ENV per target)
+- [x] **Phase 3**: M2 — Descoped (manifests not used at runtime)
 
 ## Test
 
-- [ ] `docker build --target latest .` succeeds with no `curl | bash`
-- [ ] All runtime version ARGs are pinned (no `latest`, no floating refs)
-- [ ] `entrypoint.sh` has no `nullclaw` references
-- [ ] `git/setup.sh` and `http/setup.sh` contain no `sudo` or `apt-get install` calls
-- [ ] `yq --version`, `file --version`, `gzip --version` all succeed inside `:latest` image
-- [ ] Sandbox `clawden-sandbox` does not expose `/proc/1/environ`
-- [ ] `tools.json` contains actual binary paths and version strings
-- [ ] `HEALTHCHECK` uses correct port for openclaw (18789) and openfang (4200)
-- [ ] Build-time smoke test passes for all 5 runtimes
-- [ ] `cargo test -p clawden-core --quiet && cargo test -p clawden-cli --quiet` pass
+- [x] `docker build --target openclaw .` succeeds with no `curl | bash`
+- [x] All runtime version ARGs are pinned (no `latest`, no floating refs)
+- [x] `entrypoint.sh` has no `nullclaw` references
+- [x] No `sudo` or `apt-get install` in entrypoint or startup path
+- [x] `yq --version`, `file --version`, `gzip --version` available in the image
+- [x] No sandbox/bubblewrap in image
+- [x] No `tools.json` generated at startup
+- [x] `HEALTHCHECK` uses correct port for openclaw (18789) and zeroclaw (42617)
+- [x] Build-time smoke test passes for openclaw and zeroclaw
+- [x] `cargo test -p clawden-core --quiet && cargo test -p clawden-cli --quiet` pass
+
+## Follow-up
+
+- [x] Remove `docker/tools/` directory (old manifests/scripts no longer referenced)
+- [x] Add `yq` to complete `core-utils` parity without reintroducing the old tool layer
 
 ## Notes
 
 - Audit performed 2026-03-06. Full finding list: 1 critical, 6 high, 14 medium, 9 low across security, consistency, correctness, performance, UX, and maintenance.
-- Spec 052 (in-progress) handles the binary compatibility subset (glibc mismatch, arch errors). This spec covers all remaining findings.
-- Phase 2 runtimes (IronClaw, NullClaw, MicroClaw) are out of scope — they'll need their own Dockerfile entries when shipped.
+- Spec 052 (in-progress) handles the binary compatibility subset (glibc mismatch, arch errors).
+- Unstable runtimes (PicoClaw, NanoClaw, OpenFang, IronClaw, NullClaw, MicroClaw) are not included in the Docker image until they stabilize.

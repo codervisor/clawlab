@@ -38,6 +38,7 @@ FROM debian:trixie-slim AS base
 # Node.js 22 LTS — copied from official image (no curl|bash)
 COPY --from=node:22-bookworm-slim /usr/local/bin/node /usr/local/bin/node
 COPY --from=node:22-bookworm-slim /usr/local/lib/node_modules /usr/local/lib/node_modules
+COPY --from=mikefarah/yq:4.47.2 /usr/bin/yq /usr/local/bin/yq
 RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && ln -s /usr/local/lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack \
     && corepack enable pnpm

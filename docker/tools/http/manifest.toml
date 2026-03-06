@@ -1,8 +1,0 @@
-[tool]
-name = "http"
-description = "curl, wget"
-tier = "core"
-
-[dependencies]
-requires = []
-conflicts = []
