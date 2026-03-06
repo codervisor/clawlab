@@ -36,6 +36,20 @@ Rules:
 - `clawden run zeroclaw --help` shows runtime help output (passthrough)
 - Docker-specific execution uses `clawden docker run` (for `-p/--port`, `--rm`, `--restart`, `--network`, `--volume`, `--image`)
 
+### Docker runtime image
+
+ClawDen-managed Docker remains the preferred path:
+
+- Preferred: `cargo run -p clawden-cli -- docker run zeroclaw`
+- Direct Docker: `docker run --rm ghcr.io/codervisor/clawden-runtime:latest zeroclaw`
+- Advanced env contract: `docker run --rm -e RUNTIME=openclaw ghcr.io/codervisor/clawden-runtime:latest gateway`
+
+The published image is also self-describing for ad-hoc usage:
+
+- `docker run --rm ghcr.io/codervisor/clawden-runtime:latest --help`
+- `docker run --rm ghcr.io/codervisor/clawden-runtime:latest --list-runtimes`
+- `docker run --rm ghcr.io/codervisor/clawden-runtime:latest zeroclaw --help`
+
 ### Config translation pipeline
 
 Use one `clawden.yaml`; ClawDen translates it to runtime-native config automatically at run/start time.

@@ -16,11 +16,86 @@ EX_CONFIG=78
 
 RUNTIME="${RUNTIME:-}"
 TOOLS="${TOOLS:-}"
+SUPPORTED_RUNTIMES=(zeroclaw picoclaw openclaw nanoclaw openfang)
+
+supported_runtimes_csv() {
+    local joined=""
+    local runtime
+    for runtime in "${SUPPORTED_RUNTIMES[@]}"; do
+        if [ -n "$joined" ]; then
+            joined+=", "
+        fi
+        joined+="${runtime}"
+    done
+    printf '%s\n' "$joined"
+}
+
+print_supported_runtimes() {
+    printf '%s\n' "${SUPPORTED_RUNTIMES[@]}"
+}
+
+is_supported_runtime() {
+    local candidate="$1"
+    local runtime
+    for runtime in "${SUPPORTED_RUNTIMES[@]}"; do
+        if [ "$runtime" = "$candidate" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+print_usage() {
+    cat <<EOF
+ClawDen runtime image
+
+Usage:
+  docker run ghcr.io/codervisor/clawden-runtime:latest <runtime> [runtime-args...]
+  docker run -e RUNTIME=<runtime> ghcr.io/codervisor/clawden-runtime:latest [runtime-args...]
+
+Supported runtimes:
+  $(supported_runtimes_csv)
+
+Examples:
+  docker run --rm ghcr.io/codervisor/clawden-runtime:latest zeroclaw
+  docker run --rm ghcr.io/codervisor/clawden-runtime:latest zeroclaw --help
+  docker run --rm -e RUNTIME=openclaw ghcr.io/codervisor/clawden-runtime:latest gateway
+
+Wrapper commands:
+  --help           Show this help
+  --list-runtimes  Print supported runtime slugs
+EOF
+}
 
 if [ -z "$RUNTIME" ]; then
-    echo "Error: RUNTIME environment variable must be set (e.g., zeroclaw, picoclaw, openclaw, nanoclaw, openfang)" >&2
-    exit 1
+    if [ $# -eq 0 ]; then
+        echo "Error: missing runtime name." >&2
+        print_usage >&2
+        exit 1
+    fi
+
+    case "$1" in
+        --help|-h)
+            print_usage
+            exit 0
+            ;;
+        --list-runtimes)
+            print_supported_runtimes
+            exit 0
+            ;;
+    esac
+
+    if is_supported_runtime "$1"; then
+        RUNTIME="$1"
+        shift
+    else
+        echo "Error: Unknown runtime '$1'." >&2
+        print_usage >&2
+        exit 1
+    fi
 fi
+
+export RUNTIME
 
 # --- Tool setup ---
 TOOLS_STATE_DIR="/run/clawden"
@@ -150,7 +225,7 @@ case "$RUNTIME" in
         ;;
     *)
         echo "Error: Unknown runtime '${RUNTIME}'" >&2
-        echo "Supported runtimes: zeroclaw, picoclaw, openclaw, nanoclaw, openfang" >&2
+        echo "Supported runtimes: $(supported_runtimes_csv)" >&2
         exit 1
         ;;
 esac

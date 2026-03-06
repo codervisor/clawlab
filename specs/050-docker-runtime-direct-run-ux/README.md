@@ -1,5 +1,5 @@
 ---
-status: planned
+status: complete
 created: 2026-03-06
 priority: high
 tags:
@@ -10,7 +10,13 @@ tags:
 - onboarding
 parent: 017-docker-runtime-images
 created_at: 2026-03-06T05:14:56.087137077Z
-updated_at: 2026-03-06T05:14:56.087137077Z
+updated_at: 2026-03-06T05:44:57.787469995Z
+completed_at: 2026-03-06T05:44:57.787469995Z
+transitions:
+- status: in-progress
+  at: 2026-03-06T05:38:42.068915699Z
+- status: complete
+  at: 2026-03-06T05:44:57.787469995Z
 ---
 
 # Docker Runtime Direct-Run UX — Self-Describing Entrypoint & Positional Runtime Selection
@@ -135,26 +141,28 @@ This adds a thin wrapper concern to the image entrypoint, but that is the correc
 
 ## Plan
 
-- [ ] Refactor `docker/entrypoint.sh` to accept positional runtime selection when `RUNTIME` is unset
-- [ ] Add wrapper-level `--help` and `--list-runtimes`
-- [ ] Centralize supported runtime slug list to avoid drift between help and launch logic
-- [ ] Preserve existing `RUNTIME` + `TOOLS` env-driven behavior for ClawDen-managed runs
-- [ ] Update Docker image docs and README examples to show direct Docker usage first-class
-- [ ] Add regression tests for both env-driven and positional invocation modes
+- [x] Refactor `docker/entrypoint.sh` to accept positional runtime selection when `RUNTIME` is unset
+- [x] Add wrapper-level `--help` and `--list-runtimes`
+- [x] Centralize supported runtime slug list to avoid drift between help and launch logic
+- [x] Preserve existing `RUNTIME` + `TOOLS` env-driven behavior for ClawDen-managed runs
+- [x] Update Docker image docs and README examples to show direct Docker usage first-class
+- [x] Add regression tests for both env-driven and positional invocation modes
 
 ## Test
 
-- [ ] `docker run ghcr.io/codervisor/clawden-runtime:latest` prints usage guidance and exits with usage error
-- [ ] `docker run ghcr.io/codervisor/clawden-runtime:latest --help` prints wrapper help
-- [ ] `docker run ghcr.io/codervisor/clawden-runtime:latest --list-runtimes` prints supported runtimes
-- [ ] `docker run ghcr.io/codervisor/clawden-runtime:latest zeroclaw` starts ZeroClaw without requiring `-e RUNTIME=...`
-- [ ] `docker run ghcr.io/codervisor/clawden-runtime:latest zeroclaw --help` passes through to ZeroClaw help output
-- [ ] `docker run -e RUNTIME=zeroclaw ghcr.io/codervisor/clawden-runtime:latest` still works unchanged
-- [ ] `clawden docker run zeroclaw` still injects `RUNTIME` and works unchanged
-- [ ] Invalid runtime names print a usage message that includes supported runtimes
+- [x] `docker run ghcr.io/codervisor/clawden-runtime:latest` prints usage guidance and exits with usage error
+- [x] `docker run ghcr.io/codervisor/clawden-runtime:latest --help` prints wrapper help
+- [x] `docker run ghcr.io/codervisor/clawden-runtime:latest --list-runtimes` prints supported runtimes
+- [x] `docker run ghcr.io/codervisor/clawden-runtime:latest zeroclaw` starts ZeroClaw without requiring `-e RUNTIME=...`
+- [x] `docker run ghcr.io/codervisor/clawden-runtime:latest zeroclaw --help` passes through to ZeroClaw help output
+- [x] `docker run -e RUNTIME=zeroclaw ghcr.io/codervisor/clawden-runtime:latest` still works unchanged
+- [x] `clawden docker run zeroclaw` still injects `RUNTIME` and works unchanged
+- [x] Invalid runtime names print a usage message that includes supported runtimes
 
 ## Notes
 
 This is a follow-up to the original runtime image design, not a reversal of it. Spec 017 correctly centralized runtime selection inside the image, but the image boundary still needs a humane first-run experience.
 
 This also complements spec 037: `clawden docker run` remains the preferred ClawDen UX, but the raw published image should not feel broken when used directly.
+
+Validated with `cargo test -p clawden-cli --test docker_entrypoint --quiet` for the wrapper behavior and `cargo test -p clawden-cli --quiet` for end-to-end CLI regression coverage.
