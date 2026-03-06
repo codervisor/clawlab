@@ -39,34 +39,17 @@ FROM debian:trixie-slim AS base
 COPY --from=node:22-bookworm-slim /usr/local/bin/node /usr/local/bin/node
 COPY --from=node:22-bookworm-slim /usr/local/lib/node_modules /usr/local/lib/node_modules
 COPY --from=mikefarah/yq:4.47.2 /usr/bin/yq /usr/local/bin/yq
-RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
-    && ln -s /usr/local/lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack \
-    && corepack enable pnpm
+RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm
 
-# System tools — all pre-installed, no activation needed
+# System tools — minimal set needed by runtimes + healthcheck
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
-    wget \
     git \
-    openssh-client \
     jq \
-    tree \
-    file \
     gzip \
     unzip \
-    zip \
     python3 \
-    python3-pip \
-    python3-venv \
-    ripgrep \
-    fd-find \
-    bat \
-    sqlite3 \
-    netcat-openbsd \
-    socat \
-    dnsutils \
-    traceroute \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -86,36 +69,41 @@ COPY docker/entrypoint.sh /opt/clawden/entrypoint.sh
 COPY docker/defaults.toml /etc/clawden/defaults.toml
 RUN chmod +x /opt/clawden/entrypoint.sh
 
-# --- Install runtimes ---
-USER clawden
-
-ARG OPENCLAW_VERSION
-ARG ZEROCLAW_VERSION
-RUN clawden install "openclaw@${OPENCLAW_VERSION}" \
-    && clawden install "zeroclaw@${ZEROCLAW_VERSION}" \
-    && for runtime in openclaw zeroclaw; do \
-         bin="/home/clawden/.clawden/runtimes/${runtime}/current/${runtime}"; \
-         case "$runtime" in \
-           zeroclaw) probe="--version" ;; \
-           openclaw) probe="--help" ;; \
-         esac; \
-         echo "[clawden] Smoke testing ${runtime} (${probe})"; \
-         "$bin" "$probe" >/tmp/${runtime}.probe.log 2>&1 \
-           || { cat /tmp/${runtime}.probe.log >&2; exit 1; }; \
-         rm -f /tmp/${runtime}.probe.log; \
-       done \
-    && rm -rf /home/clawden/.clawden/cache
-
-USER root
-
 WORKDIR /home/clawden/workspace
 VOLUME /home/clawden/workspace
 
 USER clawden
 ENTRYPOINT ["/opt/clawden/entrypoint.sh"]
 
+# --- Install runtimes (separate stages to avoid shipping both in every image) ---
+
+# Install stage: OpenClaw
+FROM base AS install-openclaw
+USER clawden
+ARG OPENCLAW_VERSION
+RUN clawden install "openclaw@${OPENCLAW_VERSION}" \
+    && bin="/home/clawden/.clawden/runtimes/openclaw/current/openclaw" \
+    && echo "[clawden] Smoke testing openclaw (--help)" \
+    && "$bin" --help >/tmp/openclaw.probe.log 2>&1 \
+       || { cat /tmp/openclaw.probe.log >&2; exit 1; } \
+    && rm -f /tmp/openclaw.probe.log \
+    && rm -rf /home/clawden/.clawden/cache
+
+# Install stage: ZeroClaw
+FROM base AS install-zeroclaw
+USER clawden
+ARG ZEROCLAW_VERSION
+RUN clawden install "zeroclaw@${ZEROCLAW_VERSION}" \
+    && bin="/home/clawden/.clawden/runtimes/zeroclaw/current/zeroclaw" \
+    && echo "[clawden] Smoke testing zeroclaw (--version)" \
+    && "$bin" --version >/tmp/zeroclaw.probe.log 2>&1 \
+       || { cat /tmp/zeroclaw.probe.log >&2; exit 1; } \
+    && rm -f /tmp/zeroclaw.probe.log \
+    && rm -rf /home/clawden/.clawden/cache
+
 # --- OpenClaw basic (default) ---
 FROM base AS openclaw
+COPY --from=install-openclaw /home/clawden/.clawden/runtimes/openclaw /home/clawden/.clawden/runtimes/openclaw
 ENV RUNTIME=openclaw
 EXPOSE 18789
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
@@ -123,6 +111,7 @@ HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
 
 # --- ZeroClaw basic ---
 FROM base AS zeroclaw
+COPY --from=install-zeroclaw /home/clawden/.clawden/runtimes/zeroclaw /home/clawden/.clawden/runtimes/zeroclaw
 ENV RUNTIME=zeroclaw
 EXPOSE 42617
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
@@ -139,12 +128,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 USER clawden
 
 FROM base-browser AS openclaw-browser
+COPY --from=install-openclaw /home/clawden/.clawden/runtimes/openclaw /home/clawden/.clawden/runtimes/openclaw
 ENV RUNTIME=openclaw
 EXPOSE 18789
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD curl -sf http://localhost:18789/health || exit 1
 
 FROM base-browser AS zeroclaw-browser
+COPY --from=install-zeroclaw /home/clawden/.clawden/runtimes/zeroclaw /home/clawden/.clawden/runtimes/zeroclaw
 ENV RUNTIME=zeroclaw
 EXPOSE 42617
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
@@ -164,12 +155,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 USER clawden
 
 FROM base-computer AS openclaw-computer
+COPY --from=install-openclaw /home/clawden/.clawden/runtimes/openclaw /home/clawden/.clawden/runtimes/openclaw
 ENV RUNTIME=openclaw
 EXPOSE 18789 6080
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD curl -sf http://localhost:18789/health || exit 1
 
 FROM base-computer AS zeroclaw-computer
+COPY --from=install-zeroclaw /home/clawden/.clawden/runtimes/zeroclaw /home/clawden/.clawden/runtimes/zeroclaw
 ENV RUNTIME=zeroclaw
 EXPOSE 42617 6080
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \

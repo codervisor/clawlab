@@ -1,0 +1,32 @@
+# Build artifacts
+target/
+tmp/
+
+# Node / frontend
+node_modules/
+dashboard/node_modules/
+dashboard/dist/
+sdk/node_modules/
+sdk/dist/
+npm/
+
+# Version control & CI
+.git/
+.github/
+
+# Specs & docs (not needed in image)
+specs/
+*.md
+!docker/*.md
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.swo
+
+# Lock files not needed for Rust-only build
+pnpm-lock.yaml
+pnpm-workspace.yaml
+package.json
