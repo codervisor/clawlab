@@ -20,23 +20,7 @@ services:
       target: openclaw
     ports:
       - "18789:18789"
-    environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
-      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-      - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
-      - GROQ_API_KEY=${GROQ_API_KEY:-}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
-      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
-      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-}
-      - SLACK_APP_TOKEN=${SLACK_APP_TOKEN:-}
-      - FEISHU_APP_ID=${FEISHU_APP_ID:-}
-      - FEISHU_APP_SECRET=${FEISHU_APP_SECRET:-}
-      - CLAWDEN_USE_CLI=${CLAWDEN_USE_CLI:-0}
-      - CLAWDEN_CHANNELS=${CLAWDEN_CHANNELS:-}
-      - CLAWDEN_ALLOWED_USERS=${CLAWDEN_ALLOWED_USERS:-}
-      - CLAWDEN_LLM_API_KEY=${CLAWDEN_LLM_API_KEY:-}
+    env_file: .env
     volumes:
       - workspace:/home/clawden/workspace
     restart: unless-stopped
@@ -49,23 +33,7 @@ services:
       target: zeroclaw
     ports:
       - "42617:42617"
-    environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
-      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-      - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
-      - GROQ_API_KEY=${GROQ_API_KEY:-}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
-      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
-      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-}
-      - SLACK_APP_TOKEN=${SLACK_APP_TOKEN:-}
-      - FEISHU_APP_ID=${FEISHU_APP_ID:-}
-      - FEISHU_APP_SECRET=${FEISHU_APP_SECRET:-}
-      - CLAWDEN_USE_CLI=${CLAWDEN_USE_CLI:-0}
-      - CLAWDEN_CHANNELS=${CLAWDEN_CHANNELS:-}
-      - CLAWDEN_ALLOWED_USERS=${CLAWDEN_ALLOWED_USERS:-}
-      - CLAWDEN_LLM_API_KEY=${CLAWDEN_LLM_API_KEY:-}
+    env_file: .env
     volumes:
       - workspace:/home/clawden/workspace
     restart: unless-stopped
