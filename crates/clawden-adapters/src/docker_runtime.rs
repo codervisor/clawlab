@@ -1,6 +1,6 @@
 use anyhow::{bail, Context, Result};
 use clawden_core::{AgentConfig, ClawRuntime, RuntimeConfig};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 const DEFAULT_IMAGE: &str = "ghcr.io/codervisor/clawden-runtime:latest";
 
@@ -49,8 +49,14 @@ pub fn start_container(runtime: ClawRuntime, config: &AgentConfig) -> Result<Str
     let image =
         std::env::var("CLAWDEN_RUNTIME_IMAGE").unwrap_or_else(|_| DEFAULT_IMAGE.to_string());
 
-    // Best-effort cleanup in case a stale same-name container exists.
-    let _ = Command::new("docker").args(["rm", "-f", &name]).status();
+    // Best-effort cleanup in case a stale same-name container exists. Suppress
+    // daemon noise when the container is absent or when a previous instance is
+    // removed successfully.
+    let _ = Command::new("docker")
+        .args(["rm", "-f", &name])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
 
     let args = build_run_args(runtime.clone(), config, &name, &image);
 
@@ -65,6 +71,22 @@ pub fn start_container(runtime: ClawRuntime, config: &AgentConfig) -> Result<Str
             "docker run failed for {}: {}",
             runtime.as_slug(),
             stderr.trim()
+        );
+    }
+
+    if !container_running(&name)? {
+        let logs = container_logs(&name)?;
+        if logs.is_empty() {
+            bail!(
+                "docker runtime {} exited immediately after start",
+                runtime.as_slug()
+            );
+        }
+
+        bail!(
+            "docker runtime {} exited immediately after start:\n{}",
+            runtime.as_slug(),
+            logs
         );
     }
 
@@ -216,12 +238,34 @@ pub fn container_running(container_id: &str) -> Result<bool> {
     Ok(stdout.trim() == "true")
 }
 
+fn container_logs(container_id: &str) -> Result<String> {
+    ensure_docker_available()?;
+    let output = Command::new("docker")
+        .args(["logs", "--tail", "50", container_id])
+        .output()
+        .context("failed to read docker container logs")?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let combined = if stdout.trim().is_empty() {
+        stderr.trim().to_string()
+    } else if stderr.trim().is_empty() {
+        stdout.trim().to_string()
+    } else {
+        format!("{}\n{}", stdout.trim(), stderr.trim())
+    };
+
+    Ok(combined)
+}
+
 fn ensure_docker_available() -> Result<()> {
-    let status = Command::new("docker")
+    let output = Command::new("docker")
         .arg("--version")
-        .status()
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
         .context("failed to run docker --version")?;
-    if !status.success() {
+    if !output.status.success() {
         bail!("docker CLI is not available");
     }
     Ok(())

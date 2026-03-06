@@ -38,12 +38,22 @@ case "$1" in
     exit 0
     ;;
   rm)
+        if [ "${{FAKE_DOCKER_RM_FAIL:-0}}" = "1" ]; then
+            echo "Error response from daemon: No such container: $3" >&2
+            exit 1
+        fi
     exit 0
     ;;
   run)
     echo "fake-container-id"
     exit 0
     ;;
+    logs)
+        if [ "${{FAKE_DOCKER_LOGS:-}}" != "" ]; then
+            printf '%s\n' "${{FAKE_DOCKER_LOGS}}" >&2
+        fi
+        exit 0
+        ;;
   stop)
     exit 0
     ;;
@@ -51,7 +61,7 @@ case "$1" in
     exit 0
     ;;
   inspect)
-    echo "true"
+        echo "${{FAKE_DOCKER_INSPECT_RUNNING:-true}}"
     exit 0
     ;;
   *)
@@ -236,6 +246,84 @@ channels:
     assert!(log.contains("ZEROCLAW_LLM_MODEL=gpt-4o-mini"));
     assert!(log.contains("--channels=discord"));
     assert!(log.contains("-p 3000:42617"));
+}
+
+#[test]
+fn run_docker_suppresses_missing_stale_container_noise() {
+    let dir = temp_dir("docker-fake-run-rm-noise");
+    let home = dir.join("home");
+    let project = dir.join("project");
+    let bin_dir = dir.join("bin");
+    let docker_log = dir.join("docker.log");
+
+    fs::create_dir_all(&home).expect("home should be created");
+    fs::create_dir_all(&project).expect("project should be created");
+    fs::create_dir_all(&bin_dir).expect("bin dir should be created");
+    setup_fake_docker(&bin_dir, &docker_log);
+
+    let base_path = std::env::var("PATH").unwrap_or_default();
+    let path = format!("{}:{}", bin_dir.display(), base_path);
+
+    let output = Command::new(binary_path())
+        .current_dir(&project)
+        .env("HOME", &home)
+        .env("PATH", path)
+        .env("FAKE_DOCKER_RM_FAIL", "1")
+        .args(["docker", "run", "openclaw"])
+        .output()
+        .expect("run should execute");
+
+    assert!(output.status.success());
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        !combined.contains("No such container"),
+        "combined output was: {combined}"
+    );
+    assert!(combined.contains("Started openclaw via Docker"));
+}
+
+#[test]
+fn run_docker_fails_when_container_exits_immediately() {
+    let dir = temp_dir("docker-fake-run-exits");
+    let home = dir.join("home");
+    let project = dir.join("project");
+    let bin_dir = dir.join("bin");
+    let docker_log = dir.join("docker.log");
+
+    fs::create_dir_all(&home).expect("home should be created");
+    fs::create_dir_all(&project).expect("project should be created");
+    fs::create_dir_all(&bin_dir).expect("bin dir should be created");
+    setup_fake_docker(&bin_dir, &docker_log);
+
+    let base_path = std::env::var("PATH").unwrap_or_default();
+    let path = format!("{}:{}", bin_dir.display(), base_path);
+
+    let output = Command::new(binary_path())
+        .current_dir(&project)
+        .env("HOME", &home)
+        .env("PATH", path)
+        .env("FAKE_DOCKER_INSPECT_RUNNING", "false")
+        .env("FAKE_DOCKER_LOGS", "runtime boot failed")
+        .args(["docker", "run", "openclaw"])
+        .output()
+        .expect("run should execute");
+
+    assert!(!output.status.success());
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(combined.contains("docker runtime openclaw exited immediately after start"));
+    assert!(combined.contains("runtime boot failed"));
+    assert!(
+        !combined.contains("Started openclaw via Docker"),
+        "combined output was: {combined}"
+    );
 }
 
 #[test]
