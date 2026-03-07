@@ -7,17 +7,9 @@
 # CLI-managed mode (config translation, channel tokens, allowed-users):
 #   CLAWDEN_USE_CLI=1 docker compose up zeroclaw
 #
-# Build from source (instead of pulling from registry):
-#   docker compose build openclaw
-#   docker compose up openclaw
-
 services:
   openclaw:
     image: ghcr.io/codervisor/openclaw:latest
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
-      target: openclaw
     ports:
       - "18789:18789"
     env_file: .env
@@ -27,10 +19,6 @@ services:
 
   zeroclaw:
     image: ghcr.io/codervisor/zeroclaw:latest
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
-      target: zeroclaw
     ports:
       - "42617:42617"
     env_file: .env

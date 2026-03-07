@@ -166,6 +166,7 @@ async fn main() -> Result<()> {
             )?,
             ConfigCommand::Env { reveal } => commands::exec_config_env(reveal)?,
         },
+        Commands::Workspace { command } => commands::exec_workspace(command)?,
     }
 
     Ok(())

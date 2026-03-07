@@ -103,7 +103,7 @@ RUN clawden install "zeroclaw@${ZEROCLAW_VERSION}" \
 
 # --- OpenClaw basic (default) ---
 FROM base AS openclaw
-COPY --from=install-openclaw /home/clawden/.clawden/runtimes/openclaw /home/clawden/.clawden/runtimes/openclaw
+COPY --from=install-openclaw --chown=clawden:clawden /home/clawden/.clawden/runtimes/openclaw /home/clawden/.clawden/runtimes/openclaw
 ENV RUNTIME=openclaw
 EXPOSE 18789
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
@@ -111,7 +111,7 @@ HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
 
 # --- ZeroClaw basic ---
 FROM base AS zeroclaw
-COPY --from=install-zeroclaw /home/clawden/.clawden/runtimes/zeroclaw /home/clawden/.clawden/runtimes/zeroclaw
+COPY --from=install-zeroclaw --chown=clawden:clawden /home/clawden/.clawden/runtimes/zeroclaw /home/clawden/.clawden/runtimes/zeroclaw
 ENV RUNTIME=zeroclaw
 EXPOSE 42617
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
@@ -128,14 +128,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 USER clawden
 
 FROM base-browser AS openclaw-browser
-COPY --from=install-openclaw /home/clawden/.clawden/runtimes/openclaw /home/clawden/.clawden/runtimes/openclaw
+COPY --from=install-openclaw --chown=clawden:clawden /home/clawden/.clawden/runtimes/openclaw /home/clawden/.clawden/runtimes/openclaw
 ENV RUNTIME=openclaw
 EXPOSE 18789
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD curl -sf http://localhost:18789/health || exit 1
 
 FROM base-browser AS zeroclaw-browser
-COPY --from=install-zeroclaw /home/clawden/.clawden/runtimes/zeroclaw /home/clawden/.clawden/runtimes/zeroclaw
+COPY --from=install-zeroclaw --chown=clawden:clawden /home/clawden/.clawden/runtimes/zeroclaw /home/clawden/.clawden/runtimes/zeroclaw
 ENV RUNTIME=zeroclaw
 EXPOSE 42617
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
@@ -155,14 +155,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 USER clawden
 
 FROM base-computer AS openclaw-computer
-COPY --from=install-openclaw /home/clawden/.clawden/runtimes/openclaw /home/clawden/.clawden/runtimes/openclaw
+COPY --from=install-openclaw --chown=clawden:clawden /home/clawden/.clawden/runtimes/openclaw /home/clawden/.clawden/runtimes/openclaw
 ENV RUNTIME=openclaw
 EXPOSE 18789 6080
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD curl -sf http://localhost:18789/health || exit 1
 
 FROM base-computer AS zeroclaw-computer
-COPY --from=install-zeroclaw /home/clawden/.clawden/runtimes/zeroclaw /home/clawden/.clawden/runtimes/zeroclaw
+COPY --from=install-zeroclaw --chown=clawden:clawden /home/clawden/.clawden/runtimes/zeroclaw /home/clawden/.clawden/runtimes/zeroclaw
 ENV RUNTIME=zeroclaw
 EXPOSE 42617 6080
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \

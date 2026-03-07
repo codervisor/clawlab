@@ -206,6 +206,11 @@ pub enum Commands {
         #[command(subcommand)]
         command: ConfigCommand,
     },
+    /// Manage git-backed agent workspace persistence
+    Workspace {
+        #[command(subcommand)]
+        command: WorkspaceCommand,
+    },
 }
 
 #[cfg(test)]
@@ -377,6 +382,43 @@ pub enum ConfigCommand {
         /// Show full values instead of redacting.
         #[arg(long, default_value_t = false)]
         reveal: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum WorkspaceCommand {
+    /// Restore agent workspace from a git repository
+    Restore {
+        /// Git repo URL or owner/repo shorthand (e.g. codervisor/agent-memory)
+        #[arg(long)]
+        repo: String,
+        /// Auth token for private repos (e.g. GitHub PAT)
+        #[arg(long)]
+        token: Option<String>,
+        /// Target directory (default: auto-detected workspace dir)
+        #[arg(long)]
+        target: Option<String>,
+        /// Git branch to clone (default: main)
+        #[arg(long, default_value = "main")]
+        branch: String,
+    },
+    /// Sync (commit and push) workspace changes back to the remote
+    Sync {
+        /// Target directory (default: auto-detected workspace dir)
+        #[arg(long)]
+        target: Option<String>,
+        /// Override commit message
+        #[arg(long, short = 'm')]
+        message: Option<String>,
+        /// Auth token for push (if not stored in git remote URL)
+        #[arg(long)]
+        token: Option<String>,
+    },
+    /// Show workspace repository status
+    Status {
+        /// Target directory (default: auto-detected workspace dir)
+        #[arg(long)]
+        target: Option<String>,
     },
 }
 

@@ -24,6 +24,10 @@ trap 'echo "[clawden] Interrupted"; exit 130' INT TERM
 RUNTIME="${RUNTIME:-}"
 CLAWDEN_USE_CLI="${CLAWDEN_USE_CLI:-0}"
 CLAWDEN_RUNTIMES="${HOME}/.clawden/runtimes"
+CLAWDEN_MEMORY_REPO="${CLAWDEN_MEMORY_REPO:-}"
+CLAWDEN_MEMORY_TOKEN="${CLAWDEN_MEMORY_TOKEN:-}"
+CLAWDEN_MEMORY_PATH="${CLAWDEN_MEMORY_PATH:-}"
+CLAWDEN_MEMORY_BRANCH="${CLAWDEN_MEMORY_BRANCH:-main}"
 
 # --- Help ---
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
@@ -61,6 +65,11 @@ Environment variables:
   CLAWDEN_ALLOWED_USERS   Comma-separated user allowlist (e.g. Telegram IDs)
   CLAWDEN_LLM_API_KEY     LLM API key override (provider-agnostic)
 
+  CLAWDEN_MEMORY_REPO     Git repo URL for agent memory bootstrap
+  CLAWDEN_MEMORY_TOKEN    Auth token for private memory repos (e.g. GitHub PAT)
+  CLAWDEN_MEMORY_PATH     Clone target (default: /home/clawden/workspace)
+  CLAWDEN_MEMORY_BRANCH   Git branch to clone (default: main)
+
 The container auto-detects which runtime to start from the image metadata.
 Common system tools (git, curl, jq, python3, yq) are pre-installed.
 EOF
@@ -86,6 +95,20 @@ if [ -z "$RUNTIME" ]; then
     fi
 fi
 export RUNTIME
+
+# ============================================================
+# Memory bootstrap: restore agent workspace from a git repo.
+# Delegates to `clawden workspace restore` for all git logic.
+# Best-effort — failure warns but does not block runtime start.
+# ============================================================
+if [ -n "$CLAWDEN_MEMORY_REPO" ]; then
+    RESTORE_ARGS=(--repo "$CLAWDEN_MEMORY_REPO" --branch "$CLAWDEN_MEMORY_BRANCH")
+    [ -n "$CLAWDEN_MEMORY_TOKEN" ] && RESTORE_ARGS+=(--token "$CLAWDEN_MEMORY_TOKEN")
+    [ -n "$CLAWDEN_MEMORY_PATH" ]  && RESTORE_ARGS+=(--target "$CLAWDEN_MEMORY_PATH")
+
+    clawden workspace restore "${RESTORE_ARGS[@]}" || \
+        echo "[clawden] Warning: workspace restore failed (continuing without memory)" >&2
+fi
 
 # ============================================================
 # CLI-managed mode: delegate to `clawden run` for full config

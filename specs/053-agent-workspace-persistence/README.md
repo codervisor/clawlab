@@ -1,5 +1,5 @@
 ---
-status: planned
+status: in-progress
 created: 2026-03-06
 priority: high
 tags:
@@ -11,7 +11,10 @@ tags:
 depends_on:
 - 054-agent-fleet-execution-layer
 created_at: 2026-03-06T07:10:43.312124552Z
-updated_at: 2026-03-06T07:49:44.060892272Z
+updated_at: 2026-03-07T02:33:38.764062Z
+transitions:
+- status: in-progress
+  at: 2026-03-07T02:33:38.764062Z
 ---
 
 # Agent Workspace Persistence — Git-Backed Memory Sync & Recovery
@@ -76,6 +79,48 @@ Git is the natural choice for agent workspaces:
 └───────────────────────────────────────────────────┘
 ```
 
+### Docker Bootstrap Integration
+
+The Docker entrypoint is the primary consumer of `clawden workspace restore`. Instead of raw git operations in shell, the entrypoint delegates to the CLI:
+
+```
+entrypoint.sh
+  │
+  ├─ if CLAWDEN_MEMORY_REPO is set:
+  │    exec clawden workspace restore \
+  │      --repo "$CLAWDEN_MEMORY_REPO" \
+  │      --token "$CLAWDEN_MEMORY_TOKEN" \
+  │      --target "$CLAWDEN_MEMORY_PATH" \
+  │      --branch "$CLAWDEN_MEMORY_BRANCH"
+  │
+  └─ then launch runtime as usual
+```
+
+**Environment variables** (Docker-specific convenience, all map to CLI flags):
+
+| Env Var | CLI Flag | Default | Description |
+|---------|----------|---------|-------------|
+| `CLAWDEN_MEMORY_REPO` | `--repo` | — | Git repo URL or `owner/repo` shorthand |
+| `CLAWDEN_MEMORY_TOKEN` | `--token` | — | Auth token for private repos (GitHub PAT) |
+| `CLAWDEN_MEMORY_PATH` | `--target` | workspace dir | Clone destination |
+| `CLAWDEN_MEMORY_BRANCH` | `--branch` | `main` | Git branch |
+
+**docker-compose.yml** passes these through so users only need a `.env` file:
+
+```yaml
+services:
+  openclaw:
+    environment:
+      - CLAWDEN_MEMORY_REPO=${CLAWDEN_MEMORY_REPO:-}
+      - CLAWDEN_MEMORY_TOKEN=${CLAWDEN_MEMORY_TOKEN:-}
+```
+
+**Key design decisions:**
+- **Best-effort**: restore failure logs a warning but does not block runtime start
+- **Token scrubbing**: credentials never appear in logs (grep -v on git output, `--token` treated as secret in CLI)
+- **Idempotent**: if workspace already has `.git`, pull instead of clone
+- **Shorthand support**: `codervisor/agent-memory` expands to `https://github.com/codervisor/agent-memory.git`
+
 ### Sync Engine
 
 Runs as a background task within `clawden up` or triggered by the agent's heartbeat:
@@ -89,12 +134,13 @@ Sync interval is configurable per-agent. Default: 30 minutes. Critical agents (l
 
 ### Restore Engine
 
-Triggered on `clawden up` when an agent's workspace directory is empty or missing:
+Triggered on `clawden up`, `clawden workspace restore`, or Docker entrypoint when workspace is empty/missing:
 
-1. Check if `workspace.repo` is configured for the agent
-2. Clone (or pull if partial) into the agent's workspace path
-3. Verify workspace integrity (MEMORY.md, IDENTITY.md exist)
-4. Signal agent ready — the runtime reads restored files on startup
+1. Check if `workspace.repo` is configured (clawden.yaml) or `CLAWDEN_MEMORY_REPO` is set (Docker env)
+2. Build authenticated URL — insert token into HTTPS URL, support `owner/repo` shorthand
+3. Clone (or fast-forward pull if `.git` exists) into the agent's workspace path
+4. Verify workspace integrity (key files exist)
+5. Signal agent ready — the runtime reads restored files on startup
 
 ### Multi-Agent Layout
 
@@ -146,35 +192,42 @@ agents:
 - ClawDen validates repo visibility before first sync and warns if public
 - Git auth reuses existing `GITHUB_TOKEN` or SSH key config from ClawDen's credential store
 - `.gitignore` excludes runtime internals (`.openclaw/`, credentials, temp files)
+- Tokens are never logged — all git output is scrubbed before display
 
 ## Plan
 
-- [ ] **Phase 1: Sync Engine** — Implement git-based workspace sync as a Rust module in `clawden-core`. Support manual `clawden workspace sync` command.
-- [ ] **Phase 2: Restore Engine** — Implement workspace restore on `clawden up` when workspace is empty. Clone from configured repo, verify integrity.
-- [ ] **Phase 3: Auto-Sync** — Background sync task that runs on a configurable interval during `clawden up`. Integrate with process supervisor from spec 050.
-- [ ] **Phase 4: Config & CLI** — Add `workspace:` section to `clawden.yaml` schema. Add `clawden workspace status/history/sync/restore` subcommands.
-- [ ] **Phase 5: Multi-Agent Layout** — Support path-prefixed multi-agent repos. Shared context directory for cross-agent knowledge.
+- [ ] **Phase 1: Restore CLI** — Implement `clawden workspace restore` as a Rust command in `clawden-cli`. Handles clone/pull, token auth, shorthand expansion, token scrubbing. This is the foundation everything else builds on.
+- [ ] **Phase 2: Docker Bootstrap** — Update `docker/entrypoint.sh` to delegate to `clawden workspace restore` instead of raw git. Add `CLAWDEN_MEMORY_*` env vars to `docker-compose.yml`. Remove shell-level git logic from entrypoint.
+- [ ] **Phase 3: Sync Engine** — Implement `clawden workspace sync` for push-back. Smart commit (skip timestamp-only changes), retry with backoff, conflict resolution via rebase.
+- [ ] **Phase 4: Auto-Sync** — Background sync task that runs on a configurable interval during `clawden up`. Integrate with process supervisor.
+- [ ] **Phase 5: Config & Status** — Add `workspace:` section to `clawden.yaml` schema. Add `clawden workspace status/history` subcommands.
+- [ ] **Phase 6: Multi-Agent Layout** — Support path-prefixed multi-agent repos. Shared context directory for cross-agent knowledge.
 
 ## Test
 
+- [ ] `clawden workspace restore --repo owner/repo --token TOKEN` clones into target dir
+- [ ] `clawden workspace restore` on existing `.git` dir does fast-forward pull instead of clone
+- [ ] Token is never visible in stdout/stderr during restore or sync
+- [ ] Docker entrypoint with `CLAWDEN_MEMORY_REPO` set calls `clawden workspace restore` and starts runtime
+- [ ] Docker entrypoint without `CLAWDEN_MEMORY_REPO` skips restore and starts runtime normally
+- [ ] Restore failure logs warning but runtime still starts (best-effort)
 - [ ] Sync engine commits and pushes workspace changes to a test repo
-- [ ] Restore engine clones workspace into empty directory and verifies file integrity
-- [ ] Kill agent workspace dir, run `clawden up`, verify workspace is auto-restored from repo
 - [ ] Two agents in same repo with different paths don't interfere with each other
 - [ ] Conflict scenario: modify workspace on two hosts, verify rebase resolves cleanly
-- [ ] Public repo detection: `clawden up` warns if workspace repo is not private
+- [ ] Public repo detection: `clawden workspace restore` warns if repo is not private
 
 ## Notes
 
 ### Real-World Validation
 
-This spec was born from a live problem: an OpenClaw agent running on a GitHub Codespace had no persistence story. The manual workaround (agent self-syncing via heartbeat to a private repo) works but is fragile and agent-dependent. ClawDen should own this.
+This spec was born from a live problem: an OpenClaw agent running in Docker had its memory persisted at `~/.openclaw/workspace` to `github.com/codervisor/agent-memory` (private), with frequent sync to the remote. When the container is recreated, there's no way to bootstrap that memory back. The entrypoint needs to restore it before the runtime starts — and that logic belongs in the CLI, not as raw shell in the entrypoint.
 
 ### Alternatives Considered
 
 - **S3/GCS blob storage**: Loses versioning, diffability, and free hosting. Git is better for text-heavy workspaces.
-- **SQLite in spec 050**: That's for fleet orchestration state (agents, tasks, routing). Workspace memory is conceptually different — it's the agent's own cognitive state, not ClawDen's operational state.
+- **SQLite in fleet orchestration**: That's for fleet state (agents, tasks, routing). Workspace memory is conceptually different — it's the agent's own cognitive state, not ClawDen's operational state.
 - **Runtime-native solutions**: Some runtimes may have their own persistence (e.g., OpenClaw's memory system). ClawDen's approach is runtime-agnostic and works as a safety net regardless.
+- **Raw shell in entrypoint**: Works as a quick fix but duplicates logic, can't be tested, and doesn't integrate with `clawden.yaml` config or the CLI workflow. The CLI should own this.
 
 ### Open Questions
 
