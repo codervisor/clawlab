@@ -111,6 +111,8 @@ pub async fn exec_up(
             ExecutionMode::Docker => {
                 let rt = parse_runtime(&runtime)?;
                 let mut docker_env = env_vars.clone();
+                // Forward CLAWDEN_MEMORY_* so Docker entrypoint can bootstrap workspace
+                crate::commands::run::inject_host_env_memory_vars(&mut docker_env);
                 for (key, value) in &env_overrides {
                     docker_env.retain(|(k, _)| k != key);
                     docker_env.push((key.clone(), value.clone()));

@@ -401,4 +401,40 @@ mod tests {
             "ghcr.io/codervisor/zeroclaw:latest"
         );
     }
+
+    #[test]
+    fn build_run_args_forwards_memory_env_vars() {
+        let cfg = AgentConfig {
+            name: "alpha".to_string(),
+            runtime: ClawRuntime::OpenClaw,
+            model: None,
+            env_vars: vec![
+                ("CLAWDEN_MEMORY_REPO".to_string(), "owner/repo".to_string()),
+                ("CLAWDEN_MEMORY_TOKEN".to_string(), "ghp_test".to_string()),
+                ("CLAWDEN_MEMORY_BRANCH".to_string(), "main".to_string()),
+            ],
+            channels: vec![],
+            tools: vec![],
+        };
+
+        let args = build_run_args(
+            ClawRuntime::OpenClaw,
+            &cfg,
+            "clawden-openclaw-alpha",
+            "ghcr.io/codervisor/openclaw:latest",
+        );
+
+        assert!(
+            args.iter().any(|a| a == "CLAWDEN_MEMORY_REPO=owner/repo"),
+            "CLAWDEN_MEMORY_REPO should be forwarded to container"
+        );
+        assert!(
+            args.iter().any(|a| a == "CLAWDEN_MEMORY_TOKEN=ghp_test"),
+            "CLAWDEN_MEMORY_TOKEN should be forwarded to container"
+        );
+        assert!(
+            args.iter().any(|a| a == "CLAWDEN_MEMORY_BRANCH=main"),
+            "CLAWDEN_MEMORY_BRANCH should be forwarded to container"
+        );
+    }
 }

@@ -93,6 +93,8 @@ pub async fn exec_run(
     };
     // Auto-inject detected host-env channel tokens at lowest precedence
     inject_host_env_channel_tokens(&mut env_vars);
+    // Forward CLAWDEN_MEMORY_* so Docker entrypoint can bootstrap workspace
+    inject_host_env_memory_vars(&mut env_vars);
     apply_shortcut_env_overrides(&mut env_vars, &opts)?;
     let env_overrides = parse_env_overrides(&opts.env_vars)?;
     if !env_overrides.is_empty() {
@@ -676,6 +678,27 @@ fn inject_host_env_channel_tokens(env_vars: &mut Vec<(String, String)>) {
     }
 }
 
+const MEMORY_ENV_VARS: &[&str] = &[
+    "CLAWDEN_MEMORY_REPO",
+    "CLAWDEN_MEMORY_TOKEN",
+    "CLAWDEN_MEMORY_PATH",
+    "CLAWDEN_MEMORY_BRANCH",
+];
+
+/// Forward `CLAWDEN_MEMORY_*` host env vars into the runtime env so the Docker
+/// entrypoint can bootstrap agent workspace without explicit `-e` flags.
+pub(crate) fn inject_host_env_memory_vars(env_vars: &mut Vec<(String, String)>) {
+    for var_name in MEMORY_ENV_VARS {
+        if !env_vars.iter().any(|(k, _)| k == *var_name) {
+            if let Ok(val) = std::env::var(var_name) {
+                if !val.trim().is_empty() {
+                    env_vars.push((var_name.to_string(), val));
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -1040,6 +1063,54 @@ providers:
         match orig {
             Some(v) => std::env::set_var("TELEGRAM_BOT_TOKEN", v),
             None => std::env::remove_var("TELEGRAM_BOT_TOKEN"),
+        }
+    }
+
+    #[test]
+    fn inject_host_env_memory_vars_forwards_memory_env() {
+        use super::inject_host_env_memory_vars;
+        use crate::commands::test_env_lock;
+
+        let _guard = test_env_lock().lock().expect("env lock");
+        let orig_repo = std::env::var("CLAWDEN_MEMORY_REPO").ok();
+        let orig_token = std::env::var("CLAWDEN_MEMORY_TOKEN").ok();
+        std::env::set_var("CLAWDEN_MEMORY_REPO", "owner/repo");
+        std::env::set_var("CLAWDEN_MEMORY_TOKEN", "ghp_test");
+
+        let mut env = Vec::new();
+        inject_host_env_memory_vars(&mut env);
+        assert!(
+            env.iter()
+                .any(|(k, v)| k == "CLAWDEN_MEMORY_REPO" && v == "owner/repo"),
+            "CLAWDEN_MEMORY_REPO should be injected from host env"
+        );
+        assert!(
+            env.iter()
+                .any(|(k, v)| k == "CLAWDEN_MEMORY_TOKEN" && v == "ghp_test"),
+            "CLAWDEN_MEMORY_TOKEN should be injected from host env"
+        );
+
+        // Should not override existing value
+        let mut env2 = vec![(
+            "CLAWDEN_MEMORY_REPO".to_string(),
+            "explicit/repo".to_string(),
+        )];
+        inject_host_env_memory_vars(&mut env2);
+        assert_eq!(
+            env2.iter()
+                .find(|(k, _)| k == "CLAWDEN_MEMORY_REPO")
+                .map(|(_, v)| v.as_str()),
+            Some("explicit/repo"),
+            "existing CLAWDEN_MEMORY_REPO should not be overridden"
+        );
+
+        match orig_repo {
+            Some(v) => std::env::set_var("CLAWDEN_MEMORY_REPO", v),
+            None => std::env::remove_var("CLAWDEN_MEMORY_REPO"),
+        }
+        match orig_token {
+            Some(v) => std::env::set_var("CLAWDEN_MEMORY_TOKEN", v),
+            None => std::env::remove_var("CLAWDEN_MEMORY_TOKEN"),
         }
     }
 }
