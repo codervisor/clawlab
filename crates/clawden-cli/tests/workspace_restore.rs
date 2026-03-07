@@ -176,3 +176,47 @@ fn workspace_restore_bootstraps_nonempty_target_directory() {
     assert!(target.join("MEMORY.md").exists());
     assert!(target.join("notes.txt").exists());
 }
+
+#[test]
+fn workspace_restore_detects_installed_runtime_without_config() {
+    // When there is no clawden.yaml and no --agent flag, workspace restore
+    // should detect installed runtimes by checking for their executable on
+    // PATH and create symlinks for them.
+    let dir = temp_dir("workspace-restore-detect-installed");
+    let home = dir.join("home");
+    let repo_url = init_memory_repo(&dir);
+
+    fs::create_dir_all(&home).expect("home should be created");
+
+    // Place a fake `openclaw` executable on PATH to simulate an installed runtime.
+    let bin_dir = dir.join("bin");
+    fs::create_dir_all(&bin_dir).expect("bin dir should be created");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let stub = bin_dir.join("openclaw");
+        fs::write(&stub, "#!/bin/sh\n").expect("stub should be written");
+        fs::set_permissions(&stub, fs::Permissions::from_mode(0o755))
+            .expect("stub should be executable");
+    }
+
+    // No clawden.yaml — only use --repo flag.
+    let output = Command::new(binary_path())
+        .current_dir(&dir)
+        .env("HOME", &home)
+        .env("PATH", format!("{}:/usr/bin:/bin", bin_dir.display()))
+        .args(["workspace", "restore", "--repo", &repo_url])
+        .output()
+        .expect("workspace restore should run");
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let target = home.join(".clawden/workspace");
+    assert!(target.join(".git").exists());
+    assert!(target.join("MEMORY.md").exists());
+    assert_symlink_points_to(&home.join(".openclaw/workspace"), &target);
+}

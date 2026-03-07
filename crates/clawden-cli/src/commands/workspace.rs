@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use anyhow::{bail, Result};
-use clawden_core::runtime_descriptor;
+use clawden_core::{runtime_descriptor, runtime_descriptors};
 use std::os::unix::fs::symlink;
 use time::OffsetDateTime;
 
@@ -712,10 +712,14 @@ fn resolve_workspace_config(agent: Option<&str>) -> Result<Option<clawden_config
 
 fn resolve_workspace_runtimes(agent: Option<&str>) -> Result<Vec<String>> {
     let Some(cfg) = super::up::load_config()? else {
-        return Ok(agent
-            .and_then(|runtime| runtime_descriptor(runtime).map(|descriptor| descriptor.slug))
-            .map(|runtime| vec![runtime.to_string()])
-            .unwrap_or_default());
+        if let Some(runtime) =
+            agent.and_then(|runtime| runtime_descriptor(runtime).map(|descriptor| descriptor.slug))
+        {
+            return Ok(vec![runtime.to_string()]);
+        }
+        // No config and no --agent: detect installed runtimes by checking
+        // whether their home directories exist on disk.
+        return Ok(detect_installed_runtimes());
     };
 
     if let Some(agent_name) = agent {
@@ -757,6 +761,17 @@ fn available_runtimes(cfg: &clawden_config::ClawDenYaml) -> String {
         .map(|r| r.name.as_str())
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+/// Detect runtimes installed on disk by checking whether each descriptor's
+/// executable (slug) is available on PATH.
+fn detect_installed_runtimes() -> Vec<String> {
+    runtime_descriptors()
+        .iter()
+        .filter(|d| d.workspace_path.is_some())
+        .filter(|d| crate::util::command_exists(d.slug))
+        .map(|d| d.slug.to_string())
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
