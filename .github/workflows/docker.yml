@@ -1,5 +1,9 @@
 name: Build & Push ClawDen Runtime Images
 
+# Multi-arch builds use native runners (no QEMU emulation) for each
+# platform, then merge the per-platform images into a single manifest
+# list so `docker pull` works on both amd64 and arm64 hosts.
+
 on:
   push:
     tags: ["v*"]
@@ -22,11 +26,6 @@ on:
           - zeroclaw-browser
           - zeroclaw-computer
           - all
-      include_arm64:
-        description: "Also build linux/arm64"
-        required: false
-        default: false
-        type: boolean
 
 permissions:
   contents: read
@@ -41,44 +40,55 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       should_run: ${{ steps.decide.outputs.should_run }}
-      matrix: ${{ steps.decide.outputs.matrix }}
+      build_matrix: ${{ steps.decide.outputs.build_matrix }}
+      merge_matrix: ${{ steps.decide.outputs.merge_matrix }}
     steps:
-      - name: Decide whether image build should run and which targets
+      - name: Decide targets and expand platform matrix
         id: decide
         shell: bash
         run: |
           SHOULD_RUN=false
-          MATRIX='[]'
+          TARGETS='[]'
 
-          ALL_TARGETS='[{"target":"openclaw"},{"target":"zeroclaw"},{"target":"openclaw-browser"},{"target":"zeroclaw-browser"},{"target":"openclaw-computer"},{"target":"zeroclaw-computer"}]'
+          ALL_TARGETS='["openclaw","zeroclaw","openclaw-browser","zeroclaw-browser","openclaw-computer","zeroclaw-computer"]'
 
           if [ "${{ github.event_name }}" = "push" ]; then
             SHOULD_RUN=true
-            MATRIX='[{"target":"openclaw"}]'
+            TARGETS='["openclaw"]'
           elif [ "${{ github.event_name }}" = "workflow_run" ] && [ "${{ github.event.workflow_run.conclusion }}" = "success" ]; then
             SHOULD_RUN=true
-            MATRIX='[{"target":"openclaw"}]'
+            TARGETS='["openclaw"]'
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             SHOULD_RUN=true
             TARGET="${{ inputs.target }}"
             if [ "$TARGET" = "all" ]; then
-              MATRIX="$ALL_TARGETS"
+              TARGETS="$ALL_TARGETS"
             else
-              MATRIX="[{\"target\":\"${TARGET}\"}]"
+              TARGETS="[\"${TARGET}\"]"
             fi
           fi
 
-          echo "should_run=${SHOULD_RUN}" >> "$GITHUB_OUTPUT"
-          echo "matrix=${MATRIX}" >> "$GITHUB_OUTPUT"
+          # Cross each target with both platforms (native runners)
+          BUILD_MATRIX=$(echo "$TARGETS" | jq -c '[.[] as $t |
+            {target: $t, runner: "ubuntu-latest",    platform: "linux/amd64", slug: "amd64"},
+            {target: $t, runner: "ubuntu-24.04-arm", platform: "linux/arm64", slug: "arm64"}
+          ]')
 
-  build-and-push:
+          MERGE_MATRIX=$(echo "$TARGETS" | jq -c '[.[] | {target: .}]')
+
+          echo "should_run=${SHOULD_RUN}" >> "$GITHUB_OUTPUT"
+          echo "build_matrix=${BUILD_MATRIX}" >> "$GITHUB_OUTPUT"
+          echo "merge_matrix=${MERGE_MATRIX}" >> "$GITHUB_OUTPUT"
+
+  # Build each (target × platform) natively and push by digest.
+  build:
     needs: precheck
     if: needs.precheck.outputs.should_run == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJson(needs.precheck.outputs.matrix) }}
+        include: ${{ fromJson(needs.precheck.outputs.build_matrix) }}
     steps:
       - name: Check out triggering commit
         if: github.event_name == 'workflow_run'
@@ -93,9 +103,92 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Set up QEMU (multi-arch)
-        if: github.event_name == 'workflow_dispatch' && inputs.include_arm64
-        uses: docker/setup-qemu-action@v3
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve image name
+        id: meta
+        shell: bash
+        run: |
+          TARGET="${{ matrix.target }}"
+
+          case "$TARGET" in
+            openclaw|openclaw-browser|openclaw-computer)
+              REPOSITORY="openclaw"
+              ;;
+            zeroclaw|zeroclaw-browser|zeroclaw-computer)
+              REPOSITORY="zeroclaw"
+              ;;
+            *)
+              echo "Unknown target: $TARGET" >&2
+              exit 1
+              ;;
+          esac
+
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${REPOSITORY}"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          target: ${{ matrix.target }}
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,"name=${{ steps.meta.outputs.image }}",push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.target }}-${{ matrix.slug }}
+          cache-to: type=gha,scope=${{ matrix.target }}-${{ matrix.slug }},mode=max
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.target }}-${{ matrix.slug }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # Merge per-platform digests into a multi-arch manifest list and tag it.
+  merge:
+    needs: [precheck, build]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.precheck.outputs.merge_matrix) }}
+    steps:
+      - name: Check out triggering commit
+        if: github.event_name == 'workflow_run'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          sparse-checkout: docker/Dockerfile
+
+      - name: Check out repository
+        if: github.event_name != 'workflow_run'
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: docker/Dockerfile
+
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-${{ matrix.target }}-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -104,7 +197,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Resolve image metadata
+      - name: Resolve tags
         id: meta
         shell: bash
         run: |
@@ -169,9 +262,7 @@ jobs:
             TAGS="${IMAGE}:preview${IMMUTABLE_SUFFIX}"
           fi
 
-          echo "repository=${REPOSITORY}" >> "$GITHUB_OUTPUT"
-          echo "runtime_version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "immutable_tag=${IMMUTABLE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
 
           {
             echo "tags<<EOF"
@@ -179,23 +270,13 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Select build platforms
-        id: platforms
+      - name: Create multi-arch manifest and push
+        working-directory: /tmp/digests
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.include_arm64 }}" = "true" ]; then
-            echo "platforms=linux/amd64,linux/arm64" >> "$GITHUB_OUTPUT"
-          else
-            echo "platforms=linux/amd64" >> "$GITHUB_OUTPUT"
-          fi
+          TAGS=""
+          while IFS= read -r tag; do
+            [ -n "$tag" ] && TAGS+=" -t ${tag}"
+          done <<< "${{ steps.meta.outputs.tags }}"
 
-      - name: Build, smoke test, and push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: docker/Dockerfile
-          target: ${{ matrix.target }}
-          push: true
-          platforms: ${{ steps.platforms.outputs.platforms }}
-          tags: ${{ steps.meta.outputs.tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          docker buildx imagetools create $TAGS \
+            $(printf '${{ steps.meta.outputs.image }}@sha256:%s ' *)
