@@ -1,5 +1,5 @@
 ---
-status: planned
+status: in-progress
 created: 2026-03-07
 priority: high
 tags:
@@ -10,9 +10,11 @@ tags:
 - bugfix
 parent: 053-agent-workspace-persistence
 created_at: 2026-03-07T06:40:05.407138Z
-updated_at: 2026-03-07T06:40:13.149417Z
+updated_at: 2026-03-07T07:07:48.981086Z
+transitions:
+- status: in-progress
+  at: 2026-03-07T07:07:48.981086Z
 ---
-
 # Runtime-Aware Workspace Path Resolution
 
 > **Status**: draft · **Priority**: high · **Created**: 2026-03-07
@@ -87,20 +89,20 @@ This avoids per-runtime env var injection entirely — the runtime reads from it
 
 ## Plan
 
-- [ ] **Phase 1: Safe default** — Change `resolve_target` local fallback from CWD to `~/.clawden/workspace`. Add `init_and_fetch` fallback for non-empty non-git directories.
-- [ ] **Phase 2: Symlink bridge** — After successful restore, create symlinks from each configured runtime's native workspace path to `~/.clawden/workspace`. Handle existing directories (backup), existing symlinks (update/skip), and Docker mode (skip). Add `workspace_path` field to `RuntimeDescriptor` so ClawDen knows the native path per runtime.
-- [ ] **Phase 3: Tests** — Unit tests for `resolve_target`, symlink creation/update/backup logic, Docker-mode skip. Integration test: restore creates symlink, runtime sees memory files.
+- [x] **Phase 1: Safe default** — Change `resolve_target` local fallback from CWD to `~/.clawden/workspace`. Add `init_and_fetch` fallback for non-empty non-git directories.
+- [x] **Phase 2: Symlink bridge** — After successful restore, create symlinks from each configured runtime's native workspace path to `~/.clawden/workspace`. Handle existing directories (backup), existing symlinks (update/skip), and Docker mode (skip). Add `workspace_path` field to `RuntimeDescriptor` so ClawDen knows the native path per runtime.
+- [x] **Phase 3: Tests** — Unit tests for `resolve_target`, symlink creation/update/backup logic, Docker-mode skip. Integration test: restore creates symlink, runtime sees memory files.
 
 ## Test
 
-- [ ] `clawden workspace restore` from a non-empty CWD without `--target` clones into `~/.clawden/workspace` instead of failing
-- [ ] Non-empty target directory (no `.git`) succeeds via init+fetch fallback
-- [ ] After restore with `runtime: openclaw`, `~/.openclaw/workspace` is a symlink → `~/.clawden/workspace`
+- [x] `clawden workspace restore` from a non-empty CWD without `--target` clones into `~/.clawden/workspace` instead of failing
+- [x] Non-empty target directory (no `.git`) succeeds via init+fetch fallback
+- [x] After restore with `runtime: openclaw`, `~/.openclaw/workspace` is a symlink → `~/.clawden/workspace`
 - [ ] After restore with `runtime: zeroclaw`, `~/.zeroclaw/workspace` is a symlink → `~/.clawden/workspace`
-- [ ] Existing real workspace directory is backed up to `*.bak.YYYYMMDD` before symlinking
-- [ ] Existing correct symlink is left untouched (no-op)
-- [ ] Existing wrong symlink is updated to point to the correct target
-- [ ] Docker mode (`$HOME/workspace` exists) skips symlink creation
+- [x] Existing real workspace directory is backed up to `*.bak.YYYYMMDD` before symlinking
+- [x] Existing correct symlink is left untouched (no-op)
+- [x] Existing wrong symlink is updated to point to the correct target
+- [x] Docker mode (`$HOME/workspace` exists) skips symlink creation
 - [ ] Docker mode with `CLAWDEN_MEMORY_PATH` still works as before (no regression)
 - [ ] Token is never visible in stdout/stderr during init+fetch flow
 

@@ -51,6 +51,7 @@ pub struct RuntimeDescriptor {
     pub slug: &'static str,
     pub display_name: &'static str,
     pub aliases: &'static [&'static str],
+    pub workspace_path: Option<&'static str>,
     pub install_source: InstallSource,
     pub version_source: VersionSource,
     pub direct_install_supported: bool,
@@ -115,6 +116,7 @@ static DESCRIPTORS: &[RuntimeDescriptor] = &[
         slug: "openclaw",
         display_name: "OpenClaw",
         aliases: &["open-claw", "open"],
+        workspace_path: Some("~/.openclaw/workspace"),
         install_source: InstallSource::Npm {
             package: "openclaw",
         },
@@ -139,6 +141,7 @@ static DESCRIPTORS: &[RuntimeDescriptor] = &[
         slug: "zeroclaw",
         display_name: "ZeroClaw",
         aliases: &["zero-claw", "zero"],
+        workspace_path: Some("~/.zeroclaw/workspace"),
         install_source: InstallSource::GithubRelease {
             owner: "zeroclaw-labs",
             repo: "zeroclaw",
@@ -166,6 +169,7 @@ static DESCRIPTORS: &[RuntimeDescriptor] = &[
         slug: "picoclaw",
         display_name: "PicoClaw",
         aliases: &["pico-claw", "pico"],
+        workspace_path: None,
         install_source: InstallSource::GithubRelease {
             owner: "picoclaw-labs",
             repo: "picoclaw",
@@ -193,6 +197,7 @@ static DESCRIPTORS: &[RuntimeDescriptor] = &[
         slug: "nanoclaw",
         display_name: "NanoClaw",
         aliases: &["nano-claw", "nano"],
+        workspace_path: None,
         install_source: InstallSource::GitClone {
             url: "https://github.com/qwibitai/nanoclaw.git",
         },
@@ -217,6 +222,7 @@ static DESCRIPTORS: &[RuntimeDescriptor] = &[
         slug: "ironclaw",
         display_name: "IronClaw",
         aliases: &["iron-claw", "iron"],
+        workspace_path: None,
         install_source: InstallSource::NotAvailable,
         version_source: VersionSource::NotAvailable,
         direct_install_supported: false,
@@ -237,6 +243,7 @@ static DESCRIPTORS: &[RuntimeDescriptor] = &[
         slug: "nullclaw",
         display_name: "NullClaw",
         aliases: &["null-claw", "null"],
+        workspace_path: None,
         install_source: InstallSource::NotAvailable,
         version_source: VersionSource::NotAvailable,
         direct_install_supported: false,
@@ -257,6 +264,7 @@ static DESCRIPTORS: &[RuntimeDescriptor] = &[
         slug: "microclaw",
         display_name: "MicroClaw",
         aliases: &["micro-claw", "micro"],
+        workspace_path: None,
         install_source: InstallSource::NotAvailable,
         version_source: VersionSource::NotAvailable,
         direct_install_supported: false,
@@ -277,6 +285,7 @@ static DESCRIPTORS: &[RuntimeDescriptor] = &[
         slug: "mimiclaw",
         display_name: "MimiClaw",
         aliases: &["mimi-claw", "mimi"],
+        workspace_path: None,
         install_source: InstallSource::NotAvailable,
         version_source: VersionSource::NotAvailable,
         direct_install_supported: false,
@@ -297,6 +306,7 @@ static DESCRIPTORS: &[RuntimeDescriptor] = &[
         slug: "openfang",
         display_name: "OpenFang",
         aliases: &["open-fang", "fang"],
+        workspace_path: None,
         install_source: InstallSource::GithubRelease {
             owner: "RightNow-AI",
             repo: "openfang",
@@ -424,5 +434,16 @@ mod tests {
                 filename: "config.toml"
             }
         );
+    }
+
+    #[test]
+    fn workspace_paths_are_descriptor_driven() {
+        let openclaw = runtime_descriptor("openclaw").expect("openclaw descriptor");
+        let zeroclaw = runtime_descriptor("zeroclaw").expect("zeroclaw descriptor");
+        let picoclaw = runtime_descriptor("picoclaw").expect("picoclaw descriptor");
+
+        assert_eq!(openclaw.workspace_path, Some("~/.openclaw/workspace"));
+        assert_eq!(zeroclaw.workspace_path, Some("~/.zeroclaw/workspace"));
+        assert_eq!(picoclaw.workspace_path, None);
     }
 }
