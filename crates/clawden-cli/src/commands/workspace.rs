@@ -321,13 +321,13 @@ fn resolve_target(target: Option<&str>) -> Result<PathBuf> {
         Ok(PathBuf::from(t))
     } else {
         // Docker default: /home/clawden/workspace
-        // Local: .clawden/memory under the current directory
+        // Local: ~/.clawden/workspace (consistent with ~/.openclaw/workspace, ~/.zeroclaw/workspace)
         let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
         let docker_workspace = PathBuf::from(&home).join("workspace");
         if docker_workspace.exists() {
             Ok(docker_workspace)
         } else {
-            Ok(std::env::current_dir()?.join(".clawden").join("memory"))
+            Ok(PathBuf::from(&home).join(".clawden").join("workspace"))
         }
     }
 }
