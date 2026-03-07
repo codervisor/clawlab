@@ -22,6 +22,12 @@ Read the skill file for complete SDD workflow guidance.
 - **Use when**: Adding new runtime adapters, modifying existing adapters, auditing adapter consistency
 - **Key principle**: All adapters follow identical structure — only metadata values differ
 
+### clawden-development - Repository Coding Quality
+
+- **Location**: `.github/skills/clawden-development/SKILL.md`
+- **Use when**: Modifying ClawDen code, reviewing changes, adding tests, refactoring commands, or touching Rust/TypeScript codepaths outside adapter-specific work
+- **Key principle**: Fix root causes, keep diffs focused, validate with the smallest sufficient test set, and preserve repository conventions
+
 ## Architecture
 
 ClawDen uses a **Rust backend + React frontend** architecture:

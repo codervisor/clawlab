@@ -11,6 +11,7 @@ use tracing_subscriber::EnvFilter;
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
+    commands::load_default_env();
     init_logging(cli.verbose, cli.log_level.as_deref())?;
     let mut installer = RuntimeInstaller::new()?;
     let process_manager = ProcessManager::new(ExecutionMode::Auto)?;

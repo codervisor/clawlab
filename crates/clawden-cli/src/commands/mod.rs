@@ -43,6 +43,16 @@ pub use tools::exec_tools;
 pub use up::{exec_up, UpOptions};
 pub use workspace::exec_workspace;
 
+pub(crate) fn load_default_env() {
+    let Ok(current_dir) = std::env::current_dir() else {
+        return;
+    };
+    let env_path = current_dir.join(".env");
+    if env_path.exists() {
+        let _ = dotenvy::from_path(&env_path);
+    }
+}
+
 #[cfg(test)]
 pub(crate) fn test_env_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();

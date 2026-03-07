@@ -103,3 +103,31 @@ fn config_show_uses_env_file_override() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("CLAWDEN_LLM_API_KEY=sk-from-file"));
 }
+
+#[test]
+fn config_show_uses_env_file_override_without_clawden_yaml() {
+    let dir = temp_dir("config-show-env-file-no-yaml");
+    let home = dir.join("home");
+    fs::create_dir_all(&home).expect("home should be created");
+    fs::write(dir.join("staging.env"), "OPENAI_API_KEY=sk-from-file\n").expect("env file write");
+
+    let output = Command::new(binary_path())
+        .current_dir(&dir)
+        .env("HOME", &home)
+        .args([
+            "config",
+            "show",
+            "--format",
+            "env",
+            "--reveal",
+            "--env-file",
+            "staging.env",
+            "zeroclaw",
+        ])
+        .output()
+        .expect("config show env-file should run without yaml");
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("OPENAI_API_KEY=sk-from-file"));
+}

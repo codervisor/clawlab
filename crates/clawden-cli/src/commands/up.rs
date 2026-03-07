@@ -702,14 +702,17 @@ pub(crate) fn load_config() -> Result<Option<ClawDenYaml>> {
 }
 
 pub(crate) fn load_config_with_env_file(env_file: Option<&str>) -> Result<Option<ClawDenYaml>> {
-    let yaml_path = std::env::current_dir()?.join("clawden.yaml");
-    if !yaml_path.exists() {
-        return Ok(None);
-    }
+    super::load_default_env();
+
     if let Some(path) = env_file {
         debug!("loading env file override: {}", path);
         dotenvy::from_path_override(path)
             .map_err(|e| anyhow::anyhow!("failed to load {path}: {e}"))?;
+    }
+
+    let yaml_path = std::env::current_dir()?.join("clawden.yaml");
+    if !yaml_path.exists() {
+        return Ok(None);
     }
 
     let mut cfg = ClawDenYaml::from_file(&yaml_path).map_err(|e| anyhow::anyhow!("{}", e))?;
