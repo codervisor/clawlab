@@ -37,7 +37,30 @@ env:
   IMAGE_NAMESPACE: codervisor
 
 jobs:
+  precheck:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.decide.outputs.should_run }}
+    steps:
+      - name: Decide whether image build should run
+        id: decide
+        shell: bash
+        run: |
+          SHOULD_RUN=false
+
+          if [ "${{ github.event_name }}" = "push" ]; then
+            SHOULD_RUN=true
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            SHOULD_RUN=true
+          elif [ "${{ github.event_name }}" = "workflow_run" ] && [ "${{ github.event.workflow_run.conclusion }}" = "success" ]; then
+            SHOULD_RUN=true
+          fi
+
+          echo "should_run=${SHOULD_RUN}" >> "$GITHUB_OUTPUT"
+
   build-and-push:
+    needs: precheck
+    if: needs.precheck.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -161,9 +184,7 @@ jobs:
       - name: Build, smoke test, and push
         if: >-
           (github.event_name == 'push' && matrix.target == 'openclaw') ||
-          (github.event_name == 'workflow_run' &&
-            github.event.workflow_run.conclusion == 'success' &&
-            matrix.target == 'openclaw') ||
+          (github.event_name == 'workflow_run' && matrix.target == 'openclaw') ||
           (github.event_name == 'workflow_dispatch' && (
             inputs.target == 'all' ||
             inputs.target == matrix.target
