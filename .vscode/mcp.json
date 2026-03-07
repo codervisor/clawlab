@@ -8,7 +8,11 @@
 			],
 			"env": {},
 			"type": "stdio"
-		}
+		},
+		"deepwiki": {
+			"url": "https://mcp.deepwiki.com/mcp",
+			"type": "http"
+		},
 	},
 	"inputs": []
 }

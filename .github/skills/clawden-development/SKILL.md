@@ -11,7 +11,7 @@ Use this skill for day-to-day engineering work in this repository. Keep changes 
 
 1. Read `AGENTS.md` before making assumptions.
 2. If the task touches specs or is a multi-step design change, load `leanspec-sdd` first.
-3. If the task touches runtime adapters or runtime catalog consistency, load `runtime-sync` first.
+3. If the task touches runtime adapters or runtime catalog consistency, load `runtime-research` first.
 4. Inspect the relevant code paths before editing.
 
 ## Core Rules

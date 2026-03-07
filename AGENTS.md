@@ -16,11 +16,11 @@ This project uses the Agent Skills framework for domain-specific guidance.
 
 Read the skill file for complete SDD workflow guidance.
 
-### runtime-sync - Runtime Integration Consistency
+### runtime-research - Upstream Runtime Research
 
-- **Location**: `.github/skills/runtime-sync/runtime-sync/SKILL.md`
-- **Use when**: Adding new runtime adapters, modifying existing adapters, auditing adapter consistency
-- **Key principle**: All adapters follow identical structure — only metadata values differ
+- **Location**: `.github/skills/runtime-research/SKILL.md`
+- **Use when**: Adding/updating runtime adapters, researching upstream runtime metadata, auditing alignment with upstream repos
+- **Key principle**: Research upstream via DeepWiki MCP tools before editing ClawDen runtime code
 
 ### clawden-development - Repository Coding Quality
 

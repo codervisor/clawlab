@@ -116,22 +116,34 @@ pub(crate) fn do_restore(
         );
         std::fs::create_dir_all(&target_dir)?;
 
-        let output = Command::new("git")
-            .args([
-                "clone",
-                "--single-branch",
-                "--branch",
-                branch,
-                &repo_url,
-                &target_dir.to_string_lossy(),
-            ])
-            .env("GIT_TERMINAL_PROMPT", "0")
-            .output()?;
+        // If the directory is non-empty (e.g. user ran restore from an existing
+        // workspace without --target), git clone will fail. Fall back to
+        // init + fetch + checkout so the memory repo lands cleanly.
+        let dir_non_empty = std::fs::read_dir(&target_dir)
+            .map(|mut rd| rd.next().is_some())
+            .unwrap_or(false);
 
-        print_scrubbed(&output.stdout);
-        print_scrubbed(&output.stderr);
+        let clone_ok = if dir_non_empty {
+            init_and_fetch(&target_dir, &repo_url, branch)?
+        } else {
+            let output = Command::new("git")
+                .args([
+                    "clone",
+                    "--single-branch",
+                    "--branch",
+                    branch,
+                    &repo_url,
+                    &target_dir.to_string_lossy(),
+                ])
+                .env("GIT_TERMINAL_PROMPT", "0")
+                .output()?;
 
-        if !output.status.success() {
+            print_scrubbed(&output.stdout);
+            print_scrubbed(&output.stderr);
+            output.status.success()
+        };
+
+        if !clone_ok {
             eprintln!("[clawden] Warning: git clone failed, continuing without agent memory");
             return Ok(());
         }
@@ -309,13 +321,13 @@ fn resolve_target(target: Option<&str>) -> Result<PathBuf> {
         Ok(PathBuf::from(t))
     } else {
         // Docker default: /home/clawden/workspace
-        // Local: current directory
+        // Local: .clawden/memory under the current directory
         let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
         let docker_workspace = PathBuf::from(&home).join("workspace");
         if docker_workspace.exists() {
             Ok(docker_workspace)
         } else {
-            Ok(std::env::current_dir()?)
+            Ok(std::env::current_dir()?.join(".clawden").join("memory"))
         }
     }
 }
@@ -408,6 +420,36 @@ fn run_git_scrubbed(dir: &Path, args: &[&str]) -> Result<()> {
         bail!("git {} failed", args.join(" "));
     }
     Ok(())
+}
+
+/// Bootstrap a git repo into a non-empty directory via init + fetch + checkout.
+/// Returns `true` on success.
+fn init_and_fetch(dir: &Path, repo_url: &str, branch: &str) -> Result<bool> {
+    let run = |args: &[&str]| -> Result<bool> {
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(dir)
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .output()?;
+        print_scrubbed(&output.stdout);
+        print_scrubbed(&output.stderr);
+        Ok(output.status.success())
+    };
+
+    if !run(&["init"])? {
+        return Ok(false);
+    }
+    if !run(&["remote", "add", "origin", repo_url])? {
+        // Remote may already exist from a previous partial attempt
+        let _ = run(&["remote", "set-url", "origin", repo_url]);
+    }
+    if !run(&["fetch", "--depth=1", "origin", branch])? {
+        return Ok(false);
+    }
+    if !run(&["checkout", &format!("origin/{branch}"), "-B", branch])? {
+        return Ok(false);
+    }
+    Ok(true)
 }
 
 /// Print output with any credentials scrubbed
