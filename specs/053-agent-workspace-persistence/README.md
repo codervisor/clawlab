@@ -213,8 +213,8 @@ agents:
 - [x] Restore failure logs warning but runtime still starts (best-effort)
 - [x] Sync engine commits and pushes workspace changes to a test repo
 - [x] Two agents in same repo with different paths don't interfere with each other
-- [ ] Conflict scenario: modify workspace on two hosts, verify rebase resolves cleanly
-- [ ] Public repo detection: `clawden workspace restore` warns if repo is not private
+- [x] Conflict scenario: modify workspace on two hosts, verify rebase resolves cleanly
+- [x] Public repo detection: `clawden workspace restore` warns if repo is not private
 
 ## Implementation Details
 

@@ -157,6 +157,8 @@ pub(crate) fn do_restore(
     }
 
     if target_dir.join(".git").is_dir() {
+        // Warn if the repo is public (agent memory should be private)
+        warn_if_public(repo, token);
         println!("[clawden] Agent memory ready at {}", target_dir.display());
         bridge_runtime_workspaces(&target_dir, runtimes)?;
         crate::util::append_audit_file("workspace.restore", "memory", "ok")?;
@@ -222,7 +224,13 @@ pub(crate) fn do_sync(
 
     run_git(&target_dir, &["add", "-A"])?;
     run_git(&target_dir, &["commit", "-m", &commit_msg])?;
-    run_git_scrubbed(&target_dir, &["push", "origin", "HEAD"])?;
+
+    // Try push; if rejected (remote diverged), pull --rebase and retry once
+    if try_push(&target_dir).is_err() {
+        eprintln!("[clawden] Push rejected — pulling with rebase and retrying");
+        run_git_scrubbed(&target_dir, &["pull", "--rebase", "origin", "HEAD"])?;
+        run_git_scrubbed(&target_dir, &["push", "origin", "HEAD"])?;
+    }
 
     println!("[clawden] Workspace synced successfully");
     crate::util::append_audit_file("workspace.sync", "memory", "ok")?;
@@ -506,6 +514,78 @@ fn expand_home_path(path: &str) -> Result<PathBuf> {
     }
 }
 
+/// Extract `owner/repo` from a repo string (shorthand or full GitHub URL).
+/// Returns `None` for non-GitHub URLs (file://, git@, other hosts).
+fn extract_github_owner_repo(repo: &str) -> Option<String> {
+    if !repo.starts_with("https://")
+        && !repo.starts_with("git@")
+        && !repo.starts_with("file://")
+        && repo.contains('/')
+    {
+        // Shorthand: owner/repo
+        return Some(repo.trim_end_matches(".git").to_string());
+    }
+    if let Some(rest) = repo
+        .strip_prefix("https://github.com/")
+        .or_else(|| repo.strip_prefix("https://x-access-token:"))
+    {
+        // Full URL: strip credentials if present
+        let path_part = if let Some((_creds, after_at)) = rest.split_once('@') {
+            after_at.strip_prefix("github.com/").unwrap_or(after_at)
+        } else {
+            rest
+        };
+        let cleaned = path_part.trim_end_matches(".git");
+        if cleaned.contains('/') {
+            return Some(cleaned.to_string());
+        }
+    }
+    None
+}
+
+/// Warn (non-fatally) if the repo is public. Agent memory should be private.
+/// Runs the HTTP check on a dedicated OS thread to avoid conflicts with the
+/// tokio runtime (reqwest::blocking panics if dropped inside an async context).
+fn warn_if_public(repo: &str, token: Option<&str>) {
+    let Some(owner_repo) = extract_github_owner_repo(repo) else {
+        return; // Non-GitHub URL — can't check
+    };
+    let Some(tok) = token else {
+        return; // No token — can't query API
+    };
+
+    let url = format!("https://api.github.com/repos/{owner_repo}");
+    let owner_repo = owner_repo.to_string();
+    let tok = tok.to_string();
+
+    // Spawn a plain OS thread so reqwest::blocking doesn't conflict with tokio.
+    let handle = std::thread::spawn(move || {
+        let client = reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .ok()?;
+
+        let resp = client
+            .get(&url)
+            .header("Authorization", format!("Bearer {tok}"))
+            .header("User-Agent", "clawden")
+            .header("Accept", "application/vnd.github+json")
+            .send()
+            .ok()?;
+
+        let json: serde_json::Value = resp.json().ok()?;
+        Some(json.get("private")? == &serde_json::Value::Bool(false))
+    });
+
+    if let Ok(Some(true)) = handle.join() {
+        eprintln!(
+            "[clawden] ⚠ WARNING: Workspace repo '{}' is PUBLIC. \
+             Agent memory may contain sensitive context — consider making the repo private.",
+            owner_repo
+        );
+    }
+}
+
 /// Build a git URL, injecting a PAT for private repos. Supports:
 /// - Full URL: `https://github.com/owner/repo.git`
 /// - Full URL: `file:///tmp/repo.git`
@@ -580,6 +660,24 @@ fn run_git(dir: &Path, args: &[&str]) -> Result<()> {
             args.join(" "),
             scrub_credentials(&stderr)
         );
+    }
+    Ok(())
+}
+
+/// Attempt `git push origin HEAD`, returning Ok on success or Err on failure
+/// without bailing — caller decides how to handle rejection.
+fn try_push(dir: &Path) -> Result<()> {
+    let output = Command::new("git")
+        .args(["push", "origin", "HEAD"])
+        .current_dir(dir)
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .output()?;
+
+    print_scrubbed(&output.stdout);
+    print_scrubbed(&output.stderr);
+
+    if !output.status.success() {
+        bail!("git push origin HEAD failed");
     }
     Ok(())
 }
