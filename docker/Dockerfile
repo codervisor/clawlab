@@ -21,7 +21,7 @@
 # used for local development. This ensures Docker and CLI stay in sync.
 
 # Pinned runtime versions — bump these to upgrade
-ARG OPENCLAW_VERSION=2026.3.2
+ARG OPENCLAW_VERSION=2026.3.7
 ARG ZEROCLAW_VERSION=0.1.7
 
 # --- Stage 1: Build the clawden CLI ---

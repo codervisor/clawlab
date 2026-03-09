@@ -44,7 +44,7 @@ ClawDen Docker images are runtime-specific — pick the one you need:
 - ZeroClaw: `docker run -e ANTHROPIC_API_KEY=sk-... ghcr.io/codervisor/zeroclaw:latest`
 - Via CLI: `cargo run -p clawden-cli -- docker run openclaw`
 
-Preferred immutable tags come from the pinned runtime versions in `docker/Dockerfile`, for example `ghcr.io/codervisor/openclaw:2026.3.2` and `ghcr.io/codervisor/zeroclaw:0.1.7-browser`.
+Preferred immutable tags come from the pinned runtime versions in `docker/Dockerfile`, for example `ghcr.io/codervisor/openclaw:2026.3.7` and `ghcr.io/codervisor/zeroclaw:0.1.7-browser`.
 
 Moving aliases remain available per runtime repository: `:latest`, `:browser`, and `:computer`.
 
