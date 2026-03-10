@@ -365,13 +365,13 @@ This is stated as a conjecture rather than a theorem because "useful" resists fo
 
 #### 8.1  The Assembly-Line Analogy
 
-The coordination model claims a productivity discontinuity analogous to the **industrial assembly line**. Before Ford's assembly line (1913), a single craftsman built an entire car — skilled, serial, bottlenecked. After: specialized stations, parallel flow, interchangeable parts. Output jumped from ~12 cars/day to ~1,000 cars/day — an **~80× throughput increase** with *lower* per-unit cost.
+The coordination model claims a productivity discontinuity analogous to the **industrial assembly line**. Before Ford's moving assembly line (1913), teams of skilled workers built entire cars at stationary workstations — serial, full-scope, bottlenecked. After: 84 specialized stations, parallel flow, interchangeable parts. Per-chassis assembly time dropped from **12.5 hours to 93 minutes — an ~8× throughput increase** with *lower* per-unit cost (Model T price fell from $950 to $290).
 
 The AI-native coordination model makes the same structural claim about knowledge work:
 
 | Industrial Revolution | AI-Native Coordination |
 |---|---|
-| Craftsman (serial, one worker, full scope) | Single agent prompt (serial, one agent, full task) |
+| Craftsman team (serial, one station, full scope) | Single agent prompt (serial, one agent, full task) |
 | Assembly line (parallel stations, specialization) | Coordination primitive (parallel agents, scoped roles) |
 | Interchangeable parts | Lossless context transfer (Axiom LO) |
 | Zero retooling cost between identical stations | Costless cloning (Axiom CC) |
@@ -392,7 +392,7 @@ and with composition:
 
 $$\Gamma(p_i \otimes p_j, W) \geq 10 \quad \text{for } (p_i, p_j) \in \mathcal{K}$$
 
-The 5× and 10× thresholds are the minimum for the claim to be non-trivial. The assembly line achieved ~80×. The theory predicts AI-native coordination exceeds the assembly-line ratio for knowledge work because **agents have properties physical stations never did** — zero fork cost, lossless state duplication, and zero fatigue.
+The 5× and 10× thresholds are the minimum for the claim to be non-trivial. The assembly line achieved ~8× on per-unit throughput. The theory predicts AI-native coordination meets or exceeds the assembly-line ratio for knowledge work because **agents have properties physical stations never did** — zero fork cost, lossless state duplication, and zero fatigue.
 
 #### 8.2  Formal Productivity Model
 
@@ -538,7 +538,7 @@ where $\alpha > 1$ is the super-linear scaling exponent and $n^*$ is the saturat
 
 **Predicted values:** $\alpha \approx 1.3\text{–}1.6$ for Category B primitives (each additional agent contributes more than linearly because of cross-pollination via observe and convergence). Saturation at $n^* \approx 8\text{–}12$ agents for most primitives (matching the swarm branch counts in practice).
 
-**The industrial parallel:** Ford's assembly line hit ~80× at ~80 stations. The coordination model predicts ~10–20× at ~8–12 agents, with the tighter ratio explained by the smaller unit-of-work granularity (code artifacts vs. physical car components) and current context window limits.
+**The industrial parallel:** Ford's moving assembly line achieved ~8× per-unit throughput improvement at 84 stations (12.5h → 93min per chassis). The coordination model predicts ~5–10× at ~8–12 agents — a comparable ratio that reflects the structural parallel: specialization + parallelism → super-linear gains. The tighter agent count is explained by smaller unit-of-work granularity (code artifacts vs. physical car components) and current context window limits.
 
 ---
 
